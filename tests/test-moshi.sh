@@ -62,7 +62,15 @@ trap 'rm -rf "$tmpdir"' EXIT
   name=m1
   outf="$tmpdir/m1.out" errf="$tmpdir/m1.err" logf="$tmpdir/m1.log"
   run_moshi "$outf" "$errf" "$logf" -- h repo --primary
-  line="$(head -n1 "$logf" 2>/dev/null || true)"
+  # Pre-validation may log an ssh --validate line first; assert the mosh launch line.
+  line=""
+  while IFS= read -r l || [[ -n "$l" ]]; do
+    base="${l%% *}"; base="${base##*/}"
+    if [[ "$base" == mosh ]]; then
+      line="$l"
+      break
+    fi
+  done <"$logf"
   # Expect: .../mosh --server=MOSH_SERVER_NETWORK_TMOUT=86400 mosh-server h -- .local/bin/repo-session --client-version 1.0.0 repo --primary
   expected_tail="mosh --server=MOSH_SERVER_NETWORK_TMOUT=86400 mosh-server h -- .local/bin/repo-session --client-version 1.0.0 repo --primary"
   if [[ "$line" == *"$expected_tail" ]]; then

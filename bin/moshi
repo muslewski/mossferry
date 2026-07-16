@@ -91,6 +91,9 @@ moshi <host> [<repo>] [flags]   open a remote tmux session over mosh on <host>
 Default action is the session picker (global with no <repo>, scoped with one).
 Nothing attaches or creates a shared main session implicitly.
 
+Picker keys (remote fzf): enter=attach · ctrl-x=kill · ctrl-r=rename
+Repo typos are caught locally via automatic pre-validation (no mosh).
+
 Subcommands:
   update [host]      git pull local clone + remote; print both versions
   doctor [host]      read-only health checks (exit 1 if any FAIL)
@@ -257,12 +260,31 @@ cmd_doctor() {
   return "$failed"
 }
 
+# First non-flag token after host is the repo (stops at `--`).
+# Empty when bare picker / flag-only / cmd-only.
+repo_token_from_args() {
+  local a
+  for a in "$@"; do
+    if [[ "$a" == "--" ]]; then
+      return 0
+    fi
+    case "$a" in
+      -*) continue ;;
+      *)
+        printf '%s\n' "$a"
+        return 0
+        ;;
+    esac
+  done
+}
+
 # Launch remote: ssh for --list/-l, mosh otherwise.
 # Prepends --client-version <v> before user args.
+# Repo-bearing mosh launches pre-validate over ssh so typos print locally.
 launch_remote() {
   local host="$1"
   shift
-  local ver a
+  local ver a repo val_out val_rc=0
   ver="$(own_version)"
 
   for a in "$@"; do
@@ -282,6 +304,15 @@ launch_remote() {
         ;;
     esac
   done
+
+  repo="$(repo_token_from_args "$@")"
+  if [[ -n "$repo" ]]; then
+    val_out="$(ssh "$host" "$MOSHI_REMOTE_BIN" --client-version "$ver" --validate "$repo" 2>&1)" || val_rc=$?
+    if [[ $val_rc -ne 0 ]]; then
+      [[ -n "$val_out" ]] && printf '%s\n' "$val_out" >&2
+      return 1
+    fi
+  fi
 
   mosh --server="MOSH_SERVER_NETWORK_TMOUT=${MOSHI_SERVER_TIMEOUT} mosh-server" \
     "$host" -- "$MOSHI_REMOTE_BIN" --client-version "$ver" "$@"
