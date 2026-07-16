@@ -143,10 +143,21 @@ cmd_update() {
   # Local pull (no set -e; branch may lack upstream mid-development).
   git -C "$REPO_ROOT" pull --ff-only || printf '%s\n' "moshi update: local pull failed (continuing)" >&2
 
-  ssh "$host" git -C "$MOSHI_REMOTE_REPO" pull --ff-only || {
+  # Canonical remote checkout (no git remotes) cannot pull — skip and continue.
+  local remotes
+  if ! remotes="$(ssh "$host" git -C "$MOSHI_REMOTE_REPO" remote)"; then
     printf '%s\n' "moshi update: remote pull failed" >&2
     return 1
-  }
+  fi
+  remotes="${remotes//$'\r'/}"
+  if [[ -z "$remotes" ]]; then
+    printf '%s\n' "remote checkout is canonical (no upstream) — pull skipped"
+  else
+    ssh "$host" git -C "$MOSHI_REMOTE_REPO" pull --ff-only || {
+      printf '%s\n' "moshi update: remote pull failed" >&2
+      return 1
+    }
+  fi
 
   local v_local v_remote
   v_local="$(own_version)"
