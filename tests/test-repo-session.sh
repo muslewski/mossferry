@@ -25,6 +25,8 @@ setup() {
   : >"$FAKE_TMUX_LOG"
   export FAKE_TMUX_SESSIONS=""
   export FAKE_TMUX_META=""
+  export FAKE_TMUX_WINDOWS=""
+  unset MOSHI_HIDDEN_WINDOW_GLOB 2>/dev/null || true
   mkdir -p "$HOME/.config/moshi"
 }
 
@@ -152,10 +154,10 @@ t7() {
   teardown
 }
 
-# ---- t8: REPO_SESSION_LIB build_session_rows ----
+# ---- t8: REPO_SESSION_LIB build_session_rows (6-field format) ----
 t8() {
   setup
-  local rows n f1 f2
+  local rows n f1 f2 fields preview
   export FAKE_TMUX_SESSIONS=$'alpha\nbeta'
   export FAKE_TMUX_META=$'alpha|Awin|2w attached claude\nbeta|Bwin|1w detached bash'
   export REPO_SESSION_TMUXBIN="$FAKE"
@@ -168,11 +170,13 @@ t8() {
   n=$(printf '%s\n' "$rows" | grep -c . || true)
   f1=$(printf '%s\n' "$rows" | head -1 | cut -f1)
   f2=$(printf '%s\n' "$rows" | sed -n '2p' | cut -f1)
+  fields=$(printf '%s\n' "$rows" | head -1 | awk -F'\t' '{print NF}')
+  preview=$(printf '%s\n' "$rows" | head -1 | cut -f6)
   if [[ $n -eq 2 ]] && [[ "$f1" == "alpha" ]] && [[ "$f2" == "beta" ]] \
-     && [[ "$(printf '%s\n' "$rows" | head -1)" == *$'\t'* ]]; then
+     && [[ "$fields" -eq 6 ]] && [[ "$preview" == "alpha:0" ]]; then
     ok t8
   else
-    fail t8 "n=$n rows=[$rows]"
+    fail t8 "n=$n fields=$fields preview=[$preview] rows=[$rows]"
   fi
   teardown
 }
@@ -247,7 +251,155 @@ t12() {
   teardown
 }
 
+# ---- t13: --validate goodrepo → exit 0, silent, no tmux ----
+t13() {
+  setup
+  local out rc log
+  mkdir -p "$MOSHI_REPO_BASE/goodrepo"
+  out=$(bash "$RS" --validate goodrepo 2>&1)
+  rc=$?
+  log=$(cat "$FAKE_TMUX_LOG")
+  if [[ $rc -eq 0 ]] && [[ -z "$out" ]] && [[ -z "$log" ]]; then
+    ok t13
+  else
+    fail t13 "rc=$rc out=[$out] log=[$log]"
+  fi
+  teardown
+}
+
+# ---- t14: --validate nope → exit 1, message + list, no tmux ----
+t14() {
+  setup
+  local out rc log
+  mkdir -p "$MOSHI_REPO_BASE/other"
+  out=$(bash "$RS" --validate nope 2>&1)
+  rc=$?
+  log=$(cat "$FAKE_TMUX_LOG")
+  if [[ $rc -eq 1 ]] && [[ "$out" == *"no repo 'nope'"* ]] \
+     && [[ "$out" == *"other"* ]] && [[ -z "$log" ]]; then
+    ok t14
+  else
+    fail t14 "rc=$rc out=[$out] log=[$log]"
+  fi
+  teardown
+}
+
+# ---- t15: hidden active window → display first non-hidden + preview_target ----
+t15() {
+  setup
+  local rows name win preview
+  export FAKE_TMUX_SESSIONS="s1"
+  export FAKE_TMUX_META="s1|_curtain|2w detached bash"
+  export FAKE_TMUX_WINDOWS=$'s1:0:_curtain\ns1:1:Syndcast Backlog'
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  rows=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    build_session_rows
+  )
+  name=$(printf '%s\n' "$rows" | cut -f1)
+  win=$(printf '%s\n' "$rows" | cut -f2)
+  preview=$(printf '%s\n' "$rows" | cut -f6)
+  if [[ "$name" == "s1" ]] && [[ "$win" == "Syndcast Backlog" ]] \
+     && [[ "$preview" == "s1:1" ]]; then
+    ok t15
+  else
+    fail t15 "rows=[$rows]"
+  fi
+  teardown
+}
+
+# ---- t16: all windows hidden → keep active name ----
+t16() {
+  setup
+  local rows win preview
+  export FAKE_TMUX_SESSIONS="s1"
+  export FAKE_TMUX_META="s1|_curtain|2w detached bash"
+  export FAKE_TMUX_WINDOWS=$'s1:0:_curtain\ns1:1:_hidden'
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  rows=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    build_session_rows
+  )
+  win=$(printf '%s\n' "$rows" | cut -f2)
+  preview=$(printf '%s\n' "$rows" | cut -f6)
+  if [[ "$win" == "_curtain" ]] && [[ "$preview" == "s1:0" ]]; then
+    ok t16
+  else
+    fail t16 "rows=[$rows]"
+  fi
+  teardown
+}
+
+# ---- t17: MOSHI_HIDDEN_WINDOW_GLOB env override ----
+t17() {
+  setup
+  local rows win
+  export FAKE_TMUX_SESSIONS="s1"
+  export FAKE_TMUX_META="s1|_curtain|2w detached bash"
+  export FAKE_TMUX_WINDOWS=$'s1:0:_curtain\ns1:1:Syndcast Backlog'
+  export MOSHI_HIDDEN_WINDOW_GLOB="zzz*"
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  rows=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    build_session_rows
+  )
+  win=$(printf '%s\n' "$rows" | cut -f2)
+  if [[ "$win" == "_curtain" ]]; then
+    ok t17
+  else
+    fail t17 "rows=[$rows]"
+  fi
+  teardown
+}
+
+# ---- t18: LIB picker_kill ----
+t18() {
+  setup
+  local log
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  (
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    picker_kill s1
+  )
+  log=$(cat "$FAKE_TMUX_LOG")
+  if grep -q 'kill-session -t =s1' <<<"$log"; then
+    ok t18
+  else
+    fail t18 "log=[$log]"
+  fi
+  teardown
+}
+
+# ---- t19: LIB picker_rename ----
+t19() {
+  setup
+  local log
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  (
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    picker_rename s1 newname
+  )
+  log=$(cat "$FAKE_TMUX_LOG")
+  if grep -q 'rename-session -t =s1 newname' <<<"$log"; then
+    ok t19
+  else
+    fail t19 "log=[$log]"
+  fi
+  teardown
+}
+
 export TEST_TMPDIR_ROOT="${TMPDIR:-/tmp}"
 set +e
 t1; t2; t3; t4; t5; t6; t7; t8; t9; t10; t11; t12
+t13; t14; t15; t16; t17; t18; t19
 exit $FAIL
