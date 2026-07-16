@@ -1,7 +1,28 @@
 #!/usr/bin/env bash
 # Fake ssh: log invocation; print VERSION for update/doctor cat paths.
+# --validate path: exit per FAKE_SSH_VALIDATE_EXIT (default 0); on nonzero print no repo to stderr.
 printf '%s\n' "$0 $*" >> "${FAKE_NET_LOG:?FAKE_NET_LOG not set}"
 joined="$*"
+
+# Pre-validation: --validate <repo>
+if [[ "$joined" == *"--validate"* ]]; then
+  exit_code="${FAKE_SSH_VALIDATE_EXIT:-0}"
+  if [[ "$exit_code" -ne 0 ]]; then
+    # Extract repo token after --validate
+    repo=""
+    prev=""
+    for a in "$@"; do
+      if [[ "$prev" == "--validate" ]]; then
+        repo="$a"
+        break
+      fi
+      prev="$a"
+    done
+    printf "no repo '%s'\n" "${repo:-?}" >&2
+  fi
+  exit "$exit_code"
+fi
+
 # `git -C <path> remote` → empty stdout (canonical checkout: no remotes).
 # Match trailing ` remote` so we do not swallow `remote show` / similar.
 if [[ "$joined" == *" git -C "*remote && "$joined" != *" remote "* ]]; then
