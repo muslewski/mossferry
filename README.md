@@ -4,6 +4,13 @@ The green ferry between your machines. *Moss* carries the green identity and the
 mosh phonetics; *ferry* is the job — carrying you across to your remote tmux
 sessions. Short daily command: **`ferry`**.
 
+```
+        __|__
+   ____|_____|____
+   \  mossferry  /
+ ~~~\___________/~~~
+```
+
 A two-part tool for opening remote tmux sessions over mosh. Host-agnostic:
 written for a laptop ↔ workstation pair, but nothing is hard-coded to those
 machines.
@@ -86,6 +93,10 @@ cannot wipe the message).
 
 Runs on the remote, inside the mosh session:
 
+- **Banner:** green ferry ASCII art sits in the fzf header (top-left) when the
+  terminal has at least 18 rows; shorter panes get a one-line `⛴ mossferry`
+  variant. Set `FERRY_BANNER=off` (or `0`) to hide it. Layout is reverse with
+  the header first so the brand stays above the list.
 - One fzf list; each row: session name, active-window name, window count,
   attached/detached, current command.
 - **Preview panel:** `tmux capture-pane -ep -t <session>` — the session's
@@ -118,6 +129,7 @@ defaults.
 | `FERRY_SERVER_TIMEOUT` | `86400` | local: mosh-server self-exit after N seconds clientless |
 | `FERRY_REMOTE_REPO` | `Repositories/mossferry` | remote: repo checkout, relative to remote `$HOME` |
 | `FERRY_HIDDEN_WINDOW_GLOB` | `_*` | remote: window-name glob skipped for picker labels/previews |
+| `FERRY_BANNER` | `on` | green ferry art in picker header and `--help` (`off`/`0` hides) |
 
 See `config.example` for a ready-to-edit template.
 

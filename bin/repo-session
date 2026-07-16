@@ -22,7 +22,7 @@ TMUXBIN="${REPO_SESSION_TMUXBIN:-/usr/bin/tmux}"
 load_config() {
   # Snapshot env (env > file > default).
   local e_REMOTE_BIN e_REPO_BASE e_DEFAULT_CMD e_DEFAULT_HOST e_SERVER_TIMEOUT e_REMOTE_REPO
-  local e_HIDDEN_WINDOW_GLOB
+  local e_HIDDEN_WINDOW_GLOB e_BANNER
   e_REMOTE_BIN="${FERRY_REMOTE_BIN-__UNSET__}"
   e_REPO_BASE="${FERRY_REPO_BASE-__UNSET__}"
   e_DEFAULT_CMD="${FERRY_DEFAULT_CMD-__UNSET__}"
@@ -30,6 +30,7 @@ load_config() {
   e_SERVER_TIMEOUT="${FERRY_SERVER_TIMEOUT-__UNSET__}"
   e_REMOTE_REPO="${FERRY_REMOTE_REPO-__UNSET__}"
   e_HIDDEN_WINDOW_GLOB="${FERRY_HIDDEN_WINDOW_GLOB-__UNSET__}"
+  e_BANNER="${FERRY_BANNER-__UNSET__}"
 
   FERRY_REMOTE_BIN=".local/bin/repo-session"
   FERRY_REPO_BASE="${HOME}/Repositories"
@@ -38,6 +39,7 @@ load_config() {
   FERRY_SERVER_TIMEOUT="86400"
   FERRY_REMOTE_REPO="Repositories/mossferry"
   FERRY_HIDDEN_WINDOW_GLOB="_*"
+  FERRY_BANNER="on"
 
   if [[ -r "${HOME}/.config/mossferry/config" ]]; then
     # shellcheck source=/dev/null
@@ -51,6 +53,27 @@ load_config() {
   [[ "$e_SERVER_TIMEOUT" != "__UNSET__" ]] && FERRY_SERVER_TIMEOUT="$e_SERVER_TIMEOUT"
   [[ "$e_REMOTE_REPO" != "__UNSET__" ]] && FERRY_REMOTE_REPO="$e_REMOTE_REPO"
   [[ "$e_HIDDEN_WINDOW_GLOB" != "__UNSET__" ]] && FERRY_HIDDEN_WINDOW_GLOB="$e_HIDDEN_WINDOW_GLOB"
+  [[ "$e_BANNER" != "__UNSET__" ]] && FERRY_BANNER="$e_BANNER"
+}
+
+# ASCII ferry art for picker header / --help / no-fzf menu.
+# Keep in sync with bin/mossferry (deliberate duplication — both scripts stay self-contained).
+ferry_banner() {
+  case "${FERRY_BANNER:-on}" in
+    off|0) return 0 ;;
+  esac
+  local rows
+  rows="${LINES:-$(tput lines 2>/dev/null || echo 24)}"
+  if (( rows >= 18 )); then
+    # Full 4-line banner: hull/cabin regular green, name bright green, waves dim green.
+    printf '\033[32m        __|__\033[0m\n'
+    printf '\033[32m   ____|_____|____\033[0m\n'
+    printf '\033[32m   \\  \033[1;32mmossferry\033[0m\033[32m  /\033[0m\n'
+    printf '\033[2;32m ~~~\033[0m\033[32m\\___________/\033[0m\033[2;32m~~~\033[0m\n'
+  else
+    # Short panes: one-line variant (green name).
+    printf '⛴ \033[1;32mmossferry\033[0m\n'
+  fi
 }
 
 # Exit 0 if $FERRY_REPO_BASE/<repo> is a directory; else stderr error + list, return 1.
@@ -257,15 +280,20 @@ _pick_repo_for_new() {
   fi
 
   if command -v fzf >/dev/null 2>&1 && [[ -z "${FERRY_NO_FZF:-}" ]]; then
+    local banner sub_hdr=()
+    banner=$(ferry_banner) || true
+    if [[ -n "$banner" ]]; then
+      sub_hdr=(--header "$banner")
+    fi
     if (( scoped )); then
-      choice=$(printf '%s\n' "${dirs[@]}" | fzf --prompt='new session repo> ') || return 1
+      choice=$(printf '%s\n' "${dirs[@]}" | fzf --layout=reverse --header-first "${sub_hdr[@]}" --prompt='new session repo> ') || return 1
     else
       choice=$(
         {
           printf '%s\n' "${dirs[@]}"
           printf '%s\n' "$_NEW_REPO_LABEL"
           printf '%s\n' "$_HOME_SESSION_LABEL"
-        } | fzf --prompt='new session repo> '
+        } | fzf --layout=reverse --header-first "${sub_hdr[@]}" --prompt='new session repo> '
       ) || return 1
     fi
     if [[ "$choice" == "$_NEW_REPO_LABEL" ]]; then
@@ -386,6 +414,7 @@ run_picker() {
       while IFS= read -r line; do
         [[ -n "$line" ]] && rows+=("$line")
       done < <(build_session_rows "$repo")
+      ferry_banner
       i=1
       for line in "${rows[@]}"; do
         name="${line%%$'\t'*}"
@@ -419,18 +448,28 @@ run_picker() {
 
   # fzf path: loop so kill/rename / invalid create can reload the list.
   pickfile="${TMPDIR:-/tmp}/repo-session-pick.$$"
+  local banner hints header
+  hints='enter=attach · ctrl-x=kill · ctrl-r=rename · esc=quit'
   while true; do
     rows=()
     while IFS= read -r line; do
       [[ -n "$line" ]] && rows+=("$line")
     done < <(build_session_rows "$repo")
 
+    banner=$(ferry_banner) || true
+    if [[ -n "$banner" ]]; then
+      header="${banner}"$'\n'"${hints}"
+    else
+      header="$hints"
+    fi
+
     {
       printf '%s\n' "${rows[@]}"
       printf '%s\n' "$new_label"
     } | fzf --ansi --delimiter=$'\t' \
+        --layout=reverse --header-first \
         --expect=ctrl-x,ctrl-r \
-        --header 'enter=attach · ctrl-x=kill · ctrl-r=rename · esc=quit' \
+        --header "$header" \
         --preview "$TMUXBIN capture-pane -ep -t {6}" \
         --preview-window=right:60% \
         >"$pickfile" || {
@@ -543,6 +582,7 @@ main() {
   fi
 
   if (( help )); then
+    ferry_banner
     cat <<'EOF'
 repo-session [repo] [flags]   remote brain for mossferry (picker default)
 

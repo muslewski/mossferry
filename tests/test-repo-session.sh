@@ -565,7 +565,7 @@ t26() {
 # ---- t27: LINES=10 ferry_banner → 1 line with ⛴ mossferry ----
 t27() {
   setup
-  local out nlines rc
+  local out stripped nlines rc
   out=$(
     export REPO_SESSION_LIB=1
     # shellcheck source=/dev/null
@@ -574,10 +574,12 @@ t27() {
   )
   rc=$?
   nlines=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
-  if [[ $rc -eq 0 ]] && [[ $nlines -eq 1 ]] && [[ "$out" == *"⛴ mossferry"* ]]; then
+  # Name is green (ANSI); compare after strip so the line is exactly "⛴ mossferry"
+  stripped=$(printf '%s' "$out" | _strip_ansi)
+  if [[ $rc -eq 0 ]] && [[ $nlines -eq 1 ]] && [[ "$stripped" == "⛴ mossferry" ]]; then
     ok t27
   else
-    fail t27 "rc=$rc nlines=$nlines out=[$out]"
+    fail t27 "rc=$rc nlines=$nlines stripped=[$stripped] out=[$out]"
   fi
   teardown
 }
