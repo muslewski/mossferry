@@ -140,15 +140,14 @@ _list_repo_sessions() {
     | grep -E "^${repo}(-[0-9]+)?$" | sort -V)
 }
 
+# Numbered list for --list. Window column uses build_session_rows (hidden-window rule).
 print_list() {
-  local i=1 s cname meta
-  for s in "${sessions[@]}"; do
-    cname=$("$TMUXBIN" display-message -p -t "$s" '#{window_name}')
-    meta=$("$TMUXBIN" display-message -p -t "$s" \
-      '#{session_windows}w #{?session_attached,attached,detached} #{pane_current_command}')
-    printf '%d) %-16s %-22s %s\n' "$i" "$s" "$cname" "$meta"
+  local i=1 s cname wins att cmd _preview
+  while IFS=$'\t' read -r s cname wins att cmd _preview; do
+    [[ -z "$s" ]] && continue
+    printf '%d) %-16s %-22s %s\n' "$i" "$s" "$cname" "$wins $att $cmd"
     ((i++)) || true
-  done
+  done < <(build_session_rows "${repo:-}")
 }
 
 # Lock-guarded create of $session in $dir if missing; leaves lock held by caller

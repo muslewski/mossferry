@@ -398,8 +398,24 @@ t19() {
   teardown
 }
 
+# ---- t20: --list applies hidden-window display rule ----
+t20() {
+  setup
+  local out
+  export FAKE_TMUX_SESSIONS="s1"
+  export FAKE_TMUX_META="s1|_curtain|2w detached bash"
+  export FAKE_TMUX_WINDOWS=$'s1:0:_curtain\ns1:1:Real Name'
+  out=$(bash "$RS" --list 2>/dev/null)
+  if [[ "$out" == *"Real Name"* ]] && [[ "$out" != *"_curtain"* ]]; then
+    ok t20
+  else
+    fail t20 "out=[$out]"
+  fi
+  teardown
+}
+
 export TEST_TMPDIR_ROOT="${TMPDIR:-/tmp}"
 set +e
 t1; t2; t3; t4; t5; t6; t7; t8; t9; t10; t11; t12
-t13; t14; t15; t16; t17; t18; t19
+t13; t14; t15; t16; t17; t18; t19; t20
 exit $FAIL
