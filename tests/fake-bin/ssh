@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Fake ssh: log invocation; print VERSION for update/doctor cat paths.
+printf '%s\n' "$0 $*" >> "${FAKE_NET_LOG:?FAKE_NET_LOG not set}"
+# When args contain both "cat" and "VERSION", print version for update/doctor.
+joined="$*"
+if [[ "$joined" == *cat* && "$joined" == *VERSION* ]]; then
+  printf '%s\n' "1.0.0"
+fi
+exit 0
