@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tests/test-moshi.sh — moshi client contract tests (m1–m9)
+# tests/test-moshi.sh — moshi client contract tests (m1–m13)
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -249,6 +249,89 @@ trap 'rm -rf "$tmpdir"' EXIT
   else
     FAIL "$name"
     printf '  exit=%s out=%s err=%s\n' "$_exit" "$out" "$(cat "$errf" 2>/dev/null || true)" >&2
+  fi
+}
+
+# --- m10: FAKE_SSH_VALIDATE_EXIT=1 moshi h typoo → exit 1, no mosh, validate in log ---
+{
+  name=m10
+  outf="$tmpdir/m10.out" errf="$tmpdir/m10.err" logf="$tmpdir/m10.log"
+  FAKE_SSH_VALIDATE_EXIT=1 run_moshi "$outf" "$errf" "$logf" -- h typoo
+  err="$(cat "$errf" 2>/dev/null || true)"
+  log_content="$(cat "$logf" 2>/dev/null || true)"
+  has_validate=0 has_mosh=0
+  while IFS= read -r l || [[ -n "$l" ]]; do
+    [[ "$l" == *"--validate"* ]] && has_validate=1
+    base="${l%% *}"; base="${base##*/}"
+    [[ "$base" == mosh ]] && has_mosh=1
+  done <"$logf"
+  if [[ $_exit -eq 1 ]] && [[ "$err" == *"no repo"* ]] && [[ $has_validate -eq 1 ]] && [[ $has_mosh -eq 0 ]]; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  exit=%s has_validate=%s has_mosh=%s err=%s log=%s\n' \
+      "$_exit" "$has_validate" "$has_mosh" "$err" "$log_content" >&2
+  fi
+  unset FAKE_SSH_VALIDATE_EXIT || true
+}
+
+# --- m11: moshi h goodrepo --primary (validate ok) → validate then mosh (m1-style argv) ---
+{
+  name=m11
+  outf="$tmpdir/m11.out" errf="$tmpdir/m11.err" logf="$tmpdir/m11.log"
+  unset FAKE_SSH_VALIDATE_EXIT || true
+  run_moshi "$outf" "$errf" "$logf" -- h goodrepo --primary
+  log_content="$(cat "$logf" 2>/dev/null || true)"
+  has_validate=0
+  mosh_line=""
+  validate_before_mosh=0
+  saw_validate=0
+  while IFS= read -r l || [[ -n "$l" ]]; do
+    if [[ "$l" == *"--validate"* ]]; then
+      has_validate=1
+      saw_validate=1
+    fi
+    base="${l%% *}"; base="${base##*/}"
+    if [[ "$base" == mosh ]]; then
+      mosh_line="$l"
+      [[ $saw_validate -eq 1 ]] && validate_before_mosh=1
+    fi
+  done <"$logf"
+  expected_tail="mosh --server=MOSH_SERVER_NETWORK_TMOUT=86400 mosh-server h -- .local/bin/repo-session --client-version 1.0.0 goodrepo --primary"
+  if [[ $has_validate -eq 1 ]] && [[ $validate_before_mosh -eq 1 ]] && [[ "$mosh_line" == *"$expected_tail" ]]; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  has_validate=%s order=%s mosh_line=%s log=%s\n' \
+      "$has_validate" "$validate_before_mosh" "$mosh_line" "$log_content" >&2
+  fi
+}
+
+# --- m12: moshi h --list → no --validate in log ---
+{
+  name=m12
+  outf="$tmpdir/m12.out" errf="$tmpdir/m12.err" logf="$tmpdir/m12.log"
+  run_moshi "$outf" "$errf" "$logf" -- h --list
+  log_content="$(cat "$logf" 2>/dev/null || true)"
+  if [[ "$log_content" != *"--validate"* ]]; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  expected no --validate; log=%s\n' "$log_content" >&2
+  fi
+}
+
+# --- m13: moshi h (bare picker) → no --validate in log ---
+{
+  name=m13
+  outf="$tmpdir/m13.out" errf="$tmpdir/m13.err" logf="$tmpdir/m13.log"
+  run_moshi "$outf" "$errf" "$logf" -- h
+  log_content="$(cat "$logf" 2>/dev/null || true)"
+  if [[ "$log_content" != *"--validate"* ]]; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  expected no --validate; log=%s\n' "$log_content" >&2
   fi
 }
 
