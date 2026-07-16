@@ -14,26 +14,26 @@ fail(){ printf 'FAIL %s — %s\n' "$1" "$2"; FAIL=1; }
 # Shared arrange: temp HOME with config dir, temp repo base, log file.
 setup() {
   export TMPDIR="${TEST_TMPDIR_ROOT:-/tmp}"
-  export HOME="$(mktemp -d "${TMPDIR}/moshi-home.XXXXXX")"
-  _TEST_TMP="$(mktemp -d "${TMPDIR}/moshi-tmp.XXXXXX")"
+  export HOME="$(mktemp -d "${TMPDIR}/ferry-home.XXXXXX")"
+  _TEST_TMP="$(mktemp -d "${TMPDIR}/ferry-tmp.XXXXXX")"
   export TMPDIR="$_TEST_TMP"
-  export MOSHI_REPO_BASE="$(mktemp -d "${TMPDIR}/moshi-base.XXXXXX")"
-  export FAKE_TMUX_LOG="$(mktemp "${TMPDIR}/moshi-log.XXXXXX")"
+  export FERRY_REPO_BASE="$(mktemp -d "${TMPDIR}/ferry-base.XXXXXX")"
+  export FAKE_TMUX_LOG="$(mktemp "${TMPDIR}/ferry-log.XXXXXX")"
   export REPO_SESSION_TMUXBIN="$FAKE"
-  unset MOSHI_NO_FZF 2>/dev/null || true
+  unset FERRY_NO_FZF 2>/dev/null || true
   unset REPO_SESSION_LIB 2>/dev/null || true
   : >"$FAKE_TMUX_LOG"
   export FAKE_TMUX_SESSIONS=""
   export FAKE_TMUX_META=""
   export FAKE_TMUX_WINDOWS=""
-  unset MOSHI_HIDDEN_WINDOW_GLOB 2>/dev/null || true
-  mkdir -p "$HOME/.config/moshi"
+  unset FERRY_HIDDEN_WINDOW_GLOB 2>/dev/null || true
+  mkdir -p "$HOME/.config/mossferry"
 }
 
 teardown() {
-  local home="${HOME:-}" tmp="${_TEST_TMP:-}" base="${MOSHI_REPO_BASE:-}" log="${FAKE_TMUX_LOG:-}"
+  local home="${HOME:-}" tmp="${_TEST_TMP:-}" base="${FERRY_REPO_BASE:-}" log="${FAKE_TMUX_LOG:-}"
   export TMPDIR="${TEST_TMPDIR_ROOT:-/tmp}"
-  unset _TEST_TMP MOSHI_REPO_BASE FAKE_TMUX_LOG MOSHI_NO_FZF REPO_SESSION_LIB 2>/dev/null || true
+  unset _TEST_TMP FERRY_REPO_BASE FAKE_TMUX_LOG FERRY_NO_FZF REPO_SESSION_LIB 2>/dev/null || true
   rm -rf "$home" "$tmp" "$base" 2>/dev/null || true
   rm -f "$log" 2>/dev/null || true
 }
@@ -60,7 +60,7 @@ t2() {
   export FAKE_TMUX_SESSIONS="s1"
   export FAKE_TMUX_META="s1|win|1w detached bash"
   err=$(bash "$RS" --client-version 0.0.1 --list 2>&1 >/dev/null)
-  if [[ "$err" == *"run 'moshi update'"* ]]; then
+  if [[ "$err" == *"run 'ferry update'"* ]]; then
     ok t2
   else
     fail t2 "stderr=[$err]"
@@ -76,7 +76,7 @@ t3() {
   export FAKE_TMUX_META="s1|win|1w detached bash"
   ver=$(cat "$VERSION_FILE")
   err=$(bash "$RS" --client-version "$ver" --list 2>&1 >/dev/null)
-  if [[ "$err" != *"moshi update"* ]]; then
+  if [[ "$err" != *"ferry update"* ]]; then
     ok t3
   else
     fail t3 "stderr unexpectedly contains update: [$err]"
@@ -88,7 +88,7 @@ t3() {
 t4() {
   setup
   local log
-  mkdir -p "$MOSHI_REPO_BASE/myrepo"
+  mkdir -p "$FERRY_REPO_BASE/myrepo"
   export FAKE_TMUX_SESSIONS=""
   bash "$RS" myrepo --primary >/dev/null 2>&1
   log=$(cat "$FAKE_TMUX_LOG")
@@ -104,7 +104,7 @@ t4() {
 t5() {
   setup
   local out log
-  mkdir -p "$MOSHI_REPO_BASE/myrepo"
+  mkdir -p "$FERRY_REPO_BASE/myrepo"
   export FAKE_TMUX_SESSIONS=""
   out=$(bash "$RS" myrepo 2>&1)
   log=$(cat "$FAKE_TMUX_LOG")
@@ -122,8 +122,8 @@ t5() {
 t6() {
   setup
   local log last_attach
-  mkdir -p "$MOSHI_REPO_BASE/myrepo"
-  export MOSHI_NO_FZF=1
+  mkdir -p "$FERRY_REPO_BASE/myrepo"
+  export FERRY_NO_FZF=1
   export FAKE_TMUX_SESSIONS=$'myrepo\nmyrepo-2'
   export FAKE_TMUX_META=$'myrepo|w1|1w detached bash\nmyrepo-2|w2|1w detached bash'
   printf '2\n' | bash "$RS" myrepo >/dev/null 2>&1
@@ -141,7 +141,7 @@ t6() {
 t7() {
   setup
   local rc log
-  export MOSHI_NO_FZF=1
+  export FERRY_NO_FZF=1
   export FAKE_TMUX_SESSIONS=""
   printf 'q\n' | bash "$RS" >/dev/null 2>&1
   rc=$?
@@ -200,7 +200,7 @@ t9() {
 t10() {
   setup
   local log
-  mkdir -p "$MOSHI_REPO_BASE/myrepo"
+  mkdir -p "$FERRY_REPO_BASE/myrepo"
   export FAKE_TMUX_SESSIONS="myrepo"
   export FAKE_TMUX_META="myrepo|w|1w detached bash"
   bash "$RS" myrepo --resume-closed >/dev/null 2>&1
@@ -213,14 +213,14 @@ t10() {
   teardown
 }
 
-# ---- t11: MOSHI_REPO_BASE env wins (custom base) ----
+# ---- t11: FERRY_REPO_BASE env wins (custom base) ----
 t11() {
   setup
   local custom log rc
-  custom="$(mktemp -d "${TEST_TMPDIR_ROOT:-/tmp}/moshi-custom.XXXXXX")"
+  custom="$(mktemp -d "${TEST_TMPDIR_ROOT:-/tmp}/ferry-custom.XXXXXX")"
   mkdir -p "$custom/customrepo"
   # Only under custom base — baseline hardcodes $HOME/Repositories so this fails until env wins.
-  export MOSHI_REPO_BASE="$custom"
+  export FERRY_REPO_BASE="$custom"
   export FAKE_TMUX_SESSIONS=""
   bash "$RS" customrepo --primary >/dev/null 2>&1
   rc=$?
@@ -238,8 +238,8 @@ t11() {
 t12() {
   setup
   local log
-  mkdir -p "$MOSHI_REPO_BASE/myrepo"
-  export MOSHI_NO_FZF=1
+  mkdir -p "$FERRY_REPO_BASE/myrepo"
+  export FERRY_NO_FZF=1
   export FAKE_TMUX_SESSIONS=""
   printf 'n\n1\n' | bash "$RS" >/dev/null 2>&1
   log=$(cat "$FAKE_TMUX_LOG")
@@ -255,7 +255,7 @@ t12() {
 t13() {
   setup
   local out rc log
-  mkdir -p "$MOSHI_REPO_BASE/goodrepo"
+  mkdir -p "$FERRY_REPO_BASE/goodrepo"
   out=$(bash "$RS" --validate goodrepo 2>&1)
   rc=$?
   log=$(cat "$FAKE_TMUX_LOG")
@@ -271,7 +271,7 @@ t13() {
 t14() {
   setup
   local out rc log
-  mkdir -p "$MOSHI_REPO_BASE/other"
+  mkdir -p "$FERRY_REPO_BASE/other"
   out=$(bash "$RS" --validate nope 2>&1)
   rc=$?
   log=$(cat "$FAKE_TMUX_LOG")
@@ -334,14 +334,14 @@ t16() {
   teardown
 }
 
-# ---- t17: MOSHI_HIDDEN_WINDOW_GLOB env override ----
+# ---- t17: FERRY_HIDDEN_WINDOW_GLOB env override ----
 t17() {
   setup
   local rows win
   export FAKE_TMUX_SESSIONS="s1"
   export FAKE_TMUX_META="s1|_curtain|2w detached bash"
   export FAKE_TMUX_WINDOWS=$'s1:0:_curtain\ns1:1:Syndcast Backlog'
-  export MOSHI_HIDDEN_WINDOW_GLOB="zzz*"
+  export FERRY_HIDDEN_WINDOW_GLOB="zzz*"
   export REPO_SESSION_TMUXBIN="$FAKE"
   rows=$(
     export REPO_SESSION_LIB=1
