@@ -381,16 +381,16 @@ trap 'rm -rf "$tmpdir"' EXIT
   unset FAKE_SSH_UPSTREAM_EXIT || true
 }
 
-# --- m16: mossferry --help contains hull line (ANSI-stripped) + usage text ---
+# --- m16: mossferry --help contains MEDIUM hull line (ANSI-stripped) + usage text ---
 {
   name=m16
   outf="$tmpdir/m16.out" errf="$tmpdir/m16.err" logf="$tmpdir/m16.log"
-  # Tall terminal so full banner is chosen
-  LINES=30 run_ferry "$outf" "$errf" "$logf" -- --help
+  # Tall + medium width so MEDIUM tier is chosen (not WIDE, not SMALL)
+  LINES=30 COLUMNS=40 run_ferry "$outf" "$errf" "$logf" -- --help
   out="$(cat "$outf" 2>/dev/null || true)"
   stripped=$(printf '%s' "$out" | sed $'s/\033\\[[0-9;]*m//g')
   if [[ $_exit -eq 0 ]] \
-    && printf '%s\n' "$stripped" | grep -qF '\  mossferry  /' \
+    && printf '%s\n' "$stripped" | grep -qF '\   mossferry   /' \
     && [[ "$out" == *"mossferry <host>"* ]]; then
     ok "$name"
   else

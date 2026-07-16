@@ -540,21 +540,29 @@ _strip_ansi() {
   sed $'s/\033\\[[0-9;]*m//g'
 }
 
-# ---- t26: LINES=30 ferry_banner → 4-line canonical art (ANSI-stripped) ----
+# ---- t26: LINES=30 ferry_banner 40 → 6-line MEDIUM art (ANSI-stripped) ----
 t26() {
   setup
   local out stripped expected nlines rc
-  expected=$'        __|__\n   ____|_____|____\n   \\  mossferry  /\n ~~~\___________/~~~'
+  expected=$(cat <<'EOF'
+           |>
+         __|__
+      __|_o_o_|__
+    _|___________|_
+   \   mossferry   /
+ ~~~\_____________/~~~
+EOF
+)
   out=$(
     export REPO_SESSION_LIB=1
     # shellcheck source=/dev/null
     source "$RS"
-    LINES=30 ferry_banner
+    LINES=30 ferry_banner 40
   )
   rc=$?
   nlines=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
   stripped=$(printf '%s' "$out" | _strip_ansi)
-  if [[ $rc -eq 0 ]] && [[ $nlines -eq 4 ]] && [[ "$stripped" == "$expected" ]]; then
+  if [[ $rc -eq 0 ]] && [[ $nlines -eq 6 ]] && [[ "$stripped" == "$expected" ]]; then
     ok t26
   else
     fail t26 "rc=$rc nlines=$nlines stripped=[$(printf '%s' "$stripped" | cat -A)]"
@@ -608,6 +616,68 @@ t28() {
     fail t28 "rc1=$rc1 rc2=$rc2 out1=[$out1] out2=[$out2]"
   fi
   teardown
+}
+
+# ---- t33: LINES=30 ferry_banner 100 → 6-line WIDE art (ANSI-stripped) ----
+t33() {
+  setup
+  local out stripped expected nlines rc
+  expected=$(cat <<'EOF'
+           |>
+         __|__               __
+      __|_o_o_|__           / _|___ _ _ _ _ _  _
+    _|___________|_        |  _/ -_) '_| '_| || |
+   \   o   o   o   /       |_| \___|_| |_|  \_, |
+ ~~~\_____________/~~~~~~~~~~~~~~~~~~~~~~~~ |__/ ~~
+EOF
+)
+  out=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    LINES=30 ferry_banner 100
+  )
+  rc=$?
+  nlines=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
+  stripped=$(printf '%s' "$out" | _strip_ansi)
+  if [[ $rc -eq 0 ]] && [[ $nlines -eq 6 ]] && [[ "$stripped" == "$expected" ]]; then
+    ok t33
+  else
+    fail t33 "rc=$rc nlines=$nlines stripped=[$(printf '%s' "$stripped" | cat -A)]"
+  fi
+  teardown
+}
+
+# ---- t34: LINES=30 ferry_banner 20 → SMALL (narrow wins when tall) ----
+t34() {
+  setup
+  local out stripped nlines rc
+  out=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    LINES=30 ferry_banner 20
+  )
+  rc=$?
+  nlines=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
+  stripped=$(printf '%s' "$out" | _strip_ansi)
+  if [[ $rc -eq 0 ]] && [[ $nlines -eq 1 ]] && [[ "$stripped" == "⛴ mossferry" ]]; then
+    ok t34
+  else
+    fail t34 "rc=$rc nlines=$nlines stripped=[$stripped] out=[$out]"
+  fi
+  teardown
+}
+
+# ---- t35: --cycle on all three fzf invocations ----
+t35() {
+  local n
+  n=$(grep -c -- '--cycle' "$RS" || true)
+  if [[ "$n" -eq 3 ]]; then
+    ok t35
+  else
+    fail t35 "grep -c -- '--cycle' = $n (want 3)"
+  fi
 }
 
 # ---- t29: default FERRY_LAUNCHERS → parse_launchers + launcher_cmd ----
@@ -760,4 +830,5 @@ t13; t14; t15; t16; t17; t18; t19; t20
 t21; t22; t23; t24; t25
 t26; t27; t28
 t29; t30; t31; t32
+t33; t34; t35
 exit $FAIL
