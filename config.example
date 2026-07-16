@@ -6,3 +6,4 @@
 #FERRY_SERVER_TIMEOUT="86400"                # local: mosh-server self-exit after N s clientless
 #FERRY_REMOTE_REPO="Repositories/mossferry"  # remote: repo checkout, relative to remote $HOME
 #FERRY_HIDDEN_WINDOW_GLOB="_*"               # skip matching windows in picker names/previews
+#FERRY_BANNER="on"                           # green ferry art in picker / --help (off|0 to hide)

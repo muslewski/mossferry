@@ -25,8 +25,9 @@ own_version() {
 load_config() {
   local _had_remote_bin=0 _had_repo_base=0 _had_default_cmd=0
   local _had_default_host=0 _had_server_timeout=0 _had_remote_repo=0
+  local _had_banner=0
   local _v_remote_bin _v_repo_base _v_default_cmd _v_default_host
-  local _v_server_timeout _v_remote_repo
+  local _v_server_timeout _v_remote_repo _v_banner
 
   if [[ -n "${FERRY_REMOTE_BIN+x}" ]]; then
     _had_remote_bin=1
@@ -52,6 +53,10 @@ load_config() {
     _had_remote_repo=1
     _v_remote_repo="$FERRY_REMOTE_REPO"
   fi
+  if [[ -n "${FERRY_BANNER+x}" ]]; then
+    _had_banner=1
+    _v_banner="$FERRY_BANNER"
+  fi
 
   FERRY_REMOTE_BIN=".local/bin/repo-session"
   FERRY_REPO_BASE="${HOME}/Repositories"
@@ -59,6 +64,7 @@ load_config() {
   FERRY_DEFAULT_HOST=""
   FERRY_SERVER_TIMEOUT="86400"
   FERRY_REMOTE_REPO="Repositories/mossferry"
+  FERRY_BANNER="on"
 
   local cfg="${HOME}/.config/mossferry/config"
   if [[ -r "$cfg" ]]; then
@@ -75,6 +81,7 @@ load_config() {
   : "${FERRY_DEFAULT_HOST:=}"
   : "${FERRY_SERVER_TIMEOUT:=86400}"
   : "${FERRY_REMOTE_REPO:=Repositories/mossferry}"
+  : "${FERRY_BANNER:=on}"
 
   [[ $_had_remote_bin -eq 1 ]] && FERRY_REMOTE_BIN="$_v_remote_bin"
   [[ $_had_repo_base -eq 1 ]] && FERRY_REPO_BASE="$_v_repo_base"
@@ -82,9 +89,31 @@ load_config() {
   [[ $_had_default_host -eq 1 ]] && FERRY_DEFAULT_HOST="$_v_default_host"
   [[ $_had_server_timeout -eq 1 ]] && FERRY_SERVER_TIMEOUT="$_v_server_timeout"
   [[ $_had_remote_repo -eq 1 ]] && FERRY_REMOTE_REPO="$_v_remote_repo"
+  [[ $_had_banner -eq 1 ]] && FERRY_BANNER="$_v_banner"
+}
+
+# ASCII ferry art for --help (and shared brand with remote picker).
+# Keep in sync with bin/repo-session (deliberate duplication — both scripts stay self-contained).
+ferry_banner() {
+  case "${FERRY_BANNER:-on}" in
+    off|0) return 0 ;;
+  esac
+  local rows
+  rows="${LINES:-$(tput lines 2>/dev/null || echo 24)}"
+  if (( rows >= 18 )); then
+    # Full 4-line banner: hull/cabin regular green, name bright green, waves dim green.
+    printf '\033[32m        __|__\033[0m\n'
+    printf '\033[32m   ____|_____|____\033[0m\n'
+    printf '\033[32m   \\  \033[1;32mmossferry\033[0m\033[32m  /\033[0m\n'
+    printf '\033[2;32m ~~~\033[0m\033[32m\\___________/\033[0m\033[2;32m~~~\033[0m\n'
+  else
+    # Short panes: one-line variant (green name).
+    printf '⛴ \033[1;32mmossferry\033[0m\n'
+  fi
 }
 
 usage() {
+  ferry_banner
   cat <<'EOF'
 mossferry <host> [<repo>] [flags]   open a remote tmux session over mosh on <host>
   (`ferry` is the short command)
