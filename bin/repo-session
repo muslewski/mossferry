@@ -126,22 +126,43 @@ _subpicker_hints() {
 
 # ASCII ferry art for picker header / --help / no-fzf menu.
 # Keep in sync with bin/mossferry (deliberate duplication — both scripts stay self-contained).
+# Optional arg = available display columns; default COLUMNS / tput / 80.
+# Tiers: off→nothing; rows<18→SMALL; width≥52→WIDE; width≥24→MEDIUM; else SMALL.
 ferry_banner() {
   case "${FERRY_BANNER:-on}" in
     off|0) return 0 ;;
   esac
-  local rows
+  local rows width
   rows="${LINES:-$(tput lines 2>/dev/null || echo 24)}"
-  if (( rows >= 18 )); then
-    # Full 4-line banner: hull/cabin regular green, name bright green, waves dim green.
-    printf '\033[32m        __|__\033[0m\n'
-    printf '\033[32m   ____|_____|____\033[0m\n'
-    printf '\033[32m   \\  \033[1;32mmossferry\033[0m\033[32m  /\033[0m\n'
-    printf '\033[2;32m ~~~\033[0m\033[32m\\___________/\033[0m\033[2;32m~~~\033[0m\n'
-  else
+  width="${1:-${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}}"
+  if (( rows < 18 )); then
     # Short panes: one-line variant (green name).
     printf '⛴ \033[1;32mmossferry\033[0m\n'
+    return 0
   fi
+  if (( width >= 52 )); then
+    # WIDE: boat + figlet-wordmark lockup (6×51).
+    # flag bright green; boat structure regular green; portholes/waves dim; figlet bright.
+    printf '           \033[1;32m|>\033[0m\n'
+    printf '\033[32m         __|__               \033[0m\033[1;32m__\033[0m\n'
+    printf '\033[32m      __|_\033[0m\033[2;32mo\033[0m\033[32m_\033[0m\033[2;32mo\033[0m\033[32m_|__           \033[0m\033[1;32m/ _|___ _ _ _ _ _  _\033[0m\n'
+    printf '\033[32m    _|___________|_        \033[0m\033[1;32m|  _/ -_) '"'"'_| '"'"'_| || |\033[0m\n'
+    printf '\033[32m   \\   \033[0m\033[2;32mo\033[0m\033[32m   \033[0m\033[2;32mo\033[0m\033[32m   \033[0m\033[2;32mo\033[0m\033[32m   /       \033[0m\033[1;32m|_| \\___|_| |_|  \\_, |\033[0m\n'
+    printf '\033[2;32m ~~~\033[0m\033[32m\\_____________/\033[0m\033[2;32m~~~~~~~~~~~~~~~~~~~~~~~~\033[0m\033[1;32m |__/\033[0m\033[2;32m ~~\033[0m\n'
+    return 0
+  fi
+  if (( width >= 24 )); then
+    # MEDIUM: boat liner with name on hull (6×22).
+    printf '           \033[1;32m|>\033[0m\n'
+    printf '\033[32m         __|__\033[0m\n'
+    printf '\033[32m      __|_\033[0m\033[2;32mo\033[0m\033[32m_\033[0m\033[2;32mo\033[0m\033[32m_|__\033[0m\n'
+    printf '\033[32m    _|___________|_\033[0m\n'
+    printf '\033[32m   \\   \033[0m\033[1;32mmossferry\033[0m\033[32m   /\033[0m\n'
+    printf '\033[2;32m ~~~\033[0m\033[32m\\_____________/\033[0m\033[2;32m~~~\033[0m\n'
+    return 0
+  fi
+  # Narrow but tall: SMALL one-liner.
+  printf '⛴ \033[1;32mmossferry\033[0m\n'
 }
 
 # Exit 0 if $FERRY_REPO_BASE/<repo> is a directory; else stderr error + list, return 1.
@@ -364,7 +385,7 @@ _pick_repo_for_new() {
     fi
     pickfile="${TMPDIR:-/tmp}/repo-session-subpick.$$"
     if (( scoped )); then
-      printf '%s\n' "${dirs[@]}" | fzf --layout=reverse --header-first \
+      printf '%s\n' "${dirs[@]}" | fzf --layout=reverse --header-first --cycle \
         "${sub_hdr[@]}" "${sub_expect[@]}" --prompt='new session repo> ' \
         >"$pickfile" || { rm -f "$pickfile"; return 1; }
     else
@@ -372,7 +393,7 @@ _pick_repo_for_new() {
         printf '%s\n' "${dirs[@]}"
         printf '%s\n' "$_NEW_REPO_LABEL"
         printf '%s\n' "$_HOME_SESSION_LABEL"
-      } | fzf --layout=reverse --header-first \
+      } | fzf --layout=reverse --header-first --cycle \
         "${sub_hdr[@]}" "${sub_expect[@]}" --prompt='new session repo> ' \
         >"$pickfile" || { rm -f "$pickfile"; return 1; }
     fi
@@ -547,7 +568,11 @@ run_picker() {
       [[ -n "$line" ]] && rows+=("$line")
     done < <(build_session_rows "$repo")
 
-    banner=$(ferry_banner) || true
+    # Header lives left of right:60% preview → banner width is 40% of cols.
+    local cols banner_w
+    cols="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
+    banner_w=$(( cols * 40 / 100 ))
+    banner=$(ferry_banner "$banner_w") || true
     if [[ -n "$banner" ]]; then
       header="${banner}"$'\n'"${hints}"
     else
@@ -558,7 +583,7 @@ run_picker() {
       printf '%s\n' "${rows[@]}"
       printf '%s\n' "$new_label"
     } | fzf --ansi --delimiter=$'\t' \
-        --layout=reverse --header-first \
+        --layout=reverse --header-first --cycle \
         --expect="$expect_keys" \
         --header "$header" \
         --preview "$TMUXBIN capture-pane -ep -t {6}" \
