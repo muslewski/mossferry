@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tests/test-mossferry.sh — mossferry client contract tests (m1–m14)
+# tests/test-mossferry.sh — mossferry client contract tests (m1–m15)
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -362,6 +362,23 @@ trap 'rm -rf "$tmpdir"' EXIT
     FAIL "$name"
     printf '  expected --client-version %s in mosh line; got: %s\n' "$ver_from_file" "$line" >&2
   fi
+}
+
+# --- m15: update with remote present but no upstream → skip pull, exit 0 ---
+{
+  name=m15
+  outf="$tmpdir/m15.out" errf="$tmpdir/m15.err" logf="$tmpdir/m15.log"
+  FAKE_SSH_UPSTREAM_EXIT=1 run_ferry "$outf" "$errf" "$logf" -- update h
+  out="$(cat "$outf" 2>/dev/null || true)"
+  if [[ $_exit -eq 0 ]] \
+    && [[ "$out" == *"remote checkout is canonical (no upstream) — pull skipped"* ]] \
+    && [[ "$out" == *"local ${VERSION} / remote ${VERSION}"* ]]; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  exit=%s out=%s err=%s\n' "$_exit" "$out" "$(cat "$errf" 2>/dev/null || true)" >&2
+  fi
+  unset FAKE_SSH_UPSTREAM_EXIT || true
 }
 
 if [[ $fail -ne 0 ]]; then
