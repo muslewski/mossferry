@@ -92,10 +92,15 @@ Runs on the remote, inside the mosh session:
   live screen, in color.
 - `➕ new session…` → second fzf over directories in `FERRY_REPO_BASE`
   (pre-filtered to `<repo>` when one was given) → create + attach.
+- Global new-session chain also offers `➕ new repo…` (prompt name, `mkdir` +
+  `git init -b main` under `FERRY_REPO_BASE`, then create + attach) and
+  `🏠 home session…` (prompt name, empty → `home`; session cwd `$HOME`).
+- Repo-scoped picker's new-session chain stays pre-filtered — no special rows.
 - **Zero-session fast path:** `ferry <host> <repo>` with no live sessions
   skips the picker and creates + attaches the primary.
 - Esc / Ctrl-C: exit 130; mosh ends; you land back at the local prompt.
-- fzf missing on host → plain numbered menu (sessions + `n) new` + `q) quit`).
+- fzf missing on host → plain numbered menu (sessions + `n) new` + `q) quit`;
+  global new-session menu adds `r) new repo` and `h) home session`).
   Never falls through to a shared session.
 
 ## Configuration

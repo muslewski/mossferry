@@ -414,8 +414,130 @@ t20() {
   teardown
 }
 
+# ---- t21: create_repo side-quest → dir + .git under mktemp base ----
+t21() {
+  setup
+  local rc dir
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  (
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    create_repo side-quest
+  )
+  rc=$?
+  dir="$FERRY_REPO_BASE/side-quest"
+  if [[ $rc -eq 0 ]] && [[ -d "$dir" ]] && [[ -d "$dir/.git" ]]; then
+    ok t21
+  else
+    fail t21 "rc=$rc dir=[$dir] exists=$([[ -d "$dir" ]] && echo y || echo n) git=$([[ -d "$dir/.git" ]] && echo y || echo n)"
+  fi
+  teardown
+}
+
+# ---- t22: create_repo invalid names → nonzero, nothing created ----
+t22() {
+  setup
+  local rc1 rc2 base_before base_after
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  base_before=$(ls -1A "$FERRY_REPO_BASE" 2>/dev/null | wc -l)
+  (
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    create_repo '../evil'
+  )
+  rc1=$?
+  (
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    create_repo 'has space'
+  )
+  rc2=$?
+  base_after=$(ls -1A "$FERRY_REPO_BASE" 2>/dev/null | wc -l)
+  if [[ $rc1 -ne 0 ]] && [[ $rc2 -ne 0 ]] && [[ "$base_before" -eq "$base_after" ]] \
+     && [[ ! -e "$FERRY_REPO_BASE/../evil" || ! -d "$FERRY_REPO_BASE/evil" ]]; then
+    # nothing under base; path traversal must not create either
+    if [[ ! -d "$FERRY_REPO_BASE/evil" ]] && [[ ! -d "$FERRY_REPO_BASE/has space" ]]; then
+      ok t22
+    else
+      fail t22 "unexpected dirs under base"
+    fi
+  else
+    fail t22 "rc1=$rc1 rc2=$rc2 before=$base_before after=$base_after"
+  fi
+  teardown
+}
+
+# ---- t23: create_repo existing dir → nonzero + message ----
+t23() {
+  setup
+  local out rc
+  mkdir -p "$FERRY_REPO_BASE/exists-already"
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  out=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    create_repo exists-already 2>&1
+  )
+  rc=$?
+  if [[ $rc -ne 0 ]] && [[ -n "$out" ]]; then
+    ok t23
+  else
+    fail t23 "rc=$rc out=[$out]"
+  fi
+  teardown
+}
+
+# ---- t24: create_home_session home → new-session -c $HOME then attach ----
+t24() {
+  setup
+  local log
+  export FAKE_TMUX_SESSIONS=""
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  (
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    create_home_session home
+  ) >/dev/null 2>&1
+  log=$(cat "$FAKE_TMUX_LOG")
+  if grep -qF "new-session -d -s home -c $HOME" <<<"$log" \
+     && grep -q 'attach -t home' <<<"$log"; then
+    ok t24
+  else
+    fail t24 "log=[$log] HOME=[$HOME]"
+  fi
+  teardown
+}
+
+# ---- t25: create_home_session existing name → attach only, no new-session ----
+t25() {
+  setup
+  local log
+  export FAKE_TMUX_SESSIONS="home"
+  export FAKE_TMUX_META="home|w|1w detached bash"
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  (
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    create_home_session home
+  ) >/dev/null 2>&1
+  log=$(cat "$FAKE_TMUX_LOG")
+  if grep -q 'attach -t home' <<<"$log" && ! grep -q 'new-session' <<<"$log"; then
+    ok t25
+  else
+    fail t25 "log=[$log]"
+  fi
+  teardown
+}
+
 export TEST_TMPDIR_ROOT="${TMPDIR:-/tmp}"
 set +e
 t1; t2; t3; t4; t5; t6; t7; t8; t9; t10; t11; t12
 t13; t14; t15; t16; t17; t18; t19; t20
+t21; t22; t23; t24; t25
 exit $FAIL

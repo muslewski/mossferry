@@ -132,6 +132,43 @@ picker_rename() {
   "$TMUXBIN" rename-session -t "=$1" "$2"
 }
 
+# Create a new git repo under FERRY_REPO_BASE. No tmux.
+# Name must match ^[A-Za-z0-9][A-Za-z0-9._-]*$. Returns 1 on invalid/existing.
+create_repo() {
+  local name="$1"
+  local dir
+  if [[ -z "$name" || ! "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    echo "repo-session: invalid repo name '${name}'" >&2
+    return 1
+  fi
+  dir="${FERRY_REPO_BASE}/${name}"
+  if [[ -e "$dir" ]]; then
+    echo "repo-session: already exists: ${dir}" >&2
+    return 1
+  fi
+  mkdir -p "$dir" || return 1
+  git -C "$dir" init -q -b main || {
+    echo "repo-session: git init failed for '${name}'" >&2
+    return 1
+  }
+  return 0
+}
+
+# Create (if missing) + attach a session with cwd $HOME. -A semantics.
+# Honours startcmd / FERRY_DEFAULT_CMD when creating. Name regex same as create_repo.
+create_home_session() {
+  local session_name="${1:-home}"
+  if [[ -z "$session_name" || ! "$session_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    echo "repo-session: invalid session name '${session_name}'" >&2
+    return 1
+  fi
+  if ! "$TMUXBIN" has-session -t "=$session_name" 2>/dev/null; then
+    "$TMUXBIN" new-session -d -s "$session_name" -c "$HOME"
+    "$TMUXBIN" send-keys -t "$session_name" "${startcmd:-${FERRY_DEFAULT_CMD:-neofetch}}" C-m
+  fi
+  exec "$TMUXBIN" attach -t "$session_name"
+}
+
 # ---- session helpers ---------------------------------------------------------
 
 _list_repo_sessions() {
@@ -189,12 +226,21 @@ _create_and_attach() {
 
 # ---- picker ------------------------------------------------------------------
 
+# Special tokens returned by _pick_repo_for_new (global chain only).
+_NEW_REPO_LABEL=$'➕ new repo…'
+_HOME_SESSION_LABEL=$'🏠 home session…'
+_TOKEN_NEW_REPO='__NEW_REPO__'
+_TOKEN_HOME='__HOME__'
+
 _pick_repo_for_new() {
-  # Print chosen repo name to stdout, or empty on cancel. Uses global $repo filter.
+  # Print chosen repo name (or special token) to stdout, or return 1 on cancel.
+  # Global chain: repo dirs + new-repo + home-session rows.
+  # Repo-scoped: pre-filtered to that repo only — no special rows.
   local -a dirs=()
-  local d choice i
+  local d choice i scoped=0
   if [[ -n "$repo" ]]; then
     dirs=("$repo")
+    scoped=1
   else
     if [[ -d "$FERRY_REPO_BASE" ]]; then
       while IFS= read -r d; do
@@ -202,29 +248,66 @@ _pick_repo_for_new() {
       done < <(ls -1 "$FERRY_REPO_BASE" 2>/dev/null)
     fi
   fi
-  if (( ${#dirs[@]} == 0 )); then
+  if (( scoped == 0 && ${#dirs[@]} == 0 )); then
+    # Global with no existing repos: still offer new-repo / home rows.
+    :
+  elif (( scoped == 1 && ${#dirs[@]} == 0 )); then
     echo "repo-session: no repos under $FERRY_REPO_BASE" >&2
     return 1
   fi
 
   if command -v fzf >/dev/null 2>&1 && [[ -z "${FERRY_NO_FZF:-}" ]]; then
-    choice=$(printf '%s\n' "${dirs[@]}" | fzf --prompt='new session repo> ') || return 1
-    printf '%s\n' "$choice"
+    if (( scoped )); then
+      choice=$(printf '%s\n' "${dirs[@]}" | fzf --prompt='new session repo> ') || return 1
+    else
+      choice=$(
+        {
+          printf '%s\n' "${dirs[@]}"
+          printf '%s\n' "$_NEW_REPO_LABEL"
+          printf '%s\n' "$_HOME_SESSION_LABEL"
+        } | fzf --prompt='new session repo> '
+      ) || return 1
+    fi
+    if [[ "$choice" == "$_NEW_REPO_LABEL" ]]; then
+      printf '%s\n' "$_TOKEN_NEW_REPO"
+    elif [[ "$choice" == "$_HOME_SESSION_LABEL" ]]; then
+      printf '%s\n' "$_TOKEN_HOME"
+    else
+      printf '%s\n' "$choice"
+    fi
     return 0
   fi
 
-  # numbered menu
+  # numbered menu (no-fzf)
   i=1
   for d in "${dirs[@]}"; do
     printf '%d) %s\n' "$i" "$d" >&2
     ((i++)) || true
   done
+  if (( ! scoped )); then
+    printf 'r) new repo\n' >&2
+    printf 'h) home session\n' >&2
+  fi
   printf 'q) quit\n' >&2
   if ! read -r choice; then
     return 1
   fi
   case "$choice" in
     q|Q|"") return 1 ;;
+    r|R)
+      if (( ! scoped )); then
+        printf '%s\n' "$_TOKEN_NEW_REPO"
+        return 0
+      fi
+      return 1
+      ;;
+    h|H)
+      if (( ! scoped )); then
+        printf '%s\n' "$_TOKEN_HOME"
+        return 0
+      fi
+      return 1
+      ;;
     *)
       if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#dirs[@]} )); then
         printf '%s\n' "${dirs[$((choice-1))]}"
@@ -235,13 +318,54 @@ _pick_repo_for_new() {
   esac
 }
 
+# Prompt for new repo name, create_repo, then lock-guarded create+attach.
+# Returns 1 on invalid (message already printed) so caller can reload picker.
+_flow_new_repo() {
+  local name session_name
+  printf 'new repo name: ' >/dev/tty
+  if ! read -r name </dev/tty; then
+    return 1
+  fi
+  if ! create_repo "$name"; then
+    return 1
+  fi
+  repo="$name"
+  session_name=$(_next_free_name)
+  _create_and_attach "$session_name"
+}
+
+# Prompt for home session name (empty → home), then create_home_session.
+# Returns 1 on invalid so caller can reload picker.
+_flow_home_session() {
+  local name
+  printf 'session name [home]: ' >/dev/tty
+  if ! read -r name </dev/tty; then
+    return 1
+  fi
+  [[ -z "$name" ]] && name="home"
+  create_home_session "$name" || return 1
+}
+
+# Returns 1 on invalid input (reload picker); exits 130 on cancel; execs on success.
 _do_new_session_flow() {
   local chosen name
   chosen=$(_pick_repo_for_new) || exit 130
   [[ -z "$chosen" ]] && exit 130
+
+  case "$chosen" in
+    "$_TOKEN_NEW_REPO")
+      _flow_new_repo || return 1
+      return 0
+      ;;
+    "$_TOKEN_HOME")
+      _flow_home_session || return 1
+      return 0
+      ;;
+  esac
+
   if [[ ! -d "${FERRY_REPO_BASE}/${chosen}" ]]; then
     echo "repo-session: no repo '${chosen}' under $FERRY_REPO_BASE" >&2
-    exit 1
+    return 1
   fi
   repo="$chosen"
   name=$(_next_free_name)
@@ -255,41 +379,45 @@ run_picker() {
   local new_label=$'➕ new session…'
   local is_new=0
 
-  # Numbered menu fallback (no loop — attach/new/quit only; keybinds are fzf-only).
+  # Numbered menu fallback: loop so invalid create-flow input reloads.
   if ! command -v fzf >/dev/null 2>&1 || [[ -n "${FERRY_NO_FZF:-}" ]]; then
-    while IFS= read -r line; do
-      [[ -n "$line" ]] && rows+=("$line")
-    done < <(build_session_rows "$repo")
-    i=1
-    for line in "${rows[@]}"; do
-      name="${line%%$'\t'*}"
-      printf '%d) %s\n' "$i" "$line" | tr '\t' ' '
-      ((i++)) || true
+    while true; do
+      rows=()
+      while IFS= read -r line; do
+        [[ -n "$line" ]] && rows+=("$line")
+      done < <(build_session_rows "$repo")
+      i=1
+      for line in "${rows[@]}"; do
+        name="${line%%$'\t'*}"
+        printf '%d) %s\n' "$i" "$line" | tr '\t' ' '
+        ((i++)) || true
+      done
+      printf 'n) new session…\n'
+      printf 'q) quit\n'
+      if ! read -r nsel; then
+        exit 130
+      fi
+      case "$nsel" in
+        q|Q|"") exit 130 ;;
+        n|N)
+          # On invalid name: message already printed; reload this menu.
+          _do_new_session_flow || continue
+          ;;
+        *)
+          if [[ "$nsel" =~ ^[0-9]+$ ]] && (( nsel >= 1 && nsel <= ${#rows[@]} )); then
+            line="${rows[$((nsel-1))]}"
+            name="${line%%$'\t'*}"
+            exec "$TMUXBIN" attach -t "=$name"
+          fi
+          echo "repo-session: invalid selection" >&2
+          continue
+          ;;
+      esac
     done
-    printf 'n) new session…\n'
-    printf 'q) quit\n'
-    if ! read -r nsel; then
-      exit 130
-    fi
-    case "$nsel" in
-      q|Q|"") exit 130 ;;
-      n|N)
-        _do_new_session_flow
-        ;;
-      *)
-        if [[ "$nsel" =~ ^[0-9]+$ ]] && (( nsel >= 1 && nsel <= ${#rows[@]} )); then
-          line="${rows[$((nsel-1))]}"
-          name="${line%%$'\t'*}"
-          exec "$TMUXBIN" attach -t "=$name"
-        fi
-        echo "repo-session: invalid selection" >&2
-        exit 1
-        ;;
-    esac
     return
   fi
 
-  # fzf path: loop so kill/rename can reload the list.
+  # fzf path: loop so kill/rename / invalid create can reload the list.
   pickfile="${TMPDIR:-/tmp}/repo-session-pick.$$"
   while true; do
     rows=()
@@ -325,7 +453,9 @@ run_picker() {
     fi
 
     if (( is_new )); then
-      _do_new_session_flow
+      # Success execs attach; cancel exits 130; invalid returns → reload.
+      _do_new_session_flow || continue
+      continue
     fi
 
     name="${choice%%$'\t'*}"
