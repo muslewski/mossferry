@@ -610,10 +610,154 @@ t28() {
   teardown
 }
 
+# ---- t29: default FERRY_LAUNCHERS → parse_launchers + launcher_cmd ----
+t29() {
+  setup
+  local keys="" cmds="" lc="" out
+  unset FERRY_LAUNCHERS 2>/dev/null || true
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  out=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    load_config
+    parse_launchers
+    printf 'KEYS:%s\n' "${LAUNCHER_KEYS[*]-}"
+    printf 'CMDS:%s\n' "${LAUNCHER_CMDS[*]-}"
+    printf 'LC:%s\n' "$(launcher_cmd ctrl-g 2>/dev/null || true)"
+  ) 2>/dev/null || true
+  keys=$(printf '%s\n' "$out" | sed -n 's/^KEYS://p')
+  cmds=$(printf '%s\n' "$out" | sed -n 's/^CMDS://p')
+  lc=$(printf '%s\n' "$out" | sed -n 's/^LC://p')
+  if [[ "$keys" == "ctrl-a ctrl-g" ]] && [[ "$cmds" == "claude grok" ]] && [[ "$lc" == "grok" ]]; then
+    ok t29
+  else
+    fail t29 "keys=[$keys] cmds=[$cmds] lc=[$lc] out=[$out]"
+  fi
+  teardown
+}
+
+# ---- t30: reserved/invalid skipped; first-colon split keeps args ----
+t30() {
+  setup
+  local keys="" cmds="" lc="" n="" out
+  export FERRY_LAUNCHERS="ctrl-x:evil,banana:claude,alt-c:claude code"
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  out=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    parse_launchers
+    printf 'N:%s\n' "${#LAUNCHER_KEYS[@]}"
+    printf 'KEYS:%s\n' "${LAUNCHER_KEYS[*]-}"
+    printf 'CMDS:%s\n' "${LAUNCHER_CMDS[*]-}"
+    printf 'LC:%s\n' "$(launcher_cmd alt-c 2>/dev/null || true)"
+  ) 2>/dev/null || true
+  n=$(printf '%s\n' "$out" | sed -n 's/^N://p')
+  keys=$(printf '%s\n' "$out" | sed -n 's/^KEYS://p')
+  cmds=$(printf '%s\n' "$out" | sed -n 's/^CMDS://p')
+  lc=$(printf '%s\n' "$out" | sed -n 's/^LC://p')
+  if [[ "$n" == "1" ]] && [[ "$keys" == "alt-c" ]] && [[ "$cmds" == "claude code" ]] \
+     && [[ "$lc" == "claude code" ]]; then
+    ok t30
+  else
+    fail t30 "n=$n keys=[$keys] cmds=[$cmds] lc=[$lc] out=[$out]"
+  fi
+  teardown
+}
+
+# ---- t31: armed launcher overrides start command (home + repo); bare default ----
+t31() {
+  setup
+  local log1="" log2="" log3=""
+  mkdir -p "$FERRY_REPO_BASE/myrepo"
+  export FAKE_TMUX_SESSIONS=""
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  unset FERRY_LAUNCHERS 2>/dev/null || true
+
+  # Home path with launcher armed (ctrl-a → claude)
+  : >"$FAKE_TMUX_LOG"
+  (
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    load_config
+    parse_launchers
+    startcmd=$(launcher_cmd ctrl-a)
+    create_home_session home
+  ) >/dev/null 2>&1 || true
+  log1=$(cat "$FAKE_TMUX_LOG")
+
+  # Repo path with launcher armed (ctrl-g → grok)
+  : >"$FAKE_TMUX_LOG"
+  (
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    load_config
+    parse_launchers
+    startcmd=$(launcher_cmd ctrl-g)
+    repo=myrepo
+    _create_session_locked myrepo
+  ) >/dev/null 2>&1 || true
+  log2=$(cat "$FAKE_TMUX_LOG")
+
+  # No launcher → FERRY_DEFAULT_CMD (neofetch)
+  : >"$FAKE_TMUX_LOG"
+  (
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    load_config
+    startcmd=""
+    create_home_session home2
+  ) >/dev/null 2>&1 || true
+  log3=$(cat "$FAKE_TMUX_LOG")
+
+  if grep -qE 'send-keys -t home[[:space:]]+claude([[:space:]]+C-m)?$' <<<"$log1" \
+     && grep -qE 'send-keys -t myrepo[[:space:]]+grok([[:space:]]+C-m)?$' <<<"$log2" \
+     && grep -qE 'send-keys -t home2[[:space:]]+neofetch([[:space:]]+C-m)?$' <<<"$log3"; then
+    ok t31
+  else
+    fail t31 "log1=[$log1] log2=[$log2] log3=[$log3]"
+  fi
+  teardown
+}
+
+# ---- t32: empty FERRY_LAUNCHERS disables; launcher_cmd unknown → nonzero ----
+t32() {
+  setup
+  local n="" rc=0
+  export FERRY_LAUNCHERS=""
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  n=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    parse_launchers
+    printf '%s' "${#LAUNCHER_KEYS[@]}"
+  ) 2>/dev/null || true
+  (
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    parse_launchers
+    launcher_cmd ctrl-a
+  ) >/dev/null 2>&1
+  rc=$?
+  if [[ "$n" == "0" ]] && [[ $rc -ne 0 ]]; then
+    ok t32
+  else
+    fail t32 "n=$n rc=$rc"
+  fi
+  teardown
+}
+
 export TEST_TMPDIR_ROOT="${TMPDIR:-/tmp}"
 set +e
 t1; t2; t3; t4; t5; t6; t7; t8; t9; t10; t11; t12
 t13; t14; t15; t16; t17; t18; t19; t20
 t21; t22; t23; t24; t25
 t26; t27; t28
+t29; t30; t31; t32
 exit $FAIL
