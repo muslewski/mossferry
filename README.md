@@ -58,7 +58,9 @@ symlinks `bin/mossferry` as both `mossferry` and `ferry`, plus `repo-session`,
 into `~/.local/bin/`, removes a repo-owned legacy short-name symlink if present,
 migrates the old `~/.config/<previous-name>/config` (prefix `MOSHI_` → `FERRY_`)
 when the new config is absent, and seeds `~/.config/mossferry/config` from
-`config.example` **only if absent**. Ensure `~/.local/bin` is on your `PATH`.
+`config.example` **only if absent**. On a TTY it prints a MEDIUM hull banner,
+✓ per step, and a ready card (linked commands, config path, PATH check, next
+steps). Ensure `~/.local/bin` is on your `PATH`.
 
 ## Usage
 
@@ -67,7 +69,7 @@ when the new config is absent, and seeds `~/.config/mossferry/config` from
 | `ferry` | uses `FERRY_DEFAULT_HOST` → global picker (error if key unset) |
 | `ferry <host>` | fzf picker, all sessions + `➕ new session…` row |
 | `ferry <host> <repo>` | fzf picker, that repo's sessions + `➕ new session…` row |
-| _(picker keys)_ | `enter=attach · ctrl-x=kill · ctrl-r=rename`; launchers (default `ctrl-a`/`ctrl-g`) on `➕ new session…` and destination rows |
+| _(picker keys)_ | `enter=attach · ctrl-x=kill · ctrl-r=rename · ctrl-a/ctrl-g=AI · cycle · esc`; launchers on `➕ new session…` and destination rows |
 | `ferry <host> <repo> --primary\|-p` | attach primary, create if missing (old default, now explicit) |
 | `ferry <host> <repo> --new` | force fresh session (unchanged) |
 | `ferry <host> [repo] --list\|-l` | list sessions via ssh (unchanged) |
@@ -169,7 +171,10 @@ ferry update <host>   # explicit host
 ```
 
 Pulls the local clone (`git pull --ff-only`), then pulls the remote clone
-over ssh, and prints `local <v> / remote <v>`.
+over ssh, and prints `local <v> / remote <v>`. On a TTY the crossing is
+shown as step lines (local pull → remote pull) plus a wave strip
+`local <v> ~~~⛴~~~ remote <v>` (green on match, red on divergence). Raw
+git output is dimmed, not removed. `FERRY_UPDATE_VERBOSE=1` keeps git loud.
 
 ## Health
 
@@ -180,7 +185,27 @@ ferry doctor <host>
 
 Read-only checks (config, ssh resolution, auth, mosh, remote bin, version
 match, fzf, lingering mosh-servers, MagicDNS notes). Exit 1 if any check
-fails.
+fails. On a TTY: small ferry banner, green ✓ / red ✗ / dim info glyphs,
+end summary, and a dim fix hint (e.g. `ferry update`) when versions
+mismatch. Non-TTY keeps the plain `ok` / `FAIL` / `info` tokens for
+scripts and tests.
+
+## Ops screens (v2.5.0)
+
+Chrome is TTY-gated via the vendored GREEN-UI-KIT (`lib/green-ui.sh`).
+Pipes and CI stay monochrome and parse-stable.
+
+| Surface | Non-TTY (stable tokens) | TTY chrome |
+|---|---|---|
+| `ferry doctor` | `ok` / `FAIL` / `info` lines | ⛴ banner · glyphs · summary · fix hints |
+| `ferry update` | `local <v> / remote <v>` | step checklist · wave strip |
+| `--help` | sectioned body + version footer | green section labels |
+| validate typo | exact `repo-session: no repo…` + list, exit 1 | dim capped list + `did you mean …?` |
+| `install.sh` | `symlink` / `seeded` action lines | MEDIUM hull · ✓ steps · ready panel · PATH check |
+
+Errors are unified as `mossferry:` (client) or `repo-session:` (remote),
+with a red ✗ glyph when stderr is a TTY. Missing `lib/green-ui.sh` never
+kills the tool — plain fallbacks apply.
 
 ## Testing
 
