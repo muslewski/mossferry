@@ -5,10 +5,12 @@ mosh phonetics; *ferry* is the job — carrying you across to your remote tmux
 sessions. Short daily command: **`ferry`**.
 
 ```
-        __|__
-   ____|_____|____
-   \  mossferry  /
- ~~~\___________/~~~
+           |>
+         __|__               __
+      __|_o_o_|__           / _|___ _ _ _ _ _  _
+    _|___________|_        |  _/ -_) '_| '_| || |
+   \   o   o   o   /       |_| \___|_| |_|  \_, |
+ ~~~\_____________/~~~~~~~~~~~~~~~~~~~~~~~~ |__/ ~~
 ```
 
 A two-part tool for opening remote tmux sessions over mosh. Host-agnostic:
@@ -93,10 +95,13 @@ cannot wipe the message).
 
 Runs on the remote, inside the mosh session:
 
-- **Banner:** green ferry ASCII art sits in the fzf header (top-left) when the
-  terminal has at least 18 rows; shorter panes get a one-line `⛴ mossferry`
-  variant. Set `FERRY_BANNER=off` (or `0`) to hide it. Layout is reverse with
-  the header first so the brand stays above the list.
+- **Banner:** green ferry ASCII art sits in the fzf header (top-left), width-
+  tiered: wide panes get the boat+figlet lockup (≥52 cols), medium panes get
+  the liner with the name on the hull (≥24 cols), and short or narrow panes
+  get a one-line `⛴ mossferry`. The main picker's banner uses 40% of terminal
+  width (header left of the `right:60%` preview). Set `FERRY_BANNER=off` (or
+  `0`) to hide it. Layout is reverse with the header first; list navigation
+  wraps (`--cycle`).
 - One fzf list; each row: session name, active-window name, window count,
   attached/detached, current command.
 - **Preview panel:** `tmux capture-pane -ep -t <session>` — the session's
