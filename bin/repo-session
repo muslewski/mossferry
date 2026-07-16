@@ -17,12 +17,16 @@ set -u
 
 TMUXBIN="${REPO_SESSION_TMUXBIN:-/usr/bin/tmux}"
 
+# Populated by parse_launchers (after load_config). Empty = feature off.
+LAUNCHER_KEYS=()
+LAUNCHER_CMDS=()
+
 # ---- config / version helpers ------------------------------------------------
 
 load_config() {
   # Snapshot env (env > file > default).
   local e_REMOTE_BIN e_REPO_BASE e_DEFAULT_CMD e_DEFAULT_HOST e_SERVER_TIMEOUT e_REMOTE_REPO
-  local e_HIDDEN_WINDOW_GLOB e_BANNER
+  local e_HIDDEN_WINDOW_GLOB e_BANNER e_LAUNCHERS
   e_REMOTE_BIN="${FERRY_REMOTE_BIN-__UNSET__}"
   e_REPO_BASE="${FERRY_REPO_BASE-__UNSET__}"
   e_DEFAULT_CMD="${FERRY_DEFAULT_CMD-__UNSET__}"
@@ -31,6 +35,7 @@ load_config() {
   e_REMOTE_REPO="${FERRY_REMOTE_REPO-__UNSET__}"
   e_HIDDEN_WINDOW_GLOB="${FERRY_HIDDEN_WINDOW_GLOB-__UNSET__}"
   e_BANNER="${FERRY_BANNER-__UNSET__}"
+  e_LAUNCHERS="${FERRY_LAUNCHERS-__UNSET__}"
 
   FERRY_REMOTE_BIN=".local/bin/repo-session"
   FERRY_REPO_BASE="${HOME}/Repositories"
@@ -40,6 +45,7 @@ load_config() {
   FERRY_REMOTE_REPO="Repositories/mossferry"
   FERRY_HIDDEN_WINDOW_GLOB="_*"
   FERRY_BANNER="on"
+  FERRY_LAUNCHERS="ctrl-a:claude,ctrl-g:grok"
 
   if [[ -r "${HOME}/.config/mossferry/config" ]]; then
     # shellcheck source=/dev/null
@@ -54,6 +60,68 @@ load_config() {
   [[ "$e_REMOTE_REPO" != "__UNSET__" ]] && FERRY_REMOTE_REPO="$e_REMOTE_REPO"
   [[ "$e_HIDDEN_WINDOW_GLOB" != "__UNSET__" ]] && FERRY_HIDDEN_WINDOW_GLOB="$e_HIDDEN_WINDOW_GLOB"
   [[ "$e_BANNER" != "__UNSET__" ]] && FERRY_BANNER="$e_BANNER"
+  [[ "$e_LAUNCHERS" != "__UNSET__" ]] && FERRY_LAUNCHERS="$e_LAUNCHERS"
+}
+
+# Parse FERRY_LAUNCHERS into LAUNCHER_KEYS / LAUNCHER_CMDS (parallel arrays).
+# Empty value → both empty (feature off). Invalid/reserved pairs skipped.
+# Split each pair on the FIRST colon so commands may contain args/spaces.
+parse_launchers() {
+  LAUNCHER_KEYS=()
+  LAUNCHER_CMDS=()
+  local raw="${FERRY_LAUNCHERS:-}"
+  [[ -z "$raw" ]] && return 0
+
+  local pair key cmd
+  # Trailing newline so the last pair is not dropped by `read`.
+  while IFS= read -r pair || [[ -n "${pair:-}" ]]; do
+    [[ -z "$pair" ]] && continue
+    [[ "$pair" != *:* ]] && continue
+    key="${pair%%:*}"
+    cmd="${pair#*:}"
+    [[ -z "$key" || -z "$cmd" ]] && continue
+    # Reserved for kill/rename in the main picker.
+    [[ "$key" == "ctrl-x" || "$key" == "ctrl-r" ]] && continue
+    # Valid fzf-bindable keys only.
+    if [[ "$key" =~ ^ctrl-[a-z]$ ]] \
+       || [[ "$key" =~ ^alt-[a-z]$ ]] \
+       || [[ "$key" =~ ^f([1-9]|1[0-2])$ ]]; then
+      LAUNCHER_KEYS+=("$key")
+      LAUNCHER_CMDS+=("$cmd")
+    fi
+  done < <(printf '%s\n' "$raw" | tr ',' '\n')
+}
+
+# Print the start command for a launcher key. Exit 1 if unknown.
+launcher_cmd() {
+  local want="${1:-}" i
+  [[ -z "$want" ]] && return 1
+  for i in "${!LAUNCHER_KEYS[@]}"; do
+    if [[ "${LAUNCHER_KEYS[$i]}" == "$want" ]]; then
+      printf '%s\n' "${LAUNCHER_CMDS[$i]}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Comma-separated --expect list: ctrl-x,ctrl-r[,launcher keys...]
+_launcher_expect_suffix() {
+  local k out=""
+  for k in "${LAUNCHER_KEYS[@]+"${LAUNCHER_KEYS[@]}"}"; do
+    out+=",$k"
+  done
+  printf '%s' "$out"
+}
+
+# Sub-picker hints: enter=<default> · key=cmd · ...
+_subpicker_hints() {
+  local i line
+  line="enter=${FERRY_DEFAULT_CMD:-neofetch}"
+  for i in "${!LAUNCHER_KEYS[@]}"; do
+    line+=" · ${LAUNCHER_KEYS[$i]}=${LAUNCHER_CMDS[$i]}"
+  done
+  printf '%s' "$line"
 }
 
 # ASCII ferry art for picker header / --help / no-fzf menu.
@@ -280,22 +348,44 @@ _pick_repo_for_new() {
   fi
 
   if command -v fzf >/dev/null 2>&1 && [[ -z "${FERRY_NO_FZF:-}" ]]; then
-    local banner sub_hdr=()
+    local banner sub_hdr=() sub_expect=() header hints pickfile key lc
     banner=$(ferry_banner) || true
-    if [[ -n "$banner" ]]; then
+    if (( ${#LAUNCHER_KEYS[@]} > 0 )); then
+      hints=$(_subpicker_hints)
+      if [[ -n "$banner" ]]; then
+        header="${banner}"$'\n'"${hints}"
+      else
+        header="$hints"
+      fi
+      sub_hdr=(--header "$header")
+      sub_expect=(--expect="$(_launcher_expect_suffix | sed 's/^,//')")
+    elif [[ -n "$banner" ]]; then
       sub_hdr=(--header "$banner")
     fi
+    pickfile="${TMPDIR:-/tmp}/repo-session-subpick.$$"
     if (( scoped )); then
-      choice=$(printf '%s\n' "${dirs[@]}" | fzf --layout=reverse --header-first "${sub_hdr[@]}" --prompt='new session repo> ') || return 1
+      printf '%s\n' "${dirs[@]}" | fzf --layout=reverse --header-first \
+        "${sub_hdr[@]}" "${sub_expect[@]}" --prompt='new session repo> ' \
+        >"$pickfile" || { rm -f "$pickfile"; return 1; }
     else
-      choice=$(
-        {
-          printf '%s\n' "${dirs[@]}"
-          printf '%s\n' "$_NEW_REPO_LABEL"
-          printf '%s\n' "$_HOME_SESSION_LABEL"
-        } | fzf --layout=reverse --header-first "${sub_hdr[@]}" --prompt='new session repo> '
-      ) || return 1
+      {
+        printf '%s\n' "${dirs[@]}"
+        printf '%s\n' "$_NEW_REPO_LABEL"
+        printf '%s\n' "$_HOME_SESSION_LABEL"
+      } | fzf --layout=reverse --header-first \
+        "${sub_hdr[@]}" "${sub_expect[@]}" --prompt='new session repo> ' \
+        >"$pickfile" || { rm -f "$pickfile"; return 1; }
     fi
+    if (( ${#LAUNCHER_KEYS[@]} > 0 )); then
+      key=$(head -n 1 "$pickfile")
+      choice=$(sed -n '2p' "$pickfile")
+      if [[ -n "$key" ]] && lc=$(launcher_cmd "$key"); then
+        startcmd="$lc"
+      fi
+    else
+      choice=$(cat "$pickfile")
+    fi
+    rm -f "$pickfile"
     if [[ "$choice" == "$_NEW_REPO_LABEL" ]]; then
       printf '%s\n' "$_TOKEN_NEW_REPO"
     elif [[ "$choice" == "$_HOME_SESSION_LABEL" ]]; then
@@ -448,8 +538,9 @@ run_picker() {
 
   # fzf path: loop so kill/rename / invalid create can reload the list.
   pickfile="${TMPDIR:-/tmp}/repo-session-pick.$$"
-  local banner hints header
+  local banner hints header expect_keys lc
   hints='enter=attach · ctrl-x=kill · ctrl-r=rename · esc=quit'
+  expect_keys="ctrl-x,ctrl-r$(_launcher_expect_suffix)"
   while true; do
     rows=()
     while IFS= read -r line; do
@@ -468,7 +559,7 @@ run_picker() {
       printf '%s\n' "$new_label"
     } | fzf --ansi --delimiter=$'\t' \
         --layout=reverse --header-first \
-        --expect=ctrl-x,ctrl-r \
+        --expect="$expect_keys" \
         --header "$header" \
         --preview "$TMUXBIN capture-pane -ep -t {6}" \
         --preview-window=right:60% \
@@ -492,6 +583,10 @@ run_picker() {
     fi
 
     if (( is_new )); then
+      # Launcher key arms start command for this one creation (overrides flags).
+      if [[ -n "$key" ]] && lc=$(launcher_cmd "$key"); then
+        startcmd="$lc"
+      fi
       # Success execs attach; cancel exits 130; invalid returns → reload.
       _do_new_session_flow || continue
       continue
@@ -522,6 +617,10 @@ run_picker() {
         continue
         ;;
       *)
+        # Launcher keys on existing-session rows: ignore, reload.
+        if [[ -n "$key" ]] && launcher_cmd "$key" >/dev/null 2>&1; then
+          continue
+        fi
         # Enter (or empty expect key) → attach
         exec "$TMUXBIN" attach -t "=$name"
         ;;
@@ -565,6 +664,7 @@ main() {
   done
 
   load_config
+  parse_launchers
 
   # --validate dispatches first (before help/list/resume); never touches tmux.
   if (( validate )); then
