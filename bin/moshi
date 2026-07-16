@@ -1,0 +1,321 @@
+#!/usr/bin/env bash
+# moshi — local client: config, mosh/ssh launch, update, doctor
+# shellcheck disable=SC1090,SC1091
+set -u
+
+# Resolve install path even when invoked via symlink in ~/.local/bin.
+_moshi_repo_root() {
+  cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd
+}
+
+REPO_ROOT="$(_moshi_repo_root)"
+
+own_version() {
+  local f="$REPO_ROOT/VERSION" v
+  if [[ -r "$f" ]]; then
+    IFS= read -r v <"$f" || true
+    printf '%s\n' "${v:-unknown}"
+  else
+    printf '%s\n' unknown
+  fi
+}
+
+# env > config file > built-in default.
+# Snapshot pre-set MOSHI_* vars, apply defaults, source file, restore snapshot.
+load_config() {
+  local _had_remote_bin=0 _had_repo_base=0 _had_default_cmd=0
+  local _had_default_host=0 _had_server_timeout=0 _had_remote_repo=0
+  local _v_remote_bin _v_repo_base _v_default_cmd _v_default_host
+  local _v_server_timeout _v_remote_repo
+
+  if [[ -n "${MOSHI_REMOTE_BIN+x}" ]]; then
+    _had_remote_bin=1
+    _v_remote_bin="$MOSHI_REMOTE_BIN"
+  fi
+  if [[ -n "${MOSHI_REPO_BASE+x}" ]]; then
+    _had_repo_base=1
+    _v_repo_base="$MOSHI_REPO_BASE"
+  fi
+  if [[ -n "${MOSHI_DEFAULT_CMD+x}" ]]; then
+    _had_default_cmd=1
+    _v_default_cmd="$MOSHI_DEFAULT_CMD"
+  fi
+  if [[ -n "${MOSHI_DEFAULT_HOST+x}" ]]; then
+    _had_default_host=1
+    _v_default_host="$MOSHI_DEFAULT_HOST"
+  fi
+  if [[ -n "${MOSHI_SERVER_TIMEOUT+x}" ]]; then
+    _had_server_timeout=1
+    _v_server_timeout="$MOSHI_SERVER_TIMEOUT"
+  fi
+  if [[ -n "${MOSHI_REMOTE_REPO+x}" ]]; then
+    _had_remote_repo=1
+    _v_remote_repo="$MOSHI_REMOTE_REPO"
+  fi
+
+  MOSHI_REMOTE_BIN=".local/bin/repo-session"
+  MOSHI_REPO_BASE="${HOME}/Repositories"
+  MOSHI_DEFAULT_CMD="neofetch"
+  MOSHI_DEFAULT_HOST=""
+  MOSHI_SERVER_TIMEOUT="86400"
+  MOSHI_REMOTE_REPO="Repositories/moshi"
+
+  local cfg="${HOME}/.config/moshi/config"
+  if [[ -r "$cfg" ]]; then
+    # shellcheck source=/dev/null
+    source "$cfg"
+  fi
+
+  # Re-apply defaults for any keys the file left unset/empty only if still empty?
+  # Spec: file wins over default; missing keys in file keep defaults we set above
+  # before source — but source can unset. Re-fill only if completely unset.
+  : "${MOSHI_REMOTE_BIN:=.local/bin/repo-session}"
+  : "${MOSHI_REPO_BASE:=${HOME}/Repositories}"
+  : "${MOSHI_DEFAULT_CMD:=neofetch}"
+  : "${MOSHI_DEFAULT_HOST:=}"
+  : "${MOSHI_SERVER_TIMEOUT:=86400}"
+  : "${MOSHI_REMOTE_REPO:=Repositories/moshi}"
+
+  [[ $_had_remote_bin -eq 1 ]] && MOSHI_REMOTE_BIN="$_v_remote_bin"
+  [[ $_had_repo_base -eq 1 ]] && MOSHI_REPO_BASE="$_v_repo_base"
+  [[ $_had_default_cmd -eq 1 ]] && MOSHI_DEFAULT_CMD="$_v_default_cmd"
+  [[ $_had_default_host -eq 1 ]] && MOSHI_DEFAULT_HOST="$_v_default_host"
+  [[ $_had_server_timeout -eq 1 ]] && MOSHI_SERVER_TIMEOUT="$_v_server_timeout"
+  [[ $_had_remote_repo -eq 1 ]] && MOSHI_REMOTE_REPO="$_v_remote_repo"
+}
+
+usage() {
+  cat <<'EOF'
+moshi <host> [<repo>] [flags]   open a remote tmux session over mosh on <host>
+
+Default action is the session picker (global with no <repo>, scoped with one).
+Nothing attaches or creates a shared main session implicitly.
+
+Subcommands:
+  update [host]      git pull local clone + remote; print both versions
+  doctor [host]      read-only health checks (exit 1 if any FAIL)
+  --help, -h         this help (printed locally; no connection)
+
+Bare `moshi` uses MOSHI_DEFAULT_HOST from config/env when set.
+
+Flags (forwarded to repo-session on the remote):
+  (none)             open the session picker
+  --primary, -p      attach the repo's primary session, creating it if missing
+  --new              force a fresh session  (repo, repo-2, repo-3, ...)
+  --claude, -c       run `claude` in newly-created sessions  (default: neofetch)
+  --list, -l         list sessions and exit  (with <repo>: just that repo;
+                     without <repo>: every tmux session on the host)
+  --resume [N|name]  no arg -> session picker; N -> the Nth session;
+                     name -> attach that exact session (e.g. --resume syndcast-2)
+  --resume-closed    reattach one EXISTING session per caller, distinct (atomic).
+                     Fired across a ghostty-grid each pane gets a different one;
+                     panes past the session count stay BLANK.
+  --resume-or-new    like --resume-closed, but fill leftover panes with fresh
+                     sessions — so an N-pane grid always ends up full.
+  -- cmd...          custom startup command for newly-created sessions
+
+Grid workflows (with ghostty-grid):
+  ghostty-grid -8 -- moshi manjaro-remote syndcast --resume-or-new --claude
+        everyday driver: 8 panes, reattach existing syndcast sessions, fill the
+        rest with new ones running claude
+  ghostty-grid -8 -- moshi manjaro-remote syndcast --resume-closed
+        reattach existing sessions only; leftover panes stay blank
+
+Single session:
+  moshi manjaro-remote                        global session picker
+  moshi manjaro-remote syndcast               scoped picker for syndcast
+  moshi manjaro-remote syndcast --primary     attach/create the primary session
+  moshi manjaro-remote syndcast --new -c      fresh session running claude
+  moshi manjaro-remote syndcast --list        list syndcast's sessions
+  moshi manjaro-remote --resume               pick any session
+  moshi update                                pull local + remote (default host)
+  moshi doctor manjaro-remote                 health checks
+EOF
+}
+
+cmd_update() {
+  local host="${1:-${MOSHI_DEFAULT_HOST:-}}"
+  if [[ -z "$host" ]]; then
+    printf '%s\n' "moshi update: no host (pass one or set MOSHI_DEFAULT_HOST)" >&2
+    return 1
+  fi
+
+  # Local pull (no set -e; branch may lack upstream mid-development).
+  git -C "$REPO_ROOT" pull --ff-only || printf '%s\n' "moshi update: local pull failed (continuing)" >&2
+
+  ssh "$host" git -C "$MOSHI_REMOTE_REPO" pull --ff-only || {
+    printf '%s\n' "moshi update: remote pull failed" >&2
+    return 1
+  }
+
+  local v_local v_remote
+  v_local="$(own_version)"
+  v_remote="$(ssh "$host" cat "${MOSHI_REMOTE_REPO}/VERSION")"
+  v_remote="${v_remote//$'\r'/}"
+  v_remote="${v_remote//$'\n'/}"
+  printf 'local %s / remote %s\n' "$v_local" "$v_remote"
+}
+
+cmd_doctor() {
+  local host="${1:-${MOSHI_DEFAULT_HOST:-}}"
+  if [[ -z "$host" ]]; then
+    printf '%s\n' "moshi doctor: no host (pass one or set MOSHI_DEFAULT_HOST)" >&2
+    return 1
+  fi
+
+  local failed=0
+  local cfg="${HOME}/.config/moshi/config"
+
+  # 1. config readable (info if absent)
+  if [[ -r "$cfg" ]]; then
+    printf 'ok config readable: %s\n' "$cfg"
+  else
+    printf 'info config absent — defaults in use\n'
+  fi
+
+  # 2. ssh -G resolves
+  if ssh -G "$host" >/dev/null 2>&1; then
+    printf 'ok ssh config resolves host %s\n' "$host"
+  else
+    printf 'FAIL ssh config does not resolve host %s\n' "$host"
+    failed=1
+  fi
+
+  # 3. ssh BatchMode connect
+  if ssh -o BatchMode=yes -o ConnectTimeout=5 "$host" true >/dev/null 2>&1; then
+    printf 'ok ssh BatchMode connect to %s\n' "$host"
+  else
+    printf 'FAIL ssh BatchMode connect to %s\n' "$host"
+    failed=1
+  fi
+
+  # 4. local mosh binary
+  if command -v mosh >/dev/null 2>&1; then
+    printf 'ok local mosh binary\n'
+  else
+    printf 'FAIL local mosh binary missing\n'
+    failed=1
+  fi
+
+  # 5. remote MOSHI_REMOTE_BIN executable (relative to remote $HOME)
+  if ssh "$host" "test -x $MOSHI_REMOTE_BIN || test -x \"\$HOME/$MOSHI_REMOTE_BIN\"" >/dev/null 2>&1; then
+    printf 'ok remote %s executable\n' "$MOSHI_REMOTE_BIN"
+  else
+    printf 'FAIL remote %s not executable\n' "$MOSHI_REMOTE_BIN"
+    failed=1
+  fi
+
+  # 6. local vs remote VERSION match
+  local v_local v_remote
+  v_local="$(own_version)"
+  v_remote="$(ssh "$host" cat "${MOSHI_REMOTE_REPO}/VERSION" 2>/dev/null || true)"
+  v_remote="${v_remote//$'\r'/}"
+  v_remote="${v_remote//$'\n'/}"
+  if [[ -n "$v_remote" && "$v_local" == "$v_remote" ]]; then
+    printf 'ok versions match: %s\n' "$v_local"
+  else
+    printf 'FAIL versions: local %s / remote %s\n' "$v_local" "${v_remote:-unknown}"
+    failed=1
+  fi
+
+  # 7. remote fzf (info if missing)
+  if ssh "$host" command -v fzf >/dev/null 2>&1; then
+    printf 'ok remote fzf present\n'
+  else
+    printf 'info remote fzf missing — numbered menu fallback available\n'
+  fi
+
+  # 8. remote mosh-server count (info)
+  local count
+  count="$(ssh "$host" pgrep -c mosh-server 2>/dev/null || true)"
+  count="${count//$'\n'/}"
+  : "${count:=0}"
+  printf 'info remote mosh-server count: %s\n' "$count"
+
+  # 9. MagicDNS note (info): whether HostName is an IP
+  local hostname
+  hostname="$(ssh -G "$host" 2>/dev/null | awk 'tolower($1)=="hostname"{print $2; exit}')"
+  if [[ -z "$hostname" ]]; then
+    printf 'info MagicDNS: could not read HostName for %s\n' "$host"
+  elif [[ "$hostname" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    printf 'info MagicDNS: HostName is IP (%s) — not using MagicDNS name\n' "$hostname"
+  else
+    printf 'info MagicDNS: HostName is %s\n' "$hostname"
+  fi
+
+  return "$failed"
+}
+
+# Launch remote: ssh for --list/-l, mosh otherwise.
+# Prepends --client-version <v> before user args.
+launch_remote() {
+  local host="$1"
+  shift
+  local ver a
+  ver="$(own_version)"
+
+  for a in "$@"; do
+    case "$a" in
+      -h|--help)
+        usage
+        return 0
+        ;;
+    esac
+  done
+
+  for a in "$@"; do
+    case "$a" in
+      --list|-l)
+        ssh "$host" "$MOSHI_REMOTE_BIN" --client-version "$ver" "$@"
+        return $?
+        ;;
+    esac
+  done
+
+  mosh --server="MOSH_SERVER_NETWORK_TMOUT=${MOSHI_SERVER_TIMEOUT} mosh-server" \
+    "$host" -- "$MOSHI_REMOTE_BIN" --client-version "$ver" "$@"
+  return $?
+}
+
+main() {
+  load_config
+
+  # Subcommand / zero-arg dispatch before host parsing.
+  if [[ $# -eq 0 ]]; then
+    if [[ -n "${MOSHI_DEFAULT_HOST:-}" ]]; then
+      set -- "$MOSHI_DEFAULT_HOST"
+    else
+      usage >&2
+      return 1
+    fi
+  fi
+
+  case "$1" in
+    -h|--help)
+      usage
+      return 0
+      ;;
+    update)
+      shift
+      cmd_update "$@"
+      return $?
+      ;;
+    doctor)
+      shift
+      cmd_doctor "$@"
+      return $?
+      ;;
+  esac
+
+  local host="$1"
+  shift
+  launch_remote "$host" "$@"
+}
+
+if [[ "${MOSHI_LIB:-}" == "1" ]]; then
+  # Sourced as a library: expose load_config / own_version / usage / main.
+  return 0 2>/dev/null || true
+else
+  main "$@"
+  exit $?
+fi
