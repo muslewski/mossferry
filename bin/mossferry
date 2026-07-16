@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# moshi — local client: config, mosh/ssh launch, update, doctor
+# mossferry — local client: config, mosh/ssh launch, update, doctor
 # shellcheck disable=SC1090,SC1091
 set -u
 
 # Resolve install path even when invoked via symlink in ~/.local/bin.
-_moshi_repo_root() {
+_ferry_repo_root() {
   cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd
 }
 
-REPO_ROOT="$(_moshi_repo_root)"
+REPO_ROOT="$(_ferry_repo_root)"
 
 own_version() {
   local f="$REPO_ROOT/VERSION" v
@@ -21,46 +21,46 @@ own_version() {
 }
 
 # env > config file > built-in default.
-# Snapshot pre-set MOSHI_* vars, apply defaults, source file, restore snapshot.
+# Snapshot pre-set FERRY_* vars, apply defaults, source file, restore snapshot.
 load_config() {
   local _had_remote_bin=0 _had_repo_base=0 _had_default_cmd=0
   local _had_default_host=0 _had_server_timeout=0 _had_remote_repo=0
   local _v_remote_bin _v_repo_base _v_default_cmd _v_default_host
   local _v_server_timeout _v_remote_repo
 
-  if [[ -n "${MOSHI_REMOTE_BIN+x}" ]]; then
+  if [[ -n "${FERRY_REMOTE_BIN+x}" ]]; then
     _had_remote_bin=1
-    _v_remote_bin="$MOSHI_REMOTE_BIN"
+    _v_remote_bin="$FERRY_REMOTE_BIN"
   fi
-  if [[ -n "${MOSHI_REPO_BASE+x}" ]]; then
+  if [[ -n "${FERRY_REPO_BASE+x}" ]]; then
     _had_repo_base=1
-    _v_repo_base="$MOSHI_REPO_BASE"
+    _v_repo_base="$FERRY_REPO_BASE"
   fi
-  if [[ -n "${MOSHI_DEFAULT_CMD+x}" ]]; then
+  if [[ -n "${FERRY_DEFAULT_CMD+x}" ]]; then
     _had_default_cmd=1
-    _v_default_cmd="$MOSHI_DEFAULT_CMD"
+    _v_default_cmd="$FERRY_DEFAULT_CMD"
   fi
-  if [[ -n "${MOSHI_DEFAULT_HOST+x}" ]]; then
+  if [[ -n "${FERRY_DEFAULT_HOST+x}" ]]; then
     _had_default_host=1
-    _v_default_host="$MOSHI_DEFAULT_HOST"
+    _v_default_host="$FERRY_DEFAULT_HOST"
   fi
-  if [[ -n "${MOSHI_SERVER_TIMEOUT+x}" ]]; then
+  if [[ -n "${FERRY_SERVER_TIMEOUT+x}" ]]; then
     _had_server_timeout=1
-    _v_server_timeout="$MOSHI_SERVER_TIMEOUT"
+    _v_server_timeout="$FERRY_SERVER_TIMEOUT"
   fi
-  if [[ -n "${MOSHI_REMOTE_REPO+x}" ]]; then
+  if [[ -n "${FERRY_REMOTE_REPO+x}" ]]; then
     _had_remote_repo=1
-    _v_remote_repo="$MOSHI_REMOTE_REPO"
+    _v_remote_repo="$FERRY_REMOTE_REPO"
   fi
 
-  MOSHI_REMOTE_BIN=".local/bin/repo-session"
-  MOSHI_REPO_BASE="${HOME}/Repositories"
-  MOSHI_DEFAULT_CMD="neofetch"
-  MOSHI_DEFAULT_HOST=""
-  MOSHI_SERVER_TIMEOUT="86400"
-  MOSHI_REMOTE_REPO="Repositories/moshi"
+  FERRY_REMOTE_BIN=".local/bin/repo-session"
+  FERRY_REPO_BASE="${HOME}/Repositories"
+  FERRY_DEFAULT_CMD="neofetch"
+  FERRY_DEFAULT_HOST=""
+  FERRY_SERVER_TIMEOUT="86400"
+  FERRY_REMOTE_REPO="Repositories/mossferry"
 
-  local cfg="${HOME}/.config/moshi/config"
+  local cfg="${HOME}/.config/mossferry/config"
   if [[ -r "$cfg" ]]; then
     # shellcheck source=/dev/null
     source "$cfg"
@@ -69,24 +69,25 @@ load_config() {
   # Re-apply defaults for any keys the file left unset/empty only if still empty?
   # Spec: file wins over default; missing keys in file keep defaults we set above
   # before source — but source can unset. Re-fill only if completely unset.
-  : "${MOSHI_REMOTE_BIN:=.local/bin/repo-session}"
-  : "${MOSHI_REPO_BASE:=${HOME}/Repositories}"
-  : "${MOSHI_DEFAULT_CMD:=neofetch}"
-  : "${MOSHI_DEFAULT_HOST:=}"
-  : "${MOSHI_SERVER_TIMEOUT:=86400}"
-  : "${MOSHI_REMOTE_REPO:=Repositories/moshi}"
+  : "${FERRY_REMOTE_BIN:=.local/bin/repo-session}"
+  : "${FERRY_REPO_BASE:=${HOME}/Repositories}"
+  : "${FERRY_DEFAULT_CMD:=neofetch}"
+  : "${FERRY_DEFAULT_HOST:=}"
+  : "${FERRY_SERVER_TIMEOUT:=86400}"
+  : "${FERRY_REMOTE_REPO:=Repositories/mossferry}"
 
-  [[ $_had_remote_bin -eq 1 ]] && MOSHI_REMOTE_BIN="$_v_remote_bin"
-  [[ $_had_repo_base -eq 1 ]] && MOSHI_REPO_BASE="$_v_repo_base"
-  [[ $_had_default_cmd -eq 1 ]] && MOSHI_DEFAULT_CMD="$_v_default_cmd"
-  [[ $_had_default_host -eq 1 ]] && MOSHI_DEFAULT_HOST="$_v_default_host"
-  [[ $_had_server_timeout -eq 1 ]] && MOSHI_SERVER_TIMEOUT="$_v_server_timeout"
-  [[ $_had_remote_repo -eq 1 ]] && MOSHI_REMOTE_REPO="$_v_remote_repo"
+  [[ $_had_remote_bin -eq 1 ]] && FERRY_REMOTE_BIN="$_v_remote_bin"
+  [[ $_had_repo_base -eq 1 ]] && FERRY_REPO_BASE="$_v_repo_base"
+  [[ $_had_default_cmd -eq 1 ]] && FERRY_DEFAULT_CMD="$_v_default_cmd"
+  [[ $_had_default_host -eq 1 ]] && FERRY_DEFAULT_HOST="$_v_default_host"
+  [[ $_had_server_timeout -eq 1 ]] && FERRY_SERVER_TIMEOUT="$_v_server_timeout"
+  [[ $_had_remote_repo -eq 1 ]] && FERRY_REMOTE_REPO="$_v_remote_repo"
 }
 
 usage() {
   cat <<'EOF'
-moshi <host> [<repo>] [flags]   open a remote tmux session over mosh on <host>
+mossferry <host> [<repo>] [flags]   open a remote tmux session over mosh on <host>
+  (`ferry` is the short command)
 
 Default action is the session picker (global with no <repo>, scoped with one).
 Nothing attaches or creates a shared main session implicitly.
@@ -99,7 +100,7 @@ Subcommands:
   doctor [host]      read-only health checks (exit 1 if any FAIL)
   --help, -h         this help (printed locally; no connection)
 
-Bare `moshi` uses MOSHI_DEFAULT_HOST from config/env when set.
+Bare `ferry` uses FERRY_DEFAULT_HOST from config/env when set.
 
 Flags (forwarded to repo-session on the remote):
   (none)             open the session picker
@@ -118,67 +119,67 @@ Flags (forwarded to repo-session on the remote):
   -- cmd...          custom startup command for newly-created sessions
 
 Grid workflows (with ghostty-grid):
-  ghostty-grid -8 -- moshi manjaro-remote syndcast --resume-or-new --claude
+  ghostty-grid -8 -- ferry manjaro-remote syndcast --resume-or-new --claude
         everyday driver: 8 panes, reattach existing syndcast sessions, fill the
         rest with new ones running claude
-  ghostty-grid -8 -- moshi manjaro-remote syndcast --resume-closed
+  ghostty-grid -8 -- ferry manjaro-remote syndcast --resume-closed
         reattach existing sessions only; leftover panes stay blank
 
 Single session:
-  moshi manjaro-remote                        global session picker
-  moshi manjaro-remote syndcast               scoped picker for syndcast
-  moshi manjaro-remote syndcast --primary     attach/create the primary session
-  moshi manjaro-remote syndcast --new -c      fresh session running claude
-  moshi manjaro-remote syndcast --list        list syndcast's sessions
-  moshi manjaro-remote --resume               pick any session
-  moshi update                                pull local + remote (default host)
-  moshi doctor manjaro-remote                 health checks
+  ferry manjaro-remote                        global session picker
+  ferry manjaro-remote syndcast               scoped picker for syndcast
+  ferry manjaro-remote syndcast --primary     attach/create the primary session
+  ferry manjaro-remote syndcast --new -c      fresh session running claude
+  ferry manjaro-remote syndcast --list        list syndcast's sessions
+  ferry manjaro-remote --resume               pick any session
+  ferry update                                pull local + remote (default host)
+  ferry doctor manjaro-remote                 health checks
 EOF
 }
 
 cmd_update() {
-  local host="${1:-${MOSHI_DEFAULT_HOST:-}}"
+  local host="${1:-${FERRY_DEFAULT_HOST:-}}"
   if [[ -z "$host" ]]; then
-    printf '%s\n' "moshi update: no host (pass one or set MOSHI_DEFAULT_HOST)" >&2
+    printf '%s\n' "mossferry update: no host (pass one or set FERRY_DEFAULT_HOST)" >&2
     return 1
   fi
 
   # Local pull (no set -e; branch may lack upstream mid-development).
-  git -C "$REPO_ROOT" pull --ff-only || printf '%s\n' "moshi update: local pull failed (continuing)" >&2
+  git -C "$REPO_ROOT" pull --ff-only || printf '%s\n' "mossferry update: local pull failed (continuing)" >&2
 
   # Canonical remote checkout (no git remotes) cannot pull — skip and continue.
   local remotes
-  if ! remotes="$(ssh "$host" git -C "$MOSHI_REMOTE_REPO" remote)"; then
-    printf '%s\n' "moshi update: remote pull failed" >&2
+  if ! remotes="$(ssh "$host" git -C "$FERRY_REMOTE_REPO" remote)"; then
+    printf '%s\n' "mossferry update: remote pull failed" >&2
     return 1
   fi
   remotes="${remotes//$'\r'/}"
   if [[ -z "$remotes" ]]; then
     printf '%s\n' "remote checkout is canonical (no upstream) — pull skipped"
   else
-    ssh "$host" git -C "$MOSHI_REMOTE_REPO" pull --ff-only || {
-      printf '%s\n' "moshi update: remote pull failed" >&2
+    ssh "$host" git -C "$FERRY_REMOTE_REPO" pull --ff-only || {
+      printf '%s\n' "mossferry update: remote pull failed" >&2
       return 1
     }
   fi
 
   local v_local v_remote
   v_local="$(own_version)"
-  v_remote="$(ssh "$host" cat "${MOSHI_REMOTE_REPO}/VERSION")"
+  v_remote="$(ssh "$host" cat "${FERRY_REMOTE_REPO}/VERSION")"
   v_remote="${v_remote//$'\r'/}"
   v_remote="${v_remote//$'\n'/}"
   printf 'local %s / remote %s\n' "$v_local" "$v_remote"
 }
 
 cmd_doctor() {
-  local host="${1:-${MOSHI_DEFAULT_HOST:-}}"
+  local host="${1:-${FERRY_DEFAULT_HOST:-}}"
   if [[ -z "$host" ]]; then
-    printf '%s\n' "moshi doctor: no host (pass one or set MOSHI_DEFAULT_HOST)" >&2
+    printf '%s\n' "mossferry doctor: no host (pass one or set FERRY_DEFAULT_HOST)" >&2
     return 1
   fi
 
   local failed=0
-  local cfg="${HOME}/.config/moshi/config"
+  local cfg="${HOME}/.config/mossferry/config"
 
   # 1. config readable (info if absent)
   if [[ -r "$cfg" ]]; then
@@ -211,18 +212,18 @@ cmd_doctor() {
     failed=1
   fi
 
-  # 5. remote MOSHI_REMOTE_BIN executable (relative to remote $HOME)
-  if ssh "$host" "test -x $MOSHI_REMOTE_BIN || test -x \"\$HOME/$MOSHI_REMOTE_BIN\"" >/dev/null 2>&1; then
-    printf 'ok remote %s executable\n' "$MOSHI_REMOTE_BIN"
+  # 5. remote FERRY_REMOTE_BIN executable (relative to remote $HOME)
+  if ssh "$host" "test -x $FERRY_REMOTE_BIN || test -x \"\$HOME/$FERRY_REMOTE_BIN\"" >/dev/null 2>&1; then
+    printf 'ok remote %s executable\n' "$FERRY_REMOTE_BIN"
   else
-    printf 'FAIL remote %s not executable\n' "$MOSHI_REMOTE_BIN"
+    printf 'FAIL remote %s not executable\n' "$FERRY_REMOTE_BIN"
     failed=1
   fi
 
   # 6. local vs remote VERSION match
   local v_local v_remote
   v_local="$(own_version)"
-  v_remote="$(ssh "$host" cat "${MOSHI_REMOTE_REPO}/VERSION" 2>/dev/null || true)"
+  v_remote="$(ssh "$host" cat "${FERRY_REMOTE_REPO}/VERSION" 2>/dev/null || true)"
   v_remote="${v_remote//$'\r'/}"
   v_remote="${v_remote//$'\n'/}"
   if [[ -n "$v_remote" && "$v_local" == "$v_remote" ]]; then
@@ -299,7 +300,7 @@ launch_remote() {
   for a in "$@"; do
     case "$a" in
       --list|-l)
-        ssh "$host" "$MOSHI_REMOTE_BIN" --client-version "$ver" "$@"
+        ssh "$host" "$FERRY_REMOTE_BIN" --client-version "$ver" "$@"
         return $?
         ;;
     esac
@@ -307,15 +308,15 @@ launch_remote() {
 
   repo="$(repo_token_from_args "$@")"
   if [[ -n "$repo" ]]; then
-    val_out="$(ssh "$host" "$MOSHI_REMOTE_BIN" --client-version "$ver" --validate "$repo" 2>&1)" || val_rc=$?
+    val_out="$(ssh "$host" "$FERRY_REMOTE_BIN" --client-version "$ver" --validate "$repo" 2>&1)" || val_rc=$?
     if [[ $val_rc -ne 0 ]]; then
       [[ -n "$val_out" ]] && printf '%s\n' "$val_out" >&2
       return 1
     fi
   fi
 
-  mosh --server="MOSH_SERVER_NETWORK_TMOUT=${MOSHI_SERVER_TIMEOUT} mosh-server" \
-    "$host" -- "$MOSHI_REMOTE_BIN" --client-version "$ver" "$@"
+  mosh --server="MOSH_SERVER_NETWORK_TMOUT=${FERRY_SERVER_TIMEOUT} mosh-server" \
+    "$host" -- "$FERRY_REMOTE_BIN" --client-version "$ver" "$@"
   return $?
 }
 
@@ -324,8 +325,8 @@ main() {
 
   # Subcommand / zero-arg dispatch before host parsing.
   if [[ $# -eq 0 ]]; then
-    if [[ -n "${MOSHI_DEFAULT_HOST:-}" ]]; then
-      set -- "$MOSHI_DEFAULT_HOST"
+    if [[ -n "${FERRY_DEFAULT_HOST:-}" ]]; then
+      set -- "$FERRY_DEFAULT_HOST"
     else
       usage >&2
       return 1
@@ -354,7 +355,7 @@ main() {
   launch_remote "$host" "$@"
 }
 
-if [[ "${MOSHI_LIB:-}" == "1" ]]; then
+if [[ "${FERRY_LIB:-}" == "1" ]]; then
   # Sourced as a library: expose load_config / own_version / usage / main.
   return 0 2>/dev/null || true
 else

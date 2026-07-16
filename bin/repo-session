@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # repo-session [repo] [flags] [-- cmd...]
-# Remote brain for moshi: picker, attach/create, atomic grid claim.
+# Remote brain for mossferry: picker, attach/create, atomic grid claim.
 #   (default)           fzf/menu picker (scoped to <repo> when given)
 #   --primary / -p      attach primary session, create if missing
 #   --new               force a fresh session (repo, repo-2, ...)
@@ -9,7 +9,7 @@
 #   --resume-closed     atomic claim of one existing session
 #   --resume-or-new     claim, or create if none left
 #   --claude / -c       run claude on creation
-#   --client-version V  version handshake with local moshi client
+#   --client-version V  version handshake with local mossferry client
 #   --validate <repo>   exit 0 if repo dir exists under base; else error (no tmux)
 #   --help / -h         usage
 #   -- cmd...           custom startup command on creation
@@ -23,44 +23,44 @@ load_config() {
   # Snapshot env (env > file > default).
   local e_REMOTE_BIN e_REPO_BASE e_DEFAULT_CMD e_DEFAULT_HOST e_SERVER_TIMEOUT e_REMOTE_REPO
   local e_HIDDEN_WINDOW_GLOB
-  e_REMOTE_BIN="${MOSHI_REMOTE_BIN-__UNSET__}"
-  e_REPO_BASE="${MOSHI_REPO_BASE-__UNSET__}"
-  e_DEFAULT_CMD="${MOSHI_DEFAULT_CMD-__UNSET__}"
-  e_DEFAULT_HOST="${MOSHI_DEFAULT_HOST-__UNSET__}"
-  e_SERVER_TIMEOUT="${MOSHI_SERVER_TIMEOUT-__UNSET__}"
-  e_REMOTE_REPO="${MOSHI_REMOTE_REPO-__UNSET__}"
-  e_HIDDEN_WINDOW_GLOB="${MOSHI_HIDDEN_WINDOW_GLOB-__UNSET__}"
+  e_REMOTE_BIN="${FERRY_REMOTE_BIN-__UNSET__}"
+  e_REPO_BASE="${FERRY_REPO_BASE-__UNSET__}"
+  e_DEFAULT_CMD="${FERRY_DEFAULT_CMD-__UNSET__}"
+  e_DEFAULT_HOST="${FERRY_DEFAULT_HOST-__UNSET__}"
+  e_SERVER_TIMEOUT="${FERRY_SERVER_TIMEOUT-__UNSET__}"
+  e_REMOTE_REPO="${FERRY_REMOTE_REPO-__UNSET__}"
+  e_HIDDEN_WINDOW_GLOB="${FERRY_HIDDEN_WINDOW_GLOB-__UNSET__}"
 
-  MOSHI_REMOTE_BIN=".local/bin/repo-session"
-  MOSHI_REPO_BASE="${HOME}/Repositories"
-  MOSHI_DEFAULT_CMD="neofetch"
-  MOSHI_DEFAULT_HOST=""
-  MOSHI_SERVER_TIMEOUT="86400"
-  MOSHI_REMOTE_REPO="Repositories/moshi"
-  MOSHI_HIDDEN_WINDOW_GLOB="_*"
+  FERRY_REMOTE_BIN=".local/bin/repo-session"
+  FERRY_REPO_BASE="${HOME}/Repositories"
+  FERRY_DEFAULT_CMD="neofetch"
+  FERRY_DEFAULT_HOST=""
+  FERRY_SERVER_TIMEOUT="86400"
+  FERRY_REMOTE_REPO="Repositories/mossferry"
+  FERRY_HIDDEN_WINDOW_GLOB="_*"
 
-  if [[ -r "${HOME}/.config/moshi/config" ]]; then
+  if [[ -r "${HOME}/.config/mossferry/config" ]]; then
     # shellcheck source=/dev/null
-    source "${HOME}/.config/moshi/config"
+    source "${HOME}/.config/mossferry/config"
   fi
 
-  [[ "$e_REMOTE_BIN" != "__UNSET__" ]] && MOSHI_REMOTE_BIN="$e_REMOTE_BIN"
-  [[ "$e_REPO_BASE" != "__UNSET__" ]] && MOSHI_REPO_BASE="$e_REPO_BASE"
-  [[ "$e_DEFAULT_CMD" != "__UNSET__" ]] && MOSHI_DEFAULT_CMD="$e_DEFAULT_CMD"
-  [[ "$e_DEFAULT_HOST" != "__UNSET__" ]] && MOSHI_DEFAULT_HOST="$e_DEFAULT_HOST"
-  [[ "$e_SERVER_TIMEOUT" != "__UNSET__" ]] && MOSHI_SERVER_TIMEOUT="$e_SERVER_TIMEOUT"
-  [[ "$e_REMOTE_REPO" != "__UNSET__" ]] && MOSHI_REMOTE_REPO="$e_REMOTE_REPO"
-  [[ "$e_HIDDEN_WINDOW_GLOB" != "__UNSET__" ]] && MOSHI_HIDDEN_WINDOW_GLOB="$e_HIDDEN_WINDOW_GLOB"
+  [[ "$e_REMOTE_BIN" != "__UNSET__" ]] && FERRY_REMOTE_BIN="$e_REMOTE_BIN"
+  [[ "$e_REPO_BASE" != "__UNSET__" ]] && FERRY_REPO_BASE="$e_REPO_BASE"
+  [[ "$e_DEFAULT_CMD" != "__UNSET__" ]] && FERRY_DEFAULT_CMD="$e_DEFAULT_CMD"
+  [[ "$e_DEFAULT_HOST" != "__UNSET__" ]] && FERRY_DEFAULT_HOST="$e_DEFAULT_HOST"
+  [[ "$e_SERVER_TIMEOUT" != "__UNSET__" ]] && FERRY_SERVER_TIMEOUT="$e_SERVER_TIMEOUT"
+  [[ "$e_REMOTE_REPO" != "__UNSET__" ]] && FERRY_REMOTE_REPO="$e_REMOTE_REPO"
+  [[ "$e_HIDDEN_WINDOW_GLOB" != "__UNSET__" ]] && FERRY_HIDDEN_WINDOW_GLOB="$e_HIDDEN_WINDOW_GLOB"
 }
 
-# Exit 0 if $MOSHI_REPO_BASE/<repo> is a directory; else stderr error + list, return 1.
+# Exit 0 if $FERRY_REPO_BASE/<repo> is a directory; else stderr error + list, return 1.
 # Never invokes tmux.
 validate_repo() {
   local r="$1"
-  local dir="${MOSHI_REPO_BASE}/${r}"
+  local dir="${FERRY_REPO_BASE}/${r}"
   if [[ ! -d "$dir" ]]; then
-    echo "repo-session: no repo '${r}' under ${MOSHI_REPO_BASE} — pick one below, or run 'moshi <host>' to browse all sessions" >&2
-    ls -1 "$MOSHI_REPO_BASE" 2>/dev/null | sed 's/^/  /' >&2
+    echo "repo-session: no repo '${r}' under ${FERRY_REPO_BASE} — pick one below, or run 'ferry <host>' to browse all sessions" >&2
+    ls -1 "$FERRY_REPO_BASE" 2>/dev/null | sed 's/^/  /' >&2
     return 1
   fi
   return 0
@@ -79,12 +79,12 @@ own_version() {
 
 # One line per live session (optionally scoped to <repo>):
 #   <session>\t<display_window>\t<N>w\t<attached|detached>\t<cmd>\t<preview_target>
-# Display window skips MOSHI_HIDDEN_WINDOW_GLOB (default _*); preview_target is session:index.
+# Display window skips FERRY_HIDDEN_WINDOW_GLOB (default _*); preview_target is session:index.
 build_session_rows() {
   local filter="${1:-}" s cname wins att cmd attword
   local active_name active_idx display_name preview_target glob wline widx wname found
   local -a names=()
-  glob="${MOSHI_HIDDEN_WINDOW_GLOB:-_*}"
+  glob="${FERRY_HIDDEN_WINDOW_GLOB:-_*}"
   if [[ -n "$filter" ]]; then
     mapfile -t names < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null \
       | grep -E "^${filter}(-[0-9]+)?$" | sort -V)
@@ -156,13 +156,13 @@ print_list() {
 _create_session_locked() {
   # args: session_name
   local session_name="$1"
-  local dir="${MOSHI_REPO_BASE}/${repo}"
+  local dir="${FERRY_REPO_BASE}/${repo}"
   local lockf="${TMPDIR:-/tmp}/repo-session-${repo}.claim"
   exec 9>"$lockf"
   flock 9
   if ! "$TMUXBIN" has-session -t "$session_name" 2>/dev/null; then
     "$TMUXBIN" new-session -d -s "$session_name" -c "$dir"
-    "$TMUXBIN" send-keys -t "$session_name" "${startcmd:-$MOSHI_DEFAULT_CMD}" C-m
+    "$TMUXBIN" send-keys -t "$session_name" "${startcmd:-$FERRY_DEFAULT_CMD}" C-m
   fi
   flock -u 9
 }
@@ -197,18 +197,18 @@ _pick_repo_for_new() {
   if [[ -n "$repo" ]]; then
     dirs=("$repo")
   else
-    if [[ -d "$MOSHI_REPO_BASE" ]]; then
+    if [[ -d "$FERRY_REPO_BASE" ]]; then
       while IFS= read -r d; do
         [[ -n "$d" ]] && dirs+=("$d")
-      done < <(ls -1 "$MOSHI_REPO_BASE" 2>/dev/null)
+      done < <(ls -1 "$FERRY_REPO_BASE" 2>/dev/null)
     fi
   fi
   if (( ${#dirs[@]} == 0 )); then
-    echo "repo-session: no repos under $MOSHI_REPO_BASE" >&2
+    echo "repo-session: no repos under $FERRY_REPO_BASE" >&2
     return 1
   fi
 
-  if command -v fzf >/dev/null 2>&1 && [[ -z "${MOSHI_NO_FZF:-}" ]]; then
+  if command -v fzf >/dev/null 2>&1 && [[ -z "${FERRY_NO_FZF:-}" ]]; then
     choice=$(printf '%s\n' "${dirs[@]}" | fzf --prompt='new session repo> ') || return 1
     printf '%s\n' "$choice"
     return 0
@@ -240,8 +240,8 @@ _do_new_session_flow() {
   local chosen name
   chosen=$(_pick_repo_for_new) || exit 130
   [[ -z "$chosen" ]] && exit 130
-  if [[ ! -d "${MOSHI_REPO_BASE}/${chosen}" ]]; then
-    echo "repo-session: no repo '${chosen}' under $MOSHI_REPO_BASE" >&2
+  if [[ ! -d "${FERRY_REPO_BASE}/${chosen}" ]]; then
+    echo "repo-session: no repo '${chosen}' under $FERRY_REPO_BASE" >&2
     exit 1
   fi
   repo="$chosen"
@@ -257,7 +257,7 @@ run_picker() {
   local is_new=0
 
   # Numbered menu fallback (no loop — attach/new/quit only; keybinds are fzf-only).
-  if ! command -v fzf >/dev/null 2>&1 || [[ -n "${MOSHI_NO_FZF:-}" ]]; then
+  if ! command -v fzf >/dev/null 2>&1 || [[ -n "${FERRY_NO_FZF:-}" ]]; then
     while IFS= read -r line; do
       [[ -n "$line" ]] && rows+=("$line")
     done < <(build_session_rows "$repo")
@@ -409,13 +409,13 @@ main() {
     local ov
     ov="$(own_version | tr -d '[:space:]')"
     if [[ -n "$ov" && "$client_version" != "$ov" ]]; then
-      echo "moshi: client ${client_version} / remote ${ov} — run 'moshi update'" >&2
+      echo "mossferry: client ${client_version} / remote ${ov} — run 'ferry update'" >&2
     fi
   fi
 
   if (( help )); then
     cat <<'EOF'
-repo-session [repo] [flags]   remote brain for moshi (picker default)
+repo-session [repo] [flags]   remote brain for mossferry (picker default)
 
 Flags:
   (none)             open the session picker (scoped to <repo> when given)
@@ -431,20 +431,20 @@ Flags:
                      a ghostty-grid each pane gets a different one; extras stay BLANK.
   --resume-or-new    like --resume-closed, but fill leftover panes with fresh
                      sessions (honouring --claude / -- cmd) -- so the grid fills.
-  --client-version V version handshake (set by moshi client)
-  --validate <repo>  check repo exists under MOSHI_REPO_BASE (no tmux; used by client)
+  --client-version V version handshake (set by mossferry client)
+  --validate <repo>  check repo exists under FERRY_REPO_BASE (no tmux; used by client)
   --help, -h         print this help and exit
   -- cmd...          custom startup command for newly-created sessions
   Picker keys (fzf): enter=attach · ctrl-x=kill · ctrl-r=rename · esc=quit
 
-Examples (run via the moshi client, which prepends the host):
-  moshi manjaro-remote                            global session picker
-  moshi manjaro-remote syndcast                   picker scoped to syndcast
-  moshi manjaro-remote syndcast --primary         attach/create the primary session
-  moshi manjaro-remote syndcast --new --claude    fresh session running claude
-  moshi manjaro-remote syndcast --list            list syndcast's sessions
-  moshi manjaro-remote --resume                   pick any session
-  ghostty-grid -8 -- moshi manjaro-remote syndcast --resume-or-new --claude
+Examples (run via the ferry client, which prepends the host):
+  ferry manjaro-remote                            global session picker
+  ferry manjaro-remote syndcast                   picker scoped to syndcast
+  ferry manjaro-remote syndcast --primary         attach/create the primary session
+  ferry manjaro-remote syndcast --new --claude    fresh session running claude
+  ferry manjaro-remote syndcast --list            list syndcast's sessions
+  ferry manjaro-remote --resume                   pick any session
+  ghostty-grid -8 -- ferry manjaro-remote syndcast --resume-or-new --claude
         8 panes: reattach existing syndcast sessions, fill the rest with new ones
         running claude (the everyday "open all my workspaces" command)
 EOF
@@ -496,7 +496,7 @@ EOF
 
   # Typo guard: repo given but not a directory under base → error + list, never attach main.
   if [[ -n "$repo" ]]; then
-    dir="${MOSHI_REPO_BASE}/${repo}"
+    dir="${FERRY_REPO_BASE}/${repo}"
     if ! validate_repo "$repo"; then
       exit 1
     fi
@@ -534,7 +534,7 @@ EOF
       n=2; target="$repo"
       while "$TMUXBIN" has-session -t "$target" 2>/dev/null; do target="$repo-$n"; ((n++)) || true; done
       "$TMUXBIN" new-session -d -s "$target" -c "$dir"
-      "$TMUXBIN" send-keys -t "$target" "${startcmd:-$MOSHI_DEFAULT_CMD}" C-m
+      "$TMUXBIN" send-keys -t "$target" "${startcmd:-$FERRY_DEFAULT_CMD}" C-m
       "$TMUXBIN" set-option -t "$target" @claim_ts "$now" >/dev/null 2>&1
     fi
     flock -u 9
@@ -555,7 +555,7 @@ EOF
     exec 9>"$lockf"; flock 9
     if ! "$TMUXBIN" has-session -t "$session" 2>/dev/null; then
       "$TMUXBIN" new-session -d -s "$session" -c "$dir"
-      "$TMUXBIN" send-keys -t "$session" "${startcmd:-$MOSHI_DEFAULT_CMD}" C-m
+      "$TMUXBIN" send-keys -t "$session" "${startcmd:-$FERRY_DEFAULT_CMD}" C-m
     fi
     flock -u 9
     exec "$TMUXBIN" attach -t "$session"
@@ -575,7 +575,7 @@ EOF
       ((n++)) || true
     done
     "$TMUXBIN" new-session -d -s "$session" -c "$dir"
-    "$TMUXBIN" send-keys -t "$session" "${startcmd:-$MOSHI_DEFAULT_CMD}" C-m
+    "$TMUXBIN" send-keys -t "$session" "${startcmd:-$FERRY_DEFAULT_CMD}" C-m
     flock -u 9
     exec "$TMUXBIN" attach -t "$session"
   fi
@@ -591,7 +591,7 @@ EOF
       exec 9>"$lockf"; flock 9
       if ! "$TMUXBIN" has-session -t "$session" 2>/dev/null; then
         "$TMUXBIN" new-session -d -s "$session" -c "$dir"
-        "$TMUXBIN" send-keys -t "$session" "${startcmd:-$MOSHI_DEFAULT_CMD}" C-m
+        "$TMUXBIN" send-keys -t "$session" "${startcmd:-$FERRY_DEFAULT_CMD}" C-m
       fi
       flock -u 9
       exec "$TMUXBIN" attach -t "$session"

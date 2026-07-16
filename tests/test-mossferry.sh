@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
-# tests/test-moshi.sh — moshi client contract tests (m1–m13)
+# tests/test-mossferry.sh — mossferry client contract tests (m1–m14)
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-MOSHI="${ROOT}/bin/moshi"
+FERRY="${ROOT}/bin/mossferry"
 FAKE_BIN="${ROOT}/tests/fake-bin"
+VERSION="$(tr -d '[:space:]' <"$ROOT/VERSION")"
 fail=0
 
 ok()   { printf 'ok %s\n' "$1"; }
 FAIL() { printf 'FAIL %s\n' "$1"; fail=1; }
 
-# Run moshi with isolated HOME, PATH stubs, and a fresh FAKE_NET_LOG.
-# Usage: run_moshi <stdout_file> <stderr_file> <log_file> -- <moshi args...>
+# Run mossferry with isolated HOME, PATH stubs, and a fresh FAKE_NET_LOG.
+# Usage: run_ferry <stdout_file> <stderr_file> <log_file> -- <ferry args...>
 # Sets globals: _rc, _out, _err, _log  (paths); exit code in _exit
-run_moshi() {
+run_ferry() {
   local outf="$1" errf="$2" logf="$3"
   shift 3
   [[ "${1:-}" == -- ]] && shift
@@ -25,7 +26,7 @@ run_moshi() {
   # Ensure PATH uses fake-bin first; include system for git etc.
   PATH="${FAKE_BIN}:${PATH}"
   set +e
-  "$MOSHI" "$@" >"$outf" 2>"$errf"
+  "$FERRY" "$@" >"$outf" 2>"$errf"
   _exit=$?
   set -e
   # keep HOME around for config cases that need it before run; caller may use $home
@@ -35,8 +36,8 @@ run_moshi() {
   _log="$logf"
 }
 
-# Like run_moshi but reuses an existing HOME (for config file cases).
-run_moshi_home() {
+# Like run_ferry but reuses an existing HOME (for config file cases).
+run_ferry_home() {
   local home="$1" outf="$2" errf="$3" logf="$4"
   shift 4
   [[ "${1:-}" == -- ]] && shift
@@ -45,7 +46,7 @@ run_moshi_home() {
   : >"$logf"
   PATH="${FAKE_BIN}:${PATH}"
   set +e
-  "$MOSHI" "$@" >"$outf" 2>"$errf"
+  "$FERRY" "$@" >"$outf" 2>"$errf"
   _exit=$?
   set -e
   _home="$home"
@@ -57,11 +58,11 @@ run_moshi_home() {
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
-# --- m1: moshi h repo --primary → mosh with timeout + client-version ---
+# --- m1: ferry h repo --primary → mosh with timeout + client-version ---
 {
   name=m1
   outf="$tmpdir/m1.out" errf="$tmpdir/m1.err" logf="$tmpdir/m1.log"
-  run_moshi "$outf" "$errf" "$logf" -- h repo --primary
+  run_ferry "$outf" "$errf" "$logf" -- h repo --primary
   # Pre-validation may log an ssh --validate line first; assert the mosh launch line.
   line=""
   while IFS= read -r l || [[ -n "$l" ]]; do
@@ -71,8 +72,7 @@ trap 'rm -rf "$tmpdir"' EXIT
       break
     fi
   done <"$logf"
-  # Expect: .../mosh --server=MOSH_SERVER_NETWORK_TMOUT=86400 mosh-server h -- .local/bin/repo-session --client-version 1.0.0 repo --primary
-  expected_tail="mosh --server=MOSH_SERVER_NETWORK_TMOUT=86400 mosh-server h -- .local/bin/repo-session --client-version 1.0.0 repo --primary"
+  expected_tail="mosh --server=MOSH_SERVER_NETWORK_TMOUT=86400 mosh-server h -- .local/bin/repo-session --client-version ${VERSION} repo --primary"
   if [[ "$line" == *"$expected_tail" ]]; then
     ok "$name"
   else
@@ -82,11 +82,11 @@ trap 'rm -rf "$tmpdir"' EXIT
   fi
 }
 
-# --- m2: moshi h --list → ssh, no mosh ---
+# --- m2: ferry h --list → ssh, no mosh ---
 {
   name=m2
   outf="$tmpdir/m2.out" errf="$tmpdir/m2.err" logf="$tmpdir/m2.log"
-  run_moshi "$outf" "$errf" "$logf" -- h --list
+  run_ferry "$outf" "$errf" "$logf" -- h --list
   line="$(head -n1 "$logf" 2>/dev/null || true)"
   has_mosh=0
   while IFS= read -r l || [[ -n "$l" ]]; do
@@ -121,20 +121,20 @@ trap 'rm -rf "$tmpdir"' EXIT
   fi
 }
 
-# --- m3: env > file for MOSHI_SERVER_TIMEOUT ---
+# --- m3: env > file for FERRY_SERVER_TIMEOUT ---
 {
   name=m3
   home="$(mktemp -d)"
-  mkdir -p "$home/.config/moshi"
-  printf 'MOSHI_SERVER_TIMEOUT=111\n' >"$home/.config/moshi/config"
+  mkdir -p "$home/.config/mossferry"
+  printf 'FERRY_SERVER_TIMEOUT=111\n' >"$home/.config/mossferry/config"
   outf="$tmpdir/m3a.out" errf="$tmpdir/m3a.err" logf="$tmpdir/m3a.log"
-  MOSHI_SERVER_TIMEOUT=222 run_moshi_home "$home" "$outf" "$errf" "$logf" -- h repo
+  FERRY_SERVER_TIMEOUT=222 run_ferry_home "$home" "$outf" "$errf" "$logf" -- h repo
   line="$(cat "$logf" 2>/dev/null || true)"
   ok_env=0 ok_file=0
   [[ "$line" == *TMOUT=222* ]] && ok_env=1
   outf="$tmpdir/m3b.out" errf="$tmpdir/m3b.err" logf="$tmpdir/m3b.log"
-  unset MOSHI_SERVER_TIMEOUT || true
-  run_moshi_home "$home" "$outf" "$errf" "$logf" -- h repo
+  unset FERRY_SERVER_TIMEOUT || true
+  run_ferry_home "$home" "$outf" "$errf" "$logf" -- h repo
   line2="$(cat "$logf" 2>/dev/null || true)"
   [[ "$line2" == *TMOUT=111* ]] && ok_file=1
   if [[ $ok_env -eq 1 && $ok_file -eq 1 ]]; then
@@ -147,23 +147,22 @@ trap 'rm -rf "$tmpdir"' EXIT
   rm -rf "$home"
 }
 
-# --- m4: config MOSHI_DEFAULT_HOST=hh; bare moshi → targets hh, no repo ---
+# --- m4: config FERRY_DEFAULT_HOST=hh; bare ferry → targets hh, no repo ---
 {
   name=m4
   home="$(mktemp -d)"
-  mkdir -p "$home/.config/moshi"
-  printf 'MOSHI_DEFAULT_HOST=hh\n' >"$home/.config/moshi/config"
+  mkdir -p "$home/.config/mossferry"
+  printf 'FERRY_DEFAULT_HOST=hh\n' >"$home/.config/mossferry/config"
   outf="$tmpdir/m4.out" errf="$tmpdir/m4.err" logf="$tmpdir/m4.log"
-  unset MOSHI_DEFAULT_HOST || true
-  run_moshi_home "$home" "$outf" "$errf" "$logf" --
+  unset FERRY_DEFAULT_HOST || true
+  run_ferry_home "$home" "$outf" "$errf" "$logf" --
   line="$(cat "$logf" 2>/dev/null || true)"
-  # mosh ... hh -- .local/bin/repo-session --client-version 1.0.0   (no repo after version)
-  if [[ "$line" == *" hh -- "* ]] && [[ "$line" == *"--client-version 1.0.0" ]] && [[ "$line" != *"--client-version 1.0.0 "* ]]; then
+  # mosh ... hh -- .local/bin/repo-session --client-version $VERSION   (no repo after version)
+  if [[ "$line" == *" hh -- "* ]] && [[ "$line" == *"--client-version ${VERSION}" ]] && [[ "$line" != *"--client-version ${VERSION} "* ]]; then
     ok "$name"
   elif [[ "$line" == *" hh -- "* ]] && [[ "$line" == *repo-session* ]]; then
     # Accept trailing space after version or end: no extra repo token
-    # Extract after --client-version 1.0.0
-    after="${line#*--client-version 1.0.0}"
+    after="${line#*--client-version ${VERSION}}"
     after="${after#"${after%%[![:space:]]*}"}"  # trim leading space
     if [[ -z "$after" ]]; then
       ok "$name"
@@ -178,14 +177,14 @@ trap 'rm -rf "$tmpdir"' EXIT
   rm -rf "$home"
 }
 
-# --- m5: bare moshi, no config → exit 1, stderr usage ---
+# --- m5: bare ferry, no config → exit 1, stderr usage ---
 {
   name=m5
   outf="$tmpdir/m5.out" errf="$tmpdir/m5.err" logf="$tmpdir/m5.log"
-  unset MOSHI_DEFAULT_HOST || true
-  run_moshi "$outf" "$errf" "$logf" --
+  unset FERRY_DEFAULT_HOST || true
+  run_ferry "$outf" "$errf" "$logf" --
   err="$(cat "$errf" 2>/dev/null || true)"
-  if [[ $_exit -eq 1 ]] && [[ "$err" == *[Uu]sage* || "$err" == *usage* || "$err" == *moshi\ \<host\>* ]]; then
+  if [[ $_exit -eq 1 ]] && [[ "$err" == *[Uu]sage* || "$err" == *usage* || "$err" == *mossferry\ \<host\>* ]]; then
     ok "$name"
   else
     # plan: stderr contains `usage`
@@ -198,14 +197,14 @@ trap 'rm -rf "$tmpdir"' EXIT
   fi
 }
 
-# --- m6: moshi --help → exit 0, stdout has moshi <host>, log empty ---
+# --- m6: ferry --help → exit 0, stdout has mossferry <host>, log empty ---
 {
   name=m6
   outf="$tmpdir/m6.out" errf="$tmpdir/m6.err" logf="$tmpdir/m6.log"
-  run_moshi "$outf" "$errf" "$logf" -- --help
+  run_ferry "$outf" "$errf" "$logf" -- --help
   out="$(cat "$outf" 2>/dev/null || true)"
   log_content="$(cat "$logf" 2>/dev/null || true)"
-  if [[ $_exit -eq 0 ]] && [[ "$out" == *"moshi <host>"* ]] && [[ -z "$log_content" ]]; then
+  if [[ $_exit -eq 0 ]] && [[ "$out" == *"mossferry <host>"* ]] && [[ -z "$log_content" ]]; then
     ok "$name"
   else
     FAIL "$name"
@@ -213,11 +212,11 @@ trap 'rm -rf "$tmpdir"' EXIT
   fi
 }
 
-# --- m7: moshi h repo -c -- htop → args after repo preserved ---
+# --- m7: ferry h repo -c -- htop → args after repo preserved ---
 {
   name=m7
   outf="$tmpdir/m7.out" errf="$tmpdir/m7.err" logf="$tmpdir/m7.log"
-  run_moshi "$outf" "$errf" "$logf" -- h repo -c -- htop
+  run_ferry "$outf" "$errf" "$logf" -- h repo -c -- htop
   line="$(cat "$logf" 2>/dev/null || true)"
   if [[ "$line" == *"repo -c -- htop"* ]]; then
     ok "$name"
@@ -227,18 +226,18 @@ trap 'rm -rf "$tmpdir"' EXIT
   fi
 }
 
-# --- m8: moshi update h → ssh git -C; stdout local/remote versions ---
+# --- m8: ferry update h → ssh git -C; stdout local/remote versions ---
 {
   name=m8
   outf="$tmpdir/m8.out" errf="$tmpdir/m8.err" logf="$tmpdir/m8.log"
-  run_moshi "$outf" "$errf" "$logf" -- update h
+  run_ferry "$outf" "$errf" "$logf" -- update h
   log_content="$(cat "$logf" 2>/dev/null || true)"
   out="$(cat "$outf" 2>/dev/null || true)"
   has_git=0
   if [[ "$log_content" == *"git -C"* ]]; then
     has_git=1
   fi
-  if [[ $has_git -eq 1 ]] && [[ "$out" == *"local 1.0.0 / remote 1.0.0"* ]]; then
+  if [[ $has_git -eq 1 ]] && [[ "$out" == *"local ${VERSION} / remote ${VERSION}"* ]]; then
     ok "$name"
   else
     FAIL "$name"
@@ -246,13 +245,13 @@ trap 'rm -rf "$tmpdir"' EXIT
   fi
 }
 
-# --- m9: moshi update h on canonical remote (no remotes) → skip pull, exit 0 ---
+# --- m9: ferry update h on canonical remote (no remotes) → skip pull, exit 0 ---
 {
   name=m9
   outf="$tmpdir/m9.out" errf="$tmpdir/m9.err" logf="$tmpdir/m9.log"
-  run_moshi "$outf" "$errf" "$logf" -- update h
+  run_ferry "$outf" "$errf" "$logf" -- update h
   out="$(cat "$outf" 2>/dev/null || true)"
-  if [[ $_exit -eq 0 ]] && [[ "$out" == *canonical* ]] && [[ "$out" == *"local 1.0.0 / remote 1.0.0"* ]]; then
+  if [[ $_exit -eq 0 ]] && [[ "$out" == *canonical* ]] && [[ "$out" == *"local ${VERSION} / remote ${VERSION}"* ]]; then
     ok "$name"
   else
     FAIL "$name"
@@ -260,11 +259,11 @@ trap 'rm -rf "$tmpdir"' EXIT
   fi
 }
 
-# --- m10: FAKE_SSH_VALIDATE_EXIT=1 moshi h typoo → exit 1, no mosh, validate in log ---
+# --- m10: FAKE_SSH_VALIDATE_EXIT=1 ferry h typoo → exit 1, no mosh, validate in log ---
 {
   name=m10
   outf="$tmpdir/m10.out" errf="$tmpdir/m10.err" logf="$tmpdir/m10.log"
-  FAKE_SSH_VALIDATE_EXIT=1 run_moshi "$outf" "$errf" "$logf" -- h typoo
+  FAKE_SSH_VALIDATE_EXIT=1 run_ferry "$outf" "$errf" "$logf" -- h typoo
   err="$(cat "$errf" 2>/dev/null || true)"
   log_content="$(cat "$logf" 2>/dev/null || true)"
   has_validate=0 has_mosh=0
@@ -283,12 +282,12 @@ trap 'rm -rf "$tmpdir"' EXIT
   unset FAKE_SSH_VALIDATE_EXIT || true
 }
 
-# --- m11: moshi h goodrepo --primary (validate ok) → validate then mosh (m1-style argv) ---
+# --- m11: ferry h goodrepo --primary (validate ok) → validate then mosh (m1-style argv) ---
 {
   name=m11
   outf="$tmpdir/m11.out" errf="$tmpdir/m11.err" logf="$tmpdir/m11.log"
   unset FAKE_SSH_VALIDATE_EXIT || true
-  run_moshi "$outf" "$errf" "$logf" -- h goodrepo --primary
+  run_ferry "$outf" "$errf" "$logf" -- h goodrepo --primary
   log_content="$(cat "$logf" 2>/dev/null || true)"
   has_validate=0
   mosh_line=""
@@ -305,7 +304,7 @@ trap 'rm -rf "$tmpdir"' EXIT
       [[ $saw_validate -eq 1 ]] && validate_before_mosh=1
     fi
   done <"$logf"
-  expected_tail="mosh --server=MOSH_SERVER_NETWORK_TMOUT=86400 mosh-server h -- .local/bin/repo-session --client-version 1.0.0 goodrepo --primary"
+  expected_tail="mosh --server=MOSH_SERVER_NETWORK_TMOUT=86400 mosh-server h -- .local/bin/repo-session --client-version ${VERSION} goodrepo --primary"
   if [[ $has_validate -eq 1 ]] && [[ $validate_before_mosh -eq 1 ]] && [[ "$mosh_line" == *"$expected_tail" ]]; then
     ok "$name"
   else
@@ -315,11 +314,11 @@ trap 'rm -rf "$tmpdir"' EXIT
   fi
 }
 
-# --- m12: moshi h --list → no --validate in log ---
+# --- m12: ferry h --list → no --validate in log ---
 {
   name=m12
   outf="$tmpdir/m12.out" errf="$tmpdir/m12.err" logf="$tmpdir/m12.log"
-  run_moshi "$outf" "$errf" "$logf" -- h --list
+  run_ferry "$outf" "$errf" "$logf" -- h --list
   log_content="$(cat "$logf" 2>/dev/null || true)"
   if [[ "$log_content" != *"--validate"* ]]; then
     ok "$name"
@@ -329,17 +328,39 @@ trap 'rm -rf "$tmpdir"' EXIT
   fi
 }
 
-# --- m13: moshi h (bare picker) → no --validate in log ---
+# --- m13: ferry h (bare picker) → no --validate in log ---
 {
   name=m13
   outf="$tmpdir/m13.out" errf="$tmpdir/m13.err" logf="$tmpdir/m13.log"
-  run_moshi "$outf" "$errf" "$logf" -- h
+  run_ferry "$outf" "$errf" "$logf" -- h
   log_content="$(cat "$logf" 2>/dev/null || true)"
   if [[ "$log_content" != *"--validate"* ]]; then
     ok "$name"
   else
     FAIL "$name"
     printf '  expected no --validate; log=%s\n' "$log_content" >&2
+  fi
+}
+
+# --- m14: client-version on mosh line equals $(cat VERSION) (dynamic wiring) ---
+{
+  name=m14
+  outf="$tmpdir/m14.out" errf="$tmpdir/m14.err" logf="$tmpdir/m14.log"
+  run_ferry "$outf" "$errf" "$logf" -- h repo --primary
+  line=""
+  while IFS= read -r l || [[ -n "$l" ]]; do
+    base="${l%% *}"; base="${base##*/}"
+    if [[ "$base" == mosh ]]; then
+      line="$l"
+      break
+    fi
+  done <"$logf"
+  ver_from_file="$(tr -d '[:space:]' <"$ROOT/VERSION")"
+  if [[ -n "$ver_from_file" ]] && [[ "$line" == *"--client-version ${ver_from_file}"* ]]; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  expected --client-version %s in mosh line; got: %s\n' "$ver_from_file" "$line" >&2
   fi
 }
 

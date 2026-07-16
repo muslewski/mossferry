@@ -28,8 +28,14 @@ fi
 if [[ "$joined" == *" git -C "*remote && "$joined" != *" remote "* ]]; then
   exit 0
 fi
-# When args contain both "cat" and "VERSION", print version for update/doctor.
+# When args contain both "cat" and "VERSION", print repo VERSION for update/doctor.
 if [[ "$joined" == *cat* && "$joined" == *VERSION* ]]; then
-  printf '%s\n' "1.0.0"
+  _root="$(cd "$(dirname "$0")/../.." && pwd)"
+  if [[ -r "${_root}/VERSION" ]]; then
+    tr -d '[:space:]' <"${_root}/VERSION"
+    printf '\n'
+  else
+    printf 'unknown\n'
+  fi
 fi
 exit 0
