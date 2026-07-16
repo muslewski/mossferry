@@ -45,6 +45,7 @@ symlinks `bin/moshi` and `bin/repo-session` into `~/.local/bin/`, and seeds
 | `moshi` | uses `MOSHI_DEFAULT_HOST` → global picker (error if key unset) |
 | `moshi <host>` | fzf picker, all sessions + `➕ new session…` row |
 | `moshi <host> <repo>` | fzf picker, that repo's sessions + `➕ new session…` row |
+| _(picker keys)_ | `enter=attach · ctrl-x=kill · ctrl-r=rename` |
 | `moshi <host> <repo> --primary\|-p` | attach primary, create if missing (old default, now explicit) |
 | `moshi <host> <repo> --new` | force fresh session (unchanged) |
 | `moshi <host> [repo] --list\|-l` | list sessions via ssh (unchanged) |
@@ -60,6 +61,11 @@ symlinks `bin/moshi` and `bin/repo-session` into `~/.local/bin/`, and seeds
 
 Default action is the **picker**. Direct attach-primary is behind `--primary`.
 Grid flags (`--resume-closed`, `--resume-or-new`) are unchanged.
+
+**Errors are local.** Before launching mosh, repo-bearing invocations run
+`repo-session --validate` over ssh. Unknown repos print the typo error + repo
+list on your local terminal and never start mosh (so alternate-screen restore
+cannot wipe the message).
 
 ## The picker
 
@@ -91,6 +97,7 @@ defaults.
 | `MOSHI_DEFAULT_HOST` | _(unset)_ | local: host used by bare `moshi` |
 | `MOSHI_SERVER_TIMEOUT` | `86400` | local: mosh-server self-exit after N seconds clientless |
 | `MOSHI_REMOTE_REPO` | `Repositories/moshi` | remote: repo checkout, relative to remote `$HOME` |
+| `MOSHI_HIDDEN_WINDOW_GLOB` | `_*` | remote: window-name glob skipped for picker labels/previews |
 
 See `config.example` for a ready-to-edit template.
 
