@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tests/test-moshi.sh — moshi client contract tests (m1–m8)
+# tests/test-moshi.sh — moshi client contract tests (m1–m9)
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -235,6 +235,20 @@ trap 'rm -rf "$tmpdir"' EXIT
   else
     FAIL "$name"
     printf '  has_git=%s out=%s log=%s\n' "$has_git" "$out" "$log_content" >&2
+  fi
+}
+
+# --- m9: moshi update h on canonical remote (no remotes) → skip pull, exit 0 ---
+{
+  name=m9
+  outf="$tmpdir/m9.out" errf="$tmpdir/m9.err" logf="$tmpdir/m9.log"
+  run_moshi "$outf" "$errf" "$logf" -- update h
+  out="$(cat "$outf" 2>/dev/null || true)"
+  if [[ $_exit -eq 0 ]] && [[ "$out" == *canonical* ]] && [[ "$out" == *"local 1.0.0 / remote 1.0.0"* ]]; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  exit=%s out=%s err=%s\n' "$_exit" "$out" "$(cat "$errf" 2>/dev/null || true)" >&2
   fi
 }
 
