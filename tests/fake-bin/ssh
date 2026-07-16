@@ -23,10 +23,20 @@ if [[ "$joined" == *"--validate"* ]]; then
   exit "$exit_code"
 fi
 
-# `git -C <path> remote` → empty stdout (canonical checkout: no remotes).
+# `git -C <path> remote` → empty stdout by default (canonical: no remotes).
+# When FAKE_SSH_UPSTREAM_EXIT is set, print "origin" so update reaches the
+# @{u} check (remote exists but may lack upstream tracking).
 # Match trailing ` remote` so we do not swallow `remote show` / similar.
 if [[ "$joined" == *" git -C "*remote && "$joined" != *" remote "* ]]; then
+  if [[ -n "${FAKE_SSH_UPSTREAM_EXIT+x}" ]]; then
+    printf 'origin\n'
+  fi
   exit 0
+fi
+# Upstream detection: git rev-parse … @{u} — exit per FAKE_SSH_UPSTREAM_EXIT
+# (default 0 = has upstream). Nonzero = no upstream tracking.
+if [[ "$joined" == *"rev-parse"* && "$joined" == *"@{u}"* ]]; then
+  exit "${FAKE_SSH_UPSTREAM_EXIT:-0}"
 fi
 # When args contain both "cat" and "VERSION", print repo VERSION for update/doctor.
 if [[ "$joined" == *cat* && "$joined" == *VERSION* ]]; then
