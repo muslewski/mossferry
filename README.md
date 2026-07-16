@@ -65,7 +65,7 @@ when the new config is absent, and seeds `~/.config/mossferry/config` from
 | `ferry` | uses `FERRY_DEFAULT_HOST` → global picker (error if key unset) |
 | `ferry <host>` | fzf picker, all sessions + `➕ new session…` row |
 | `ferry <host> <repo>` | fzf picker, that repo's sessions + `➕ new session…` row |
-| _(picker keys)_ | `enter=attach · ctrl-x=kill · ctrl-r=rename` |
+| _(picker keys)_ | `enter=attach · ctrl-x=kill · ctrl-r=rename`; launchers (default `ctrl-a`/`ctrl-g`) on `➕ new session…` and destination rows |
 | `ferry <host> <repo> --primary\|-p` | attach primary, create if missing (old default, now explicit) |
 | `ferry <host> <repo> --new` | force fresh session (unchanged) |
 | `ferry <host> [repo] --list\|-l` | list sessions via ssh (unchanged) |
@@ -106,6 +106,15 @@ Runs on the remote, inside the mosh session:
 - Global new-session chain also offers `➕ new repo…` (prompt name, `mkdir` +
   `git init -b main` under `FERRY_REPO_BASE`, then create + attach) and
   `🏠 home session…` (prompt name, empty → `home`; session cwd `$HOME`).
+- **AI launchers:** on destination rows (repo / `➕ new repo…` / `🏠 home
+  session…`) and on the main picker's `➕ new session…` row, press a configured
+  key (default `ctrl-a` → `claude`, `ctrl-g` → `grok`) instead of enter to
+  create that session with that start command. Overrides `FERRY_DEFAULT_CMD`,
+  `--claude`, and `-- cmd…` for that one creation. Enter keeps today's default.
+  On an existing-session row, launcher keys are ignored (list reloads). Configure
+  via `FERRY_LAUNCHERS` (`key:command` pairs, comma-separated; empty disables).
+  Sub-picker header shows a dynamic hints line from the parsed config. No-fzf
+  menu is unaffected (always uses the default command).
 - Repo-scoped picker's new-session chain stays pre-filtered — no special rows.
 - **Zero-session fast path:** `ferry <host> <repo>` with no live sessions
   skips the picker and creates + attaches the primary.
@@ -130,6 +139,7 @@ defaults.
 | `FERRY_REMOTE_REPO` | `Repositories/mossferry` | remote: repo checkout, relative to remote `$HOME` |
 | `FERRY_HIDDEN_WINDOW_GLOB` | `_*` | remote: window-name glob skipped for picker labels/previews |
 | `FERRY_BANNER` | `on` | green ferry art in picker header and `--help` (`off`/`0` hides) |
+| `FERRY_LAUNCHERS` | `ctrl-a:claude,ctrl-g:grok` | remote: picker AI-launcher keys (`key:command` pairs; empty disables; `ctrl-x`/`ctrl-r` reserved) |
 
 See `config.example` for a ready-to-edit template.
 
