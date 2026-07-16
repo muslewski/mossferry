@@ -4,6 +4,7 @@
 # FAKE_TMUX_SESSIONS  — newline-separated session names
 # FAKE_TMUX_META      — lines "name|window|meta" for display-message
 #                       meta ≈ "2w attached claude" or "1w detached bash"
+# FAKE_TMUX_WINDOWS   — lines "session:idx:name" for list-windows / window_index
 set -u
 
 logf="${FAKE_TMUX_LOG:-}"
@@ -41,10 +42,60 @@ _lookup_meta() {
   done <<< "$FAKE_TMUX_META"
 }
 
+# Active window index for session: match active name in FAKE_TMUX_WINDOWS, else 0.
+_active_window_index() {
+  local name="$1" line sess idx wname rest
+  _lookup_meta "$name"
+  if [[ -n "${FAKE_TMUX_WINDOWS:-}" ]]; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      sess="${line%%:*}"
+      rest="${line#*:}"
+      idx="${rest%%:*}"
+      wname="${rest#*:}"
+      if [[ "$sess" == "$name" && "$wname" == "$_win" ]]; then
+        printf '%s\n' "$idx"
+        return 0
+      fi
+    done <<< "$FAKE_TMUX_WINDOWS"
+  fi
+  printf '0\n'
+}
+
 case "$cmd" in
   list-sessions)
     if [[ -n "${FAKE_TMUX_SESSIONS:-}" ]]; then
       printf '%s\n' "$FAKE_TMUX_SESSIONS"
+    fi
+    exit 0
+    ;;
+  list-windows)
+    target=""
+    line=""; sess=""; idx=""; wname=""; rest=""; name=""
+    while (( $# )); do
+      case "$1" in
+        -t) target="${2:-}"; shift 2 ;;
+        -F) shift 2 ;;
+        -*) shift ;;
+        *) shift ;;
+      esac
+    done
+    name="${target#=}"
+    if [[ -n "${FAKE_TMUX_WINDOWS:-}" ]]; then
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        sess="${line%%:*}"
+        rest="${line#*:}"
+        idx="${rest%%:*}"
+        wname="${rest#*:}"
+        [[ "$sess" == "$name" ]] || continue
+        # Always emit index:name (matches -F '#{window_index}:#{window_name}')
+        printf '%s:%s\n' "$idx" "$wname"
+      done <<< "$FAKE_TMUX_WINDOWS"
+    else
+      # Fall back to single active window from meta (index 0).
+      _lookup_meta "$name"
+      printf '%s:%s\n' "0" "$_win"
     fi
     exit 0
     ;;
@@ -76,16 +127,23 @@ case "$cmd" in
       esac
     done
     name="${target#=}"
+    # target may be session:window for capture-pane-like targets; strip window
+    if [[ "$name" == *:* ]]; then
+      name="${name%%:*}"
+    fi
     _lookup_meta "$name"
 
     case "$format" in
       *'#{window_name}'*)
         # bare window name (not a multi-field format)
-        if [[ "$format" != *'#{session_'* && "$format" != *'#{pane_'* ]]; then
+        if [[ "$format" != *'#{session_'* && "$format" != *'#{pane_'* && "$format" != *'#{window_index}'* ]]; then
           printf '%s\n' "$_win"
         else
           printf '%s\n' "$_meta"
         fi
+        ;;
+      *'#{window_index}'*)
+        _active_window_index "$name"
         ;;
       *'#{session_windows}'*)
         if [[ "$format" == *'#{?session_attached'* || "$format" == *'#{pane_'* ]]; then
@@ -114,7 +172,7 @@ case "$cmd" in
     # No claim markers → always empty (claimable)
     exit 0
     ;;
-  attach|new-session|set-option|send-keys|new|kill-session)
+  attach|new-session|set-option|send-keys|new|kill-session|rename-session|capture-pane)
     exit 0
     ;;
   *)
