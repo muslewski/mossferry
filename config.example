@@ -5,3 +5,4 @@
 #MOSHI_DEFAULT_HOST=""                       # local: host used by bare `moshi`
 #MOSHI_SERVER_TIMEOUT="86400"                # local: mosh-server self-exit after N s clientless
 #MOSHI_REMOTE_REPO="Repositories/moshi"      # remote: repo checkout, relative to remote $HOME
+#MOSHI_HIDDEN_WINDOW_GLOB="_*"               # skip matching windows in picker names/previews

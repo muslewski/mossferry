@@ -10,6 +10,7 @@
 #   --resume-or-new     claim, or create if none left
 #   --claude / -c       run claude on creation
 #   --client-version V  version handshake with local moshi client
+#   --validate <repo>   exit 0 if repo dir exists under base; else error (no tmux)
 #   --help / -h         usage
 #   -- cmd...           custom startup command on creation
 set -u
@@ -21,12 +22,14 @@ TMUXBIN="${REPO_SESSION_TMUXBIN:-/usr/bin/tmux}"
 load_config() {
   # Snapshot env (env > file > default).
   local e_REMOTE_BIN e_REPO_BASE e_DEFAULT_CMD e_DEFAULT_HOST e_SERVER_TIMEOUT e_REMOTE_REPO
+  local e_HIDDEN_WINDOW_GLOB
   e_REMOTE_BIN="${MOSHI_REMOTE_BIN-__UNSET__}"
   e_REPO_BASE="${MOSHI_REPO_BASE-__UNSET__}"
   e_DEFAULT_CMD="${MOSHI_DEFAULT_CMD-__UNSET__}"
   e_DEFAULT_HOST="${MOSHI_DEFAULT_HOST-__UNSET__}"
   e_SERVER_TIMEOUT="${MOSHI_SERVER_TIMEOUT-__UNSET__}"
   e_REMOTE_REPO="${MOSHI_REMOTE_REPO-__UNSET__}"
+  e_HIDDEN_WINDOW_GLOB="${MOSHI_HIDDEN_WINDOW_GLOB-__UNSET__}"
 
   MOSHI_REMOTE_BIN=".local/bin/repo-session"
   MOSHI_REPO_BASE="${HOME}/Repositories"
@@ -34,6 +37,7 @@ load_config() {
   MOSHI_DEFAULT_HOST=""
   MOSHI_SERVER_TIMEOUT="86400"
   MOSHI_REMOTE_REPO="Repositories/moshi"
+  MOSHI_HIDDEN_WINDOW_GLOB="_*"
 
   if [[ -r "${HOME}/.config/moshi/config" ]]; then
     # shellcheck source=/dev/null
@@ -46,6 +50,20 @@ load_config() {
   [[ "$e_DEFAULT_HOST" != "__UNSET__" ]] && MOSHI_DEFAULT_HOST="$e_DEFAULT_HOST"
   [[ "$e_SERVER_TIMEOUT" != "__UNSET__" ]] && MOSHI_SERVER_TIMEOUT="$e_SERVER_TIMEOUT"
   [[ "$e_REMOTE_REPO" != "__UNSET__" ]] && MOSHI_REMOTE_REPO="$e_REMOTE_REPO"
+  [[ "$e_HIDDEN_WINDOW_GLOB" != "__UNSET__" ]] && MOSHI_HIDDEN_WINDOW_GLOB="$e_HIDDEN_WINDOW_GLOB"
+}
+
+# Exit 0 if $MOSHI_REPO_BASE/<repo> is a directory; else stderr error + list, return 1.
+# Never invokes tmux.
+validate_repo() {
+  local r="$1"
+  local dir="${MOSHI_REPO_BASE}/${r}"
+  if [[ ! -d "$dir" ]]; then
+    echo "repo-session: no repo '${r}' under ${MOSHI_REPO_BASE} — pick one below, or run 'moshi <host>' to browse all sessions" >&2
+    ls -1 "$MOSHI_REPO_BASE" 2>/dev/null | sed 's/^/  /' >&2
+    return 1
+  fi
+  return 0
 }
 
 own_version() {
@@ -60,10 +78,13 @@ own_version() {
 }
 
 # One line per live session (optionally scoped to <repo>):
-#   <session>\t<window_name>\t<N>w\t<attached|detached>\t<current_command>
+#   <session>\t<display_window>\t<N>w\t<attached|detached>\t<cmd>\t<preview_target>
+# Display window skips MOSHI_HIDDEN_WINDOW_GLOB (default _*); preview_target is session:index.
 build_session_rows() {
   local filter="${1:-}" s cname wins att cmd attword
+  local active_name active_idx display_name preview_target glob wline widx wname found
   local -a names=()
+  glob="${MOSHI_HIDDEN_WINDOW_GLOB:-_*}"
   if [[ -n "$filter" ]]; then
     mapfile -t names < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null \
       | grep -E "^${filter}(-[0-9]+)?$" | sort -V)
@@ -72,13 +93,43 @@ build_session_rows() {
   fi
   for s in "${names[@]}"; do
     [[ -z "$s" ]] && continue
-    cname=$("$TMUXBIN" display-message -p -t "$s" '#{window_name}')
+    active_name=$("$TMUXBIN" display-message -p -t "$s" '#{window_name}')
+    active_idx=$("$TMUXBIN" display-message -p -t "$s" '#{window_index}')
     wins=$("$TMUXBIN" display-message -p -t "$s" '#{session_windows}')
     att=$("$TMUXBIN" display-message -p -t "$s" '#{session_attached}')
     cmd=$("$TMUXBIN" display-message -p -t "$s" '#{pane_current_command}')
     if [[ "$att" == "0" ]]; then attword="detached"; else attword="attached"; fi
-    printf '%s\t%s\t%sw\t%s\t%s\n' "$s" "$cname" "$wins" "$attword" "$cmd"
+
+    display_name="$active_name"
+    preview_target="${s}:${active_idx}"
+    # If active window is hidden, fall back to first non-matching window by index.
+    if [[ "$active_name" == $glob ]]; then
+      found=0
+      while IFS= read -r wline; do
+        [[ -z "$wline" ]] && continue
+        widx="${wline%%:*}"
+        wname="${wline#*:}"
+        if [[ "$wname" != $glob ]]; then
+          display_name="$wname"
+          preview_target="${s}:${widx}"
+          found=1
+          break
+        fi
+      done < <("$TMUXBIN" list-windows -t "$s" -F '#{window_index}:#{window_name}' 2>/dev/null)
+      # all-matching → keep active as-is (found stays 0)
+      :
+    fi
+
+    printf '%s\t%s\t%sw\t%s\t%s\t%s\n' "$s" "$display_name" "$wins" "$attword" "$cmd" "$preview_target"
   done
+}
+
+picker_kill() {
+  "$TMUXBIN" kill-session -t "=$1"
+}
+
+picker_rename() {
+  "$TMUXBIN" rename-session -t "=$1" "$2"
 }
 
 # ---- session helpers ---------------------------------------------------------
@@ -201,68 +252,120 @@ _do_new_session_flow() {
 run_picker() {
   # Uses global $repo (may be empty = global).
   local -a rows=()
-  local line choice name i nsel
+  local line choice name i nsel key ans newname pickfile
   local new_label=$'➕ new session…'
+  local is_new=0
 
-  while IFS= read -r line; do
-    [[ -n "$line" ]] && rows+=("$line")
-  done < <(build_session_rows "$repo")
+  # Numbered menu fallback (no loop — attach/new/quit only; keybinds are fzf-only).
+  if ! command -v fzf >/dev/null 2>&1 || [[ -n "${MOSHI_NO_FZF:-}" ]]; then
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && rows+=("$line")
+    done < <(build_session_rows "$repo")
+    i=1
+    for line in "${rows[@]}"; do
+      name="${line%%$'\t'*}"
+      printf '%d) %s\n' "$i" "$line" | tr '\t' ' '
+      ((i++)) || true
+    done
+    printf 'n) new session…\n'
+    printf 'q) quit\n'
+    if ! read -r nsel; then
+      exit 130
+    fi
+    case "$nsel" in
+      q|Q|"") exit 130 ;;
+      n|N)
+        _do_new_session_flow
+        ;;
+      *)
+        if [[ "$nsel" =~ ^[0-9]+$ ]] && (( nsel >= 1 && nsel <= ${#rows[@]} )); then
+          line="${rows[$((nsel-1))]}"
+          name="${line%%$'\t'*}"
+          exec "$TMUXBIN" attach -t "=$name"
+        fi
+        echo "repo-session: invalid selection" >&2
+        exit 1
+        ;;
+    esac
+    return
+  fi
 
-  if command -v fzf >/dev/null 2>&1 && [[ -z "${MOSHI_NO_FZF:-}" ]]; then
+  # fzf path: loop so kill/rename can reload the list.
+  pickfile="${TMPDIR:-/tmp}/repo-session-pick.$$"
+  while true; do
+    rows=()
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && rows+=("$line")
+    done < <(build_session_rows "$repo")
+
     {
       printf '%s\n' "${rows[@]}"
       printf '%s\n' "$new_label"
     } | fzf --ansi --delimiter=$'\t' \
-        --preview "$TMUXBIN capture-pane -ep -t {1}" \
+        --expect=ctrl-x,ctrl-r \
+        --header 'enter=attach · ctrl-x=kill · ctrl-r=rename · esc=quit' \
+        --preview "$TMUXBIN capture-pane -ep -t {6}" \
         --preview-window=right:60% \
-        >"${TMPDIR:-/tmp}/repo-session-pick.$$" || {
-      rm -f "${TMPDIR:-/tmp}/repo-session-pick.$$"
+        >"$pickfile" || {
+      rm -f "$pickfile"
       exit 130
     }
-    choice=$(cat "${TMPDIR:-/tmp}/repo-session-pick.$$")
-    rm -f "${TMPDIR:-/tmp}/repo-session-pick.$$"
+
+    key=$(head -n 1 "$pickfile")
+    choice=$(sed -n '2p' "$pickfile")
+    rm -f "$pickfile"
+
+    is_new=0
     if [[ "$choice" == "$new_label" || "$choice" == *$'\t'"$new_label" || "$choice" == "➕ new session…" ]]; then
+      is_new=1
+    fi
+
+    # Action keys on the new-session row: ignore and reload.
+    if (( is_new )) && [[ "$key" == "ctrl-x" || "$key" == "ctrl-r" ]]; then
+      continue
+    fi
+
+    if (( is_new )); then
       _do_new_session_flow
     fi
+
     name="${choice%%$'\t'*}"
     [[ -z "$name" ]] && exit 130
-    exec "$TMUXBIN" attach -t "=$name"
-  fi
 
-  # Numbered menu fallback
-  i=1
-  for line in "${rows[@]}"; do
-    name="${line%%$'\t'*}"
-    printf '%d) %s\n' "$i" "$line" | tr '\t' ' '
-    ((i++)) || true
-  done
-  printf 'n) new session…\n'
-  printf 'q) quit\n'
-  if ! read -r nsel; then
-    exit 130
-  fi
-  case "$nsel" in
-    q|Q|"") exit 130 ;;
-    n|N)
-      _do_new_session_flow
-      ;;
-    *)
-      if [[ "$nsel" =~ ^[0-9]+$ ]] && (( nsel >= 1 && nsel <= ${#rows[@]} )); then
-        line="${rows[$((nsel-1))]}"
-        name="${line%%$'\t'*}"
+    case "$key" in
+      ctrl-x)
+        printf 'kill %s? [y/N] ' "$name" >/dev/tty
+        if ! read -r ans </dev/tty; then
+          continue
+        fi
+        if [[ "$ans" == "y" || "$ans" == "Y" ]]; then
+          picker_kill "$name"
+        fi
+        continue
+        ;;
+      ctrl-r)
+        printf 'new name: ' >/dev/tty
+        if ! read -r newname </dev/tty; then
+          continue
+        fi
+        if [[ -n "$newname" ]]; then
+          picker_rename "$name" "$newname"
+        fi
+        continue
+        ;;
+      *)
+        # Enter (or empty expect key) → attach
         exec "$TMUXBIN" attach -t "=$name"
-      fi
-      echo "repo-session: invalid selection" >&2
-      exit 1
-      ;;
-  esac
+        ;;
+    esac
+  done
 }
 
 # ---- main --------------------------------------------------------------------
 
 main() {
   local repo="" fresh=0 list=0 pick="" startcmd="" claim=0 fill=0 wantpick=0 help=0 primary=0
-  local client_version=""
+  local client_version="" validate=0 validate_arg=""
   local dir sessions
   sessions=()
 
@@ -278,6 +381,15 @@ main() {
       --help|-h)          help=1; shift ;;
       --primary|-p)       primary=1; shift ;;
       --client-version)   client_version="${2:-}"; shift 2 ;;
+      --validate)
+        if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+          echo "repo-session: --validate requires a <repo>" >&2
+          exit 1
+        fi
+        validate=1
+        validate_arg="$2"
+        shift 2
+        ;;
       --)                 shift; startcmd="$*"; break ;;
       -*)                 echo "repo-session: ignoring unknown flag '$1'" >&2; shift ;;
       *)                  if [[ -z "$repo" ]]; then repo="$1"; else startcmd="${startcmd:+$startcmd }$1"; fi; shift ;;
@@ -285,6 +397,12 @@ main() {
   done
 
   load_config
+
+  # --validate dispatches first (before help/list/resume); never touches tmux.
+  if (( validate )); then
+    validate_repo "$validate_arg"
+    exit $?
+  fi
 
   # Version handshake (warn only; never block).
   if [[ -n "$client_version" ]]; then
@@ -314,8 +432,10 @@ Flags:
   --resume-or-new    like --resume-closed, but fill leftover panes with fresh
                      sessions (honouring --claude / -- cmd) -- so the grid fills.
   --client-version V version handshake (set by moshi client)
+  --validate <repo>  check repo exists under MOSHI_REPO_BASE (no tmux; used by client)
   --help, -h         print this help and exit
   -- cmd...          custom startup command for newly-created sessions
+  Picker keys (fzf): enter=attach · ctrl-x=kill · ctrl-r=rename · esc=quit
 
 Examples (run via the moshi client, which prepends the host):
   moshi manjaro-remote                            global session picker
@@ -377,9 +497,7 @@ EOF
   # Typo guard: repo given but not a directory under base → error + list, never attach main.
   if [[ -n "$repo" ]]; then
     dir="${MOSHI_REPO_BASE}/${repo}"
-    if [[ ! -d "$dir" ]]; then
-      echo "repo-session: no repo '${repo}' under ${MOSHI_REPO_BASE} — pick one below, or run 'moshi <host>' to browse all sessions" >&2
-      ls -1 "$MOSHI_REPO_BASE" 2>/dev/null | sed 's/^/  /' >&2
+    if ! validate_repo "$repo"; then
       exit 1
     fi
   fi
