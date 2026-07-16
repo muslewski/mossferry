@@ -7,3 +7,5 @@
 #FERRY_REMOTE_REPO="Repositories/mossferry"  # remote: repo checkout, relative to remote $HOME
 #FERRY_HIDDEN_WINDOW_GLOB="_*"               # skip matching windows in picker names/previews
 #FERRY_BANNER="on"                           # green ferry art in picker / --help (off|0 to hide)
+#FERRY_LAUNCHERS="ctrl-a:claude,ctrl-g:grok" # picker AI launchers: comma-separated key:command
+#                                            # (first colon splits; empty disables; ctrl-x/ctrl-r reserved)
