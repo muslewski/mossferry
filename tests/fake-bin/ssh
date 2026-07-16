@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # Fake ssh: log invocation; print VERSION for update/doctor cat paths.
 printf '%s\n' "$0 $*" >> "${FAKE_NET_LOG:?FAKE_NET_LOG not set}"
-# When args contain both "cat" and "VERSION", print version for update/doctor.
 joined="$*"
+# `git -C <path> remote` → empty stdout (canonical checkout: no remotes).
+# Match trailing ` remote` so we do not swallow `remote show` / similar.
+if [[ "$joined" == *" git -C "*remote && "$joined" != *" remote "* ]]; then
+  exit 0
+fi
+# When args contain both "cat" and "VERSION", print version for update/doctor.
 if [[ "$joined" == *cat* && "$joined" == *VERSION* ]]; then
   printf '%s\n' "1.0.0"
 fi
