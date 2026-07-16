@@ -3,12 +3,109 @@
 # shellcheck disable=SC1090,SC1091
 set -u
 
-# Resolve install path even when invoked via symlink in ~/.local/bin.
+# Symlink-safe path resolution (stock macOS bash 3.2 + Linux).
+# Never depends on GNU `readlink -f` (absent on macOS without coreutils).
+_ferry_resolve_self() {
+  local src="${1:-${BASH_SOURCE[0]}}"
+  local dir link max=50
+  # Relative invocation → absolute first so -L checks work after cd.
+  case "$src" in
+    /*) ;;
+    *) src="$(pwd)/$src" ;;
+  esac
+  while [ -L "$src" ] && [ "$max" -gt 0 ]; do
+    dir=$(cd "$(dirname "$src")" && pwd) || return 1
+    link=$(readlink "$src") || return 1
+    case "$link" in
+      /*) src=$link ;;
+      *) src=$dir/$link ;;
+    esac
+    max=$((max - 1))
+  done
+  printf '%s\n' "$src"
+}
+
 _ferry_repo_root() {
-  cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd
+  local self
+  self=$(_ferry_resolve_self "${BASH_SOURCE[0]}") || return 1
+  cd "$(dirname "$self")/.." && pwd
 }
 
 REPO_ROOT="$(_ferry_repo_root)"
+
+# ---- GREEN-UI-KIT (vendored) — missing lib must NEVER kill the tool --------
+_ferry_ui_fallbacks() {
+  detect_color() { printf 'none\n'; }
+  ui_tty() {
+    case ${GREEN_UI_FORCE_TTY-} in
+      1) return 0 ;;
+      0) return 1 ;;
+    esac
+    [[ -t 2 ]]
+  }
+  ui_init() {
+    GREEN_UI_MODE=none
+    UI_R= UI_G= UI_Y= UI_B= UI_C= UI_M= UI_D= UI_BOLD= UI_Z= UI_A=
+    UI_OK='OK' UI_ERR='XX' UI_WARN='!!' UI_PEND='..' UI_RUN='>>'
+    UI_SPIN=('|' '/' '-' '\')
+    return 0
+  }
+  banner() {
+    local title=${1-} subtitle=${2-}
+    printf '+-- %s --+\n' "$title" >&2
+    [[ -n $subtitle ]] && printf '| %s\n' "$subtitle" >&2
+  }
+  ok()   { printf 'OK %s\n' "$*" >&2; }
+  warn() { printf '!! %s\n' "$*" >&2; }
+  die()  { printf 'XX %s\n' "${1-error}" >&2; exit "${2:-1}"; }
+  panel() {
+    local title=${1-} line
+    printf '+-- %s --+\n' "$title" >&2
+    while IFS= read -r line || [[ -n $line ]]; do
+      printf '| %s\n' "$line" >&2
+    done
+    printf '+--------+\n' >&2
+  }
+  check_set() { printf '%s %s\n' "$2" "$3" >>"$1"; }
+  checklist() {
+    local sf=$1; shift
+    local item id label last line g
+    for item in "$@"; do
+      id=${item%%:*}; label=${item#*:}; last=pending
+      if [[ -f $sf ]]; then
+        while IFS= read -r line || [[ -n $line ]]; do
+          [[ -z $line ]] && continue
+          [[ ${line%% *} == "$id" ]] && last=${line#* }
+        done <"$sf"
+      fi
+      case $last in done) g=OK ;; failed) g=XX ;; *) g=.. ;; esac
+      printf '%s %s\n' "$g" "$label" >&2
+    done
+  }
+  ui_cleanup() { return 0; }
+}
+
+_ferry_load_ui() {
+  local kit="${REPO_ROOT}/lib/green-ui.sh"
+  if [[ -r "$kit" ]]; then
+    # shellcheck source=lib/green-ui.sh
+    source "$kit" || _ferry_ui_fallbacks
+  else
+    _ferry_ui_fallbacks
+  fi
+  ui_init
+}
+
+_ferry_load_ui
+
+# Client error line: always `mossferry:` prefix; red ✗ when TTY.
+_ferry_err() {
+  if ui_tty 2>/dev/null; then
+    printf '%s%s%s mossferry: %s\n' "${UI_R-}" "${UI_ERR-✗}" "${UI_Z-}" "$*" >&2
+  else
+    printf 'mossferry: %s\n' "$*" >&2
+  fi
+}
 
 own_version() {
   local f="$REPO_ROOT/VERSION" v
@@ -135,29 +232,35 @@ ferry_banner() {
 }
 
 usage() {
+  local ver
+  ver="$(own_version | tr -d '[:space:]')"
   ferry_banner
-  cat <<'EOF'
-mossferry <host> [<repo>] [flags]   open a remote tmux session over mosh on <host>
-  (`ferry` is the short command)
+  # Section labels green when TTY; body stays plain for pipe/grep stability.
+  local H=$'\n' S="" Z=""
+  if ui_tty 2>/dev/null && [[ ${GREEN_UI_MODE-none} != none ]]; then
+    S="${UI_G-}${UI_BOLD-}"
+    Z="${UI_Z-}"
+  fi
+  cat <<EOF
+${S}Usage${Z}
+  mossferry <host> [<repo>] [flags]   open a remote tmux session over mosh on <host>
+  (\`ferry\` is the short command)
 
-Default action is the session picker (global with no <repo>, scoped with one).
-Nothing attaches or creates a shared main session implicitly.
+  Default action is the session picker (global with no <repo>, scoped with one).
+  Nothing attaches or creates a shared main session implicitly.
+  Repo typos are caught locally via automatic pre-validation (no mosh).
+  Bare \`ferry\` uses FERRY_DEFAULT_HOST from config/env when set.
 
-Picker keys (remote fzf): enter=attach · ctrl-x=kill · ctrl-r=rename
-Repo typos are caught locally via automatic pre-validation (no mosh).
+${S}Picker keys${Z}
+  enter=attach · ctrl-x=kill · ctrl-r=rename · ctrl-a/ctrl-g=AI launchers
+  --cycle wraps the list · esc=quit
+  (Launchers configurable via FERRY_LAUNCHERS; defaults: ctrl-a:claude, ctrl-g:grok)
 
-Subcommands:
-  update [host]      git pull local clone + remote; print both versions
-  doctor [host]      read-only health checks (exit 1 if any FAIL)
-  --help, -h         this help (printed locally; no connection)
-
-Bare `ferry` uses FERRY_DEFAULT_HOST from config/env when set.
-
-Flags (forwarded to repo-session on the remote):
+${S}Flags${Z}
   (none)             open the session picker
   --primary, -p      attach the repo's primary session, creating it if missing
   --new              force a fresh session  (repo, repo-2, repo-3, ...)
-  --claude, -c       run `claude` in newly-created sessions  (default: neofetch)
+  --claude, -c       run \`claude\` in newly-created sessions  (default: neofetch)
   --list, -l         list sessions and exit  (with <repo>: just that repo;
                      without <repo>: every tmux session on the host)
   --resume [N|name]  no arg -> session picker; N -> the Nth session;
@@ -169,14 +272,16 @@ Flags (forwarded to repo-session on the remote):
                      sessions — so an N-pane grid always ends up full.
   -- cmd...          custom startup command for newly-created sessions
 
-Grid workflows (with ghostty-grid):
-  ghostty-grid -8 -- ferry manjaro-remote syndcast --resume-or-new --claude
-        everyday driver: 8 panes, reattach existing syndcast sessions, fill the
-        rest with new ones running claude
-  ghostty-grid -8 -- ferry manjaro-remote syndcast --resume-closed
-        reattach existing sessions only; leftover panes stay blank
+  Subcommands:
+    update [host]    git pull local clone + remote; print both versions
+    doctor [host]    read-only health checks (exit 1 if any FAIL)
+    --help, -h       this help (printed locally; no connection)
 
-Single session:
+${S}Config${Z}
+  ~/.config/mossferry/config  (FERRY_* keys; env overrides file)
+  See config.example and README for the full key list.
+
+${S}Examples${Z}
   ferry manjaro-remote                        global session picker
   ferry manjaro-remote syndcast               scoped picker for syndcast
   ferry manjaro-remote syndcast --primary     attach/create the primary session
@@ -185,113 +290,230 @@ Single session:
   ferry manjaro-remote --resume               pick any session
   ferry update                                pull local + remote (default host)
   ferry doctor manjaro-remote                 health checks
+  ghostty-grid -8 -- ferry manjaro-remote syndcast --resume-or-new --claude
+
+mossferry ${ver} · the green ferry between your machines
 EOF
 }
 
 cmd_update() {
   local host="${1:-${FERRY_DEFAULT_HOST:-}}"
   if [[ -z "$host" ]]; then
-    printf '%s\n' "mossferry update: no host (pass one or set FERRY_DEFAULT_HOST)" >&2
+    _ferry_err "update: no host (pass one or set FERRY_DEFAULT_HOST)"
     return 1
   fi
 
+  local chrome=0
+  if ui_tty 2>/dev/null; then
+    chrome=1
+    banner "ferry update" "$host"
+  fi
+
   # Local pull (no set -e; branch may lack upstream mid-development).
-  git -C "$REPO_ROOT" pull --ff-only || printf '%s\n' "mossferry update: local pull failed (continuing)" >&2
+  if (( chrome )); then
+    printf '%s%s%s local pull…\n' "${UI_C-}" "${UI_RUN->>}" "${UI_Z-}" >&2
+  fi
+  local local_ec=0 git_tmp
+  if (( chrome )) && [[ -z ${FERRY_UPDATE_VERBOSE-} ]]; then
+    git_tmp=$(mktemp 2>/dev/null || printf '/tmp/ferry-update.%s' "$$")
+    if git -C "$REPO_ROOT" pull --ff-only >"$git_tmp" 2>&1; then
+      local_ec=0
+    else
+      local_ec=$?
+    fi
+    while IFS= read -r line || [[ -n ${line-} ]]; do
+      [[ -z ${line-} ]] && continue
+      printf '%s%s%s\n' "${UI_D-}" "$line" "${UI_Z-}" >&2
+    done <"$git_tmp"
+    rm -f "$git_tmp"
+  else
+    git -C "$REPO_ROOT" pull --ff-only || local_ec=$?
+  fi
+  if (( local_ec != 0 )); then
+    _ferry_err "update: local pull failed (continuing)"
+    (( chrome )) && printf '%s%s%s local pull\n' "${UI_Y-}" "${UI_WARN-!!}" "${UI_Z-}" >&2
+  else
+    (( chrome )) && printf '%s%s%s local pull\n' "${UI_G-}" "${UI_OK-OK}" "${UI_Z-}" >&2
+  fi
 
   # Canonical remote checkout (no remotes, or branch has no upstream) cannot pull —
   # skip and continue. Detect upstream via rev-parse @{u} (nonzero = no upstream).
-  local remotes
+  if (( chrome )); then
+    printf '%s%s%s remote pull…\n' "${UI_C-}" "${UI_RUN->>}" "${UI_Z-}" >&2
+  fi
+  local remotes remote_skipped=0 remote_ec=0
   if ! remotes="$(ssh "$host" git -C "$FERRY_REMOTE_REPO" remote)"; then
-    printf '%s\n' "mossferry update: remote pull failed" >&2
+    _ferry_err "update: remote pull failed"
+    (( chrome )) && printf '%s%s%s remote pull\n' "${UI_R-}" "${UI_ERR-XX}" "${UI_Z-}" >&2
     return 1
   fi
   remotes="${remotes//$'\r'/}"
   if [[ -z "$remotes" ]]; then
     printf '%s\n' "remote checkout is canonical (no upstream) — pull skipped"
+    remote_skipped=1
   elif ! ssh "$host" git -C "$FERRY_REMOTE_REPO" rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
     printf '%s\n' "remote checkout is canonical (no upstream) — pull skipped"
+    remote_skipped=1
   else
-    ssh "$host" git -C "$FERRY_REMOTE_REPO" pull --ff-only || {
-      printf '%s\n' "mossferry update: remote pull failed" >&2
-      return 1
-    }
+    if (( chrome )) && [[ -z ${FERRY_UPDATE_VERBOSE-} ]]; then
+      git_tmp=$(mktemp 2>/dev/null || printf '/tmp/ferry-update-r.%s' "$$")
+      if ssh "$host" git -C "$FERRY_REMOTE_REPO" pull --ff-only >"$git_tmp" 2>&1; then
+        remote_ec=0
+      else
+        remote_ec=$?
+      fi
+      while IFS= read -r line || [[ -n ${line-} ]]; do
+        [[ -z ${line-} ]] && continue
+        printf '%s%s%s\n' "${UI_D-}" "$line" "${UI_Z-}" >&2
+      done <"$git_tmp"
+      rm -f "$git_tmp"
+      if (( remote_ec != 0 )); then
+        _ferry_err "update: remote pull failed"
+        printf '%s%s%s remote pull\n' "${UI_R-}" "${UI_ERR-XX}" "${UI_Z-}" >&2
+        return 1
+      fi
+    else
+      ssh "$host" git -C "$FERRY_REMOTE_REPO" pull --ff-only || {
+        _ferry_err "update: remote pull failed"
+        return 1
+      }
+    fi
+  fi
+  if (( chrome )); then
+    if (( remote_skipped )); then
+      printf '%s%s%s remote pull (skipped)\n' "${UI_D-}" "${UI_PEND-..}" "${UI_Z-}" >&2
+    else
+      printf '%s%s%s remote pull\n' "${UI_G-}" "${UI_OK-OK}" "${UI_Z-}" >&2
+    fi
   fi
 
   local v_local v_remote
-  v_local="$(own_version)"
+  v_local="$(own_version | tr -d '[:space:]')"
   v_remote="$(ssh "$host" cat "${FERRY_REMOTE_REPO}/VERSION")"
   v_remote="${v_remote//$'\r'/}"
   v_remote="${v_remote//$'\n'/}"
+  v_remote="${v_remote//[[:space:]]/}"
+
+  # Parse-token law: non-TTY (and always) print the slash form on stdout.
   printf 'local %s / remote %s\n' "$v_local" "$v_remote"
+
+  # TTY wave strip on stderr (chrome).
+  if (( chrome )); then
+    local wave color
+    if [[ "$v_local" == "$v_remote" ]]; then
+      color="${UI_G-}"
+      wave="local ${v_local} ~~~⛴~~~ remote ${v_remote}"
+    else
+      color="${UI_R-}"
+      wave="local ${v_local} ~~~⛴~~~ remote ${v_remote}"
+    fi
+    printf '%s%s%s\n' "$color" "$wave" "${UI_Z-}" >&2
+  fi
 }
 
 cmd_doctor() {
   local host="${1:-${FERRY_DEFAULT_HOST:-}}"
   if [[ -z "$host" ]]; then
-    printf '%s\n' "mossferry doctor: no host (pass one or set FERRY_DEFAULT_HOST)" >&2
+    _ferry_err "doctor: no host (pass one or set FERRY_DEFAULT_HOST)"
     return 1
   fi
 
-  local failed=0
-  local cfg="${HOME}/.config/mossferry/config"
+  local failed=0 checks=0 cfg="${HOME}/.config/mossferry/config"
+  local chrome=0 version_failed=0
+  local fix_hints=()
+
+  if ui_tty 2>/dev/null; then
+    chrome=1
+    # SMALL one-liner banner tier for doctor
+    printf '⛴ %s%smossferry doctor%s · %s\n' "${UI_G-}${UI_BOLD-}" "${UI_Z-}${UI_G-}" "${UI_Z-}" "$host" >&2
+  fi
+
+  # Emit one check line. kind = ok|FAIL|info. Non-TTY: exact tokens. TTY: glyph + line.
+  _doc_emit() {
+    local kind=$1
+    shift
+    local msg="$*"
+    checks=$((checks + 1))
+    if (( chrome )); then
+      case "$kind" in
+        ok)
+          printf '%s%s%s ok %s\n' "${UI_G-}" "${UI_OK-OK}" "${UI_Z-}" "$msg"
+          ;;
+        FAIL)
+          printf '%s%s%s FAIL %s\n' "${UI_R-}" "${UI_ERR-XX}" "${UI_Z-}" "$msg"
+          ;;
+        info)
+          printf '%sinfo %s%s\n' "${UI_D-}" "$msg" "${UI_Z-}"
+          ;;
+        *)
+          printf '%s %s\n' "$kind" "$msg"
+          ;;
+      esac
+    else
+      printf '%s %s\n' "$kind" "$msg"
+    fi
+  }
 
   # 1. config readable (info if absent)
   if [[ -r "$cfg" ]]; then
-    printf 'ok config readable: %s\n' "$cfg"
+    _doc_emit ok "config readable: $cfg"
   else
-    printf 'info config absent — defaults in use\n'
+    _doc_emit info "config absent — defaults in use"
   fi
 
   # 2. ssh -G resolves
   if ssh -G "$host" >/dev/null 2>&1; then
-    printf 'ok ssh config resolves host %s\n' "$host"
+    _doc_emit ok "ssh config resolves host $host"
   else
-    printf 'FAIL ssh config does not resolve host %s\n' "$host"
+    _doc_emit FAIL "ssh config does not resolve host $host"
     failed=1
   fi
 
   # 3. ssh BatchMode connect
   if ssh -o BatchMode=yes -o ConnectTimeout=5 "$host" true >/dev/null 2>&1; then
-    printf 'ok ssh BatchMode connect to %s\n' "$host"
+    _doc_emit ok "ssh BatchMode connect to $host"
   else
-    printf 'FAIL ssh BatchMode connect to %s\n' "$host"
+    _doc_emit FAIL "ssh BatchMode connect to $host"
     failed=1
   fi
 
   # 4. local mosh binary
   if command -v mosh >/dev/null 2>&1; then
-    printf 'ok local mosh binary\n'
+    _doc_emit ok "local mosh binary"
   else
-    printf 'FAIL local mosh binary missing\n'
+    _doc_emit FAIL "local mosh binary missing"
     failed=1
   fi
 
   # 5. remote FERRY_REMOTE_BIN executable (relative to remote $HOME)
   if ssh "$host" "test -x $FERRY_REMOTE_BIN || test -x \"\$HOME/$FERRY_REMOTE_BIN\"" >/dev/null 2>&1; then
-    printf 'ok remote %s executable\n' "$FERRY_REMOTE_BIN"
+    _doc_emit ok "remote $FERRY_REMOTE_BIN executable"
   else
-    printf 'FAIL remote %s not executable\n' "$FERRY_REMOTE_BIN"
+    _doc_emit FAIL "remote $FERRY_REMOTE_BIN not executable"
     failed=1
   fi
 
   # 6. local vs remote VERSION match
   local v_local v_remote
-  v_local="$(own_version)"
+  v_local="$(own_version | tr -d '[:space:]')"
   v_remote="$(ssh "$host" cat "${FERRY_REMOTE_REPO}/VERSION" 2>/dev/null || true)"
   v_remote="${v_remote//$'\r'/}"
   v_remote="${v_remote//$'\n'/}"
+  v_remote="${v_remote//[[:space:]]/}"
   if [[ -n "$v_remote" && "$v_local" == "$v_remote" ]]; then
-    printf 'ok versions match: %s\n' "$v_local"
+    _doc_emit ok "versions match: $v_local"
   else
-    printf 'FAIL versions: local %s / remote %s\n' "$v_local" "${v_remote:-unknown}"
+    _doc_emit FAIL "versions: local $v_local / remote ${v_remote:-unknown}"
     failed=1
+    version_failed=1
+    fix_hints+=("run: ferry update ${host}")
   fi
 
   # 7. remote fzf (info if missing)
   if ssh "$host" command -v fzf >/dev/null 2>&1; then
-    printf 'ok remote fzf present\n'
+    _doc_emit ok "remote fzf present"
   else
-    printf 'info remote fzf missing — numbered menu fallback available\n'
+    _doc_emit info "remote fzf missing — numbered menu fallback available"
   fi
 
   # 8. remote mosh-server count (info)
@@ -299,17 +521,30 @@ cmd_doctor() {
   count="$(ssh "$host" pgrep -c mosh-server 2>/dev/null || true)"
   count="${count//$'\n'/}"
   : "${count:=0}"
-  printf 'info remote mosh-server count: %s\n' "$count"
+  _doc_emit info "remote mosh-server count: $count"
 
   # 9. MagicDNS note (info): whether HostName is an IP
   local hostname
   hostname="$(ssh -G "$host" 2>/dev/null | awk 'tolower($1)=="hostname"{print $2; exit}')"
   if [[ -z "$hostname" ]]; then
-    printf 'info MagicDNS: could not read HostName for %s\n' "$host"
+    _doc_emit info "MagicDNS: could not read HostName for $host"
   elif [[ "$hostname" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    printf 'info MagicDNS: HostName is IP (%s) — not using MagicDNS name\n' "$hostname"
+    _doc_emit info "MagicDNS: HostName is IP ($hostname) — not using MagicDNS name"
   else
-    printf 'info MagicDNS: HostName is %s\n' "$hostname"
+    _doc_emit info "MagicDNS: HostName is $hostname"
+  fi
+
+  # TTY summary + fix hints
+  if (( chrome )); then
+    if (( failed )); then
+      printf '%s%d checks · %s failed%s\n' "${UI_R-}" "$checks" "some" "${UI_Z-}" >&2
+    else
+      printf '%s%s%s %d checks · all ok%s\n' "${UI_G-}" "${UI_OK-OK}" "${UI_Z-}" "$checks" "" >&2
+    fi
+    local h
+    for h in "${fix_hints[@]+"${fix_hints[@]}"}"; do
+      printf '%s%s%s\n' "${UI_D-}" "$h" "${UI_Z-}" >&2
+    done
   fi
 
   return "$failed"
