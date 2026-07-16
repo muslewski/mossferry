@@ -147,7 +147,8 @@ cmd_update() {
   # Local pull (no set -e; branch may lack upstream mid-development).
   git -C "$REPO_ROOT" pull --ff-only || printf '%s\n' "mossferry update: local pull failed (continuing)" >&2
 
-  # Canonical remote checkout (no git remotes) cannot pull — skip and continue.
+  # Canonical remote checkout (no remotes, or branch has no upstream) cannot pull —
+  # skip and continue. Detect upstream via rev-parse @{u} (nonzero = no upstream).
   local remotes
   if ! remotes="$(ssh "$host" git -C "$FERRY_REMOTE_REPO" remote)"; then
     printf '%s\n' "mossferry update: remote pull failed" >&2
@@ -155,6 +156,8 @@ cmd_update() {
   fi
   remotes="${remotes//$'\r'/}"
   if [[ -z "$remotes" ]]; then
+    printf '%s\n' "remote checkout is canonical (no upstream) — pull skipped"
+  elif ! ssh "$host" git -C "$FERRY_REMOTE_REPO" rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
     printf '%s\n' "remote checkout is canonical (no upstream) — pull skipped"
   else
     ssh "$host" git -C "$FERRY_REMOTE_REPO" pull --ff-only || {
