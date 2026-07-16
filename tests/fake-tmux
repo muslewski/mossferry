@@ -3,6 +3,7 @@
 # FAKE_TMUX_LOG       — append each invocation as one line of "$*"
 # FAKE_TMUX_SESSIONS  — newline-separated session names
 # FAKE_TMUX_META      — lines "name|window|meta" for display-message
+#                       meta ≈ "2w attached claude" or "1w detached bash"
 set -u
 
 logf="${FAKE_TMUX_LOG:-}"
@@ -13,9 +14,35 @@ fi
 cmd="${1:-}"
 shift || true
 
+_lookup_meta() {
+  # sets: _win _meta _wins _attword _cmd
+  local name="$1" line mname rest
+  _win="bash"
+  _meta="1w detached bash"
+  _wins="1"
+  _attword="detached"
+  _cmd="bash"
+  [[ -z "${FAKE_TMUX_META:-}" ]] && return 0
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    mname="${line%%|*}"
+    rest="${line#*|}"
+    if [[ "$mname" == "$name" ]]; then
+      _win="${rest%%|*}"
+      _meta="${rest#*|}"
+      # parse "Nw attached|detached rest..."
+      if [[ "$_meta" =~ ^([0-9]+)w[[:space:]]+(attached|detached)[[:space:]]*(.*)$ ]]; then
+        _wins="${BASH_REMATCH[1]}"
+        _attword="${BASH_REMATCH[2]}"
+        _cmd="${BASH_REMATCH[3]:-bash}"
+      fi
+      return 0
+    fi
+  done <<< "$FAKE_TMUX_META"
+}
+
 case "$cmd" in
   list-sessions)
-    # Print session names (ignore -F / other flags). Empty env → no output.
     if [[ -n "${FAKE_TMUX_SESSIONS:-}" ]]; then
       printf '%s\n' "$FAKE_TMUX_SESSIONS"
     fi
@@ -49,49 +76,48 @@ case "$cmd" in
       esac
     done
     name="${target#=}"
-    window=""; meta=""
-    if [[ -n "${FAKE_TMUX_META:-}" ]]; then
-      while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
-        mname="${line%%|*}"
-        rest="${line#*|}"
-        mwin="${rest%%|*}"
-        mmeta="${rest#*|}"
-        if [[ "$mname" == "$name" ]]; then
-          window="$mwin"
-          meta="$mmeta"
-          break
-        fi
-      done <<< "$FAKE_TMUX_META"
-    fi
-    # Defaults when no META row
-    [[ -n "$window" ]] || window="bash"
-    [[ -n "$meta" ]] || meta="1w detached bash"
+    _lookup_meta "$name"
 
-    if [[ "$format" == *'#{window_name}'* && "$format" != *'#{session_'* && "$format" != *'#{pane_'* ]]; then
-      printf '%s\n' "$window"
-    elif [[ "$format" == *'#{session_attached}'* && "$format" != *'#{session_windows}'* ]]; then
-      # Bare attached flag (claim pass): 0 detached, 1 attached
-      if [[ "$meta" == *detached* ]]; then
-        printf '0\n'
-      else
-        printf '1\n'
-      fi
-    else
-      # Meta blob or multi-field format used by list/rows
-      printf '%s\n' "$meta"
-    fi
+    case "$format" in
+      *'#{window_name}'*)
+        # bare window name (not a multi-field format)
+        if [[ "$format" != *'#{session_'* && "$format" != *'#{pane_'* ]]; then
+          printf '%s\n' "$_win"
+        else
+          printf '%s\n' "$_meta"
+        fi
+        ;;
+      *'#{session_windows}'*)
+        if [[ "$format" == *'#{?session_attached'* || "$format" == *'#{pane_'* ]]; then
+          printf '%s\n' "$_meta"
+        else
+          printf '%s\n' "$_wins"
+        fi
+        ;;
+      *'#{session_attached}'*)
+        if [[ "$_attword" == "detached" ]]; then
+          printf '0\n'
+        else
+          printf '1\n'
+        fi
+        ;;
+      *'#{pane_current_command}'*)
+        printf '%s\n' "$_cmd"
+        ;;
+      *)
+        printf '%s\n' "$_meta"
+        ;;
+    esac
     exit 0
     ;;
   show-options)
-    # No claim markers in stub → always empty (claimable)
+    # No claim markers → always empty (claimable)
     exit 0
     ;;
   attach|new-session|set-option|send-keys|new|kill-session)
     exit 0
     ;;
   *)
-    # Unknown subcommand: log-only success so tests don't hang
     exit 0
     ;;
 esac

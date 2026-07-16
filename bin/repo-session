@@ -1,243 +1,492 @@
 #!/usr/bin/env bash
-# repo-session <repo> [--new] [--list] [--resume [ARG]] [--resume-closed]
-#              [--resume-or-new] [--claude|-c] [--help|-h] [-- cmd...]
-# Attach/create a tmux session for a repo under ~/Repositories, started in that dir.
-#   (default)        attach the repo's primary session if alive, else create it
-#   --new            force a fresh session (repo, repo-2, repo-3, ...)
-#   --list / -l      list live sessions (numbered) and exit. With <repo>, just
-#                    that repo's; with no <repo>, EVERY tmux session on the host.
-#   --resume [ARG]   No ARG: open tmux's own session tree picker (choose-tree) over
-#                    ALL sessions, so you can eyeball every session and switch to any.
-#                    ARG = a session NAME: attach that exact session directly
-#                    (e.g. --resume syndcast-2). ARG = a number N: attach the Nth
-#                    session -- scoped to <repo> if one was given, else the Nth across
-#                    ALL sessions. Works with no <repo>:  moshi <host> --resume [name|N]
-#   --resume-closed  reattach the next EXISTING session, one per caller (atomic).
-#                    Prefers a genuinely DETACHED session; if all are "attached" it
-#                    TAKES OVER one (attach -d) -- because after you close a window
-#                    mosh-server lingers and the session stays attached to that stale
-#                    client. Fired in parallel across a ghostty-grid, each pane gets a
-#                    different session; panes past the session count stay BLANK.
-#   --resume-or-new  like --resume-closed, but if no session is left to reattach,
-#                    create a fresh one instead -- so an N-pane grid always fills.
-#                    New fill sessions honour --claude / -- cmd (so the grid's empty
-#                    panes start `claude` when you pass --resume-or-new --claude).
-#   --claude         run `claude` on creation (default startup command is neofetch)
-#   --help / -h      print this usage with examples and exit
-#   -- cmd...        custom startup command on creation
-# Invoked by the Mac `moshi` wrapper:  mosh <host> -- repo-session <repo> [flags]
+# repo-session [repo] [flags] [-- cmd...]
+# Remote brain for moshi: picker, attach/create, atomic grid claim.
+#   (default)           fzf/menu picker (scoped to <repo> when given)
+#   --primary / -p      attach primary session, create if missing
+#   --new               force a fresh session (repo, repo-2, ...)
+#   --list / -l         list live sessions and exit
+#   --resume [N|name]   bare → picker; N/name → direct attach
+#   --resume-closed     atomic claim of one existing session
+#   --resume-or-new     claim, or create if none left
+#   --claude / -c       run claude on creation
+#   --client-version V  version handshake with local moshi client
+#   --help / -h         usage
+#   -- cmd...           custom startup command on creation
 set -u
-TMUXBIN="${REPO_SESSION_TMUXBIN:-/usr/bin/tmux}"   # absolute path; override only for tests. NOT named TMUX (that env var is tmux's own)
-base="$HOME/Repositories"
 
-repo=""; fresh=0; list=0; pick=""; startcmd=""; claim=0; fill=0; wantpick=0; help=0
-while (( $# )); do
-  case "$1" in
-    --new)              fresh=1; shift ;;
-    --list|-l)          list=1; shift ;;
-    --resume|-R)        wantpick=1
-                        # Optional argument: a session NAME or an index N. Consume the
-                        # next token unless it's another flag (starts with -) or absent,
-                        # so bare `--resume` still falls through to the picker.
-                        if [[ -n "${2:-}" && "${2:-}" != -* ]]; then pick="$2"; shift 2; else shift; fi ;;
-    --resume-closed)    claim=1; shift ;;
-    --resume-or-new)    claim=1; fill=1; shift ;;
-    --claude|-c)        startcmd="claude"; shift ;;
-    --help|-h)          help=1; shift ;;
-    --)                 shift; startcmd="$*"; break ;;
-    -*)                 shift ;;                       # ignore unknown flags, don't choke
-    *)                  if [[ -z "$repo" ]]; then repo="$1"; else startcmd="${startcmd:+$startcmd }$1"; fi; shift ;;
+TMUXBIN="${REPO_SESSION_TMUXBIN:-/usr/bin/tmux}"
+
+# ---- config / version helpers ------------------------------------------------
+
+load_config() {
+  # Snapshot env (env > file > default).
+  local e_REMOTE_BIN e_REPO_BASE e_DEFAULT_CMD e_DEFAULT_HOST e_SERVER_TIMEOUT e_REMOTE_REPO
+  e_REMOTE_BIN="${MOSHI_REMOTE_BIN-__UNSET__}"
+  e_REPO_BASE="${MOSHI_REPO_BASE-__UNSET__}"
+  e_DEFAULT_CMD="${MOSHI_DEFAULT_CMD-__UNSET__}"
+  e_DEFAULT_HOST="${MOSHI_DEFAULT_HOST-__UNSET__}"
+  e_SERVER_TIMEOUT="${MOSHI_SERVER_TIMEOUT-__UNSET__}"
+  e_REMOTE_REPO="${MOSHI_REMOTE_REPO-__UNSET__}"
+
+  MOSHI_REMOTE_BIN=".local/bin/repo-session"
+  MOSHI_REPO_BASE="${HOME}/Repositories"
+  MOSHI_DEFAULT_CMD="neofetch"
+  MOSHI_DEFAULT_HOST=""
+  MOSHI_SERVER_TIMEOUT="86400"
+  MOSHI_REMOTE_REPO="Repositories/moshi"
+
+  if [[ -r "${HOME}/.config/moshi/config" ]]; then
+    # shellcheck source=/dev/null
+    source "${HOME}/.config/moshi/config"
+  fi
+
+  [[ "$e_REMOTE_BIN" != "__UNSET__" ]] && MOSHI_REMOTE_BIN="$e_REMOTE_BIN"
+  [[ "$e_REPO_BASE" != "__UNSET__" ]] && MOSHI_REPO_BASE="$e_REPO_BASE"
+  [[ "$e_DEFAULT_CMD" != "__UNSET__" ]] && MOSHI_DEFAULT_CMD="$e_DEFAULT_CMD"
+  [[ "$e_DEFAULT_HOST" != "__UNSET__" ]] && MOSHI_DEFAULT_HOST="$e_DEFAULT_HOST"
+  [[ "$e_SERVER_TIMEOUT" != "__UNSET__" ]] && MOSHI_SERVER_TIMEOUT="$e_SERVER_TIMEOUT"
+  [[ "$e_REMOTE_REPO" != "__UNSET__" ]] && MOSHI_REMOTE_REPO="$e_REMOTE_REPO"
+}
+
+own_version() {
+  local root vf
+  root="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+  vf="${root}/VERSION"
+  if [[ -r "$vf" ]]; then
+    cat "$vf"
+  else
+    printf 'unknown\n'
+  fi
+}
+
+# One line per live session (optionally scoped to <repo>):
+#   <session>\t<window_name>\t<N>w\t<attached|detached>\t<current_command>
+build_session_rows() {
+  local filter="${1:-}" s cname wins att cmd attword
+  local -a names=()
+  if [[ -n "$filter" ]]; then
+    mapfile -t names < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null \
+      | grep -E "^${filter}(-[0-9]+)?$" | sort -V)
+  else
+    mapfile -t names < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
+  fi
+  for s in "${names[@]}"; do
+    [[ -z "$s" ]] && continue
+    cname=$("$TMUXBIN" display-message -p -t "$s" '#{window_name}')
+    wins=$("$TMUXBIN" display-message -p -t "$s" '#{session_windows}')
+    att=$("$TMUXBIN" display-message -p -t "$s" '#{session_attached}')
+    cmd=$("$TMUXBIN" display-message -p -t "$s" '#{pane_current_command}')
+    if [[ "$att" == "0" ]]; then attword="detached"; else attword="attached"; fi
+    printf '%s\t%s\t%sw\t%s\t%s\n' "$s" "$cname" "$wins" "$attword" "$cmd"
+  done
+}
+
+# ---- session helpers ---------------------------------------------------------
+
+_list_repo_sessions() {
+  # populate global `sessions` array for $repo
+  mapfile -t sessions < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null \
+    | grep -E "^${repo}(-[0-9]+)?$" | sort -V)
+}
+
+print_list() {
+  local i=1 s cname meta
+  for s in "${sessions[@]}"; do
+    cname=$("$TMUXBIN" display-message -p -t "$s" '#{window_name}')
+    meta=$("$TMUXBIN" display-message -p -t "$s" \
+      '#{session_windows}w #{?session_attached,attached,detached} #{pane_current_command}')
+    printf '%d) %-16s %-22s %s\n' "$i" "$s" "$cname" "$meta"
+    ((i++)) || true
+  done
+}
+
+# Lock-guarded create of $session in $dir if missing; leaves lock held by caller
+# only when caller already holds fd 9. This helper acquires and releases its own.
+_create_session_locked() {
+  # args: session_name
+  local session_name="$1"
+  local dir="${MOSHI_REPO_BASE}/${repo}"
+  local lockf="${TMPDIR:-/tmp}/repo-session-${repo}.claim"
+  exec 9>"$lockf"
+  flock 9
+  if ! "$TMUXBIN" has-session -t "$session_name" 2>/dev/null; then
+    "$TMUXBIN" new-session -d -s "$session_name" -c "$dir"
+    "$TMUXBIN" send-keys -t "$session_name" "${startcmd:-$MOSHI_DEFAULT_CMD}" C-m
+  fi
+  flock -u 9
+}
+
+_next_free_name() {
+  # print next free session name for $repo (primary if free)
+  local session="$repo" n=2
+  while "$TMUXBIN" has-session -t "$session" 2>/dev/null; do
+    session="${repo}-${n}"
+    ((n++)) || true
+  done
+  printf '%s\n' "$session"
+}
+
+_attach() {
+  # exact match when name known
+  exec "$TMUXBIN" attach -t "=$1"
+}
+
+_create_and_attach() {
+  local session_name="$1"
+  _create_session_locked "$session_name"
+  exec "$TMUXBIN" attach -t "$session_name"
+}
+
+# ---- picker ------------------------------------------------------------------
+
+_pick_repo_for_new() {
+  # Print chosen repo name to stdout, or empty on cancel. Uses global $repo filter.
+  local -a dirs=()
+  local d choice i
+  if [[ -n "$repo" ]]; then
+    dirs=("$repo")
+  else
+    if [[ -d "$MOSHI_REPO_BASE" ]]; then
+      while IFS= read -r d; do
+        [[ -n "$d" ]] && dirs+=("$d")
+      done < <(ls -1 "$MOSHI_REPO_BASE" 2>/dev/null)
+    fi
+  fi
+  if (( ${#dirs[@]} == 0 )); then
+    echo "repo-session: no repos under $MOSHI_REPO_BASE" >&2
+    return 1
+  fi
+
+  if command -v fzf >/dev/null 2>&1 && [[ -z "${MOSHI_NO_FZF:-}" ]]; then
+    choice=$(printf '%s\n' "${dirs[@]}" | fzf --prompt='new session repo> ') || return 1
+    printf '%s\n' "$choice"
+    return 0
+  fi
+
+  # numbered menu
+  i=1
+  for d in "${dirs[@]}"; do
+    printf '%d) %s\n' "$i" "$d" >&2
+    ((i++)) || true
+  done
+  printf 'q) quit\n' >&2
+  if ! read -r choice; then
+    return 1
+  fi
+  case "$choice" in
+    q|Q|"") return 1 ;;
+    *)
+      if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#dirs[@]} )); then
+        printf '%s\n' "${dirs[$((choice-1))]}"
+        return 0
+      fi
+      return 1
+      ;;
   esac
-done
+}
 
-# ---- help -- short-circuit everything else (works with or without a <repo>).
-#      Without this, `repo-session --help` hits the catch-all `-*` (ignored), ends
-#      up with no repo, and falls through to `new-session -A -s main` -- i.e. typing
-#      --help would dump you into the shared main session. --
-if (( help )); then
-  cat <<'EOF'
-repo-session <repo> [flags]   attach/create a tmux session for a repo under ~/Repositories
+_do_new_session_flow() {
+  local chosen name
+  chosen=$(_pick_repo_for_new) || exit 130
+  [[ -z "$chosen" ]] && exit 130
+  if [[ ! -d "${MOSHI_REPO_BASE}/${chosen}" ]]; then
+    echo "repo-session: no repo '${chosen}' under $MOSHI_REPO_BASE" >&2
+    exit 1
+  fi
+  repo="$chosen"
+  name=$(_next_free_name)
+  _create_and_attach "$name"
+}
+
+run_picker() {
+  # Uses global $repo (may be empty = global).
+  local -a rows=()
+  local line choice name i nsel
+  local new_label=$'➕ new session…'
+
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && rows+=("$line")
+  done < <(build_session_rows "$repo")
+
+  if command -v fzf >/dev/null 2>&1 && [[ -z "${MOSHI_NO_FZF:-}" ]]; then
+    {
+      printf '%s\n' "${rows[@]}"
+      printf '%s\n' "$new_label"
+    } | fzf --ansi --delimiter=$'\t' \
+        --preview "$TMUXBIN capture-pane -ep -t {1}" \
+        --preview-window=right:60% \
+        >"${TMPDIR:-/tmp}/repo-session-pick.$$" || {
+      rm -f "${TMPDIR:-/tmp}/repo-session-pick.$$"
+      exit 130
+    }
+    choice=$(cat "${TMPDIR:-/tmp}/repo-session-pick.$$")
+    rm -f "${TMPDIR:-/tmp}/repo-session-pick.$$"
+    if [[ "$choice" == "$new_label" || "$choice" == *$'\t'"$new_label" || "$choice" == "➕ new session…" ]]; then
+      _do_new_session_flow
+    fi
+    name="${choice%%$'\t'*}"
+    [[ -z "$name" ]] && exit 130
+    exec "$TMUXBIN" attach -t "=$name"
+  fi
+
+  # Numbered menu fallback
+  i=1
+  for line in "${rows[@]}"; do
+    name="${line%%$'\t'*}"
+    printf '%d) %s\n' "$i" "$line" | tr '\t' ' '
+    ((i++)) || true
+  done
+  printf 'n) new session…\n'
+  printf 'q) quit\n'
+  if ! read -r nsel; then
+    exit 130
+  fi
+  case "$nsel" in
+    q|Q|"") exit 130 ;;
+    n|N)
+      _do_new_session_flow
+      ;;
+    *)
+      if [[ "$nsel" =~ ^[0-9]+$ ]] && (( nsel >= 1 && nsel <= ${#rows[@]} )); then
+        line="${rows[$((nsel-1))]}"
+        name="${line%%$'\t'*}"
+        exec "$TMUXBIN" attach -t "=$name"
+      fi
+      echo "repo-session: invalid selection" >&2
+      exit 1
+      ;;
+  esac
+}
+
+# ---- main --------------------------------------------------------------------
+
+main() {
+  local repo="" fresh=0 list=0 pick="" startcmd="" claim=0 fill=0 wantpick=0 help=0 primary=0
+  local client_version=""
+  local dir sessions
+  sessions=()
+
+  while (( $# )); do
+    case "$1" in
+      --new)              fresh=1; shift ;;
+      --list|-l)          list=1; shift ;;
+      --resume|-R)        wantpick=1
+                          if [[ -n "${2:-}" && "${2:-}" != -* ]]; then pick="$2"; shift 2; else shift; fi ;;
+      --resume-closed)    claim=1; shift ;;
+      --resume-or-new)    claim=1; fill=1; shift ;;
+      --claude|-c)        startcmd="claude"; shift ;;
+      --help|-h)          help=1; shift ;;
+      --primary|-p)       primary=1; shift ;;
+      --client-version)   client_version="${2:-}"; shift 2 ;;
+      --)                 shift; startcmd="$*"; break ;;
+      -*)                 echo "repo-session: ignoring unknown flag '$1'" >&2; shift ;;
+      *)                  if [[ -z "$repo" ]]; then repo="$1"; else startcmd="${startcmd:+$startcmd }$1"; fi; shift ;;
+    esac
+  done
+
+  load_config
+
+  # Version handshake (warn only; never block).
+  if [[ -n "$client_version" ]]; then
+    local ov
+    ov="$(own_version | tr -d '[:space:]')"
+    if [[ -n "$ov" && "$client_version" != "$ov" ]]; then
+      echo "moshi: client ${client_version} / remote ${ov} — run 'moshi update'" >&2
+    fi
+  fi
+
+  if (( help )); then
+    cat <<'EOF'
+repo-session [repo] [flags]   remote brain for moshi (picker default)
 
 Flags:
-  (none)             attach the repo's primary session, creating it if missing
+  (none)             open the session picker (scoped to <repo> when given)
+  --primary, -p      attach the repo's primary session, creating it if missing
   --new              force a fresh session  (repo, repo-2, repo-3, ...)
   --claude, -c       run `claude` in newly-created sessions  (default: neofetch)
   --list, -l         list sessions and exit  (with <repo>: just that repo;
                      without <repo>: every tmux session on the host)
-  --resume [N|name]  no arg -> tmux session-tree picker; N -> the Nth session;
+  --resume [N|name]  no arg -> session picker; N -> the Nth session;
                      name -> attach that exact session (e.g. --resume syndcast-2)
   --resume-closed    reattach one EXISTING session per caller, distinct (atomic);
                      prefers detached, else takes over a stale-attached one. Across
                      a ghostty-grid each pane gets a different one; extras stay BLANK.
   --resume-or-new    like --resume-closed, but fill leftover panes with fresh
                      sessions (honouring --claude / -- cmd) -- so the grid fills.
+  --client-version V version handshake (set by moshi client)
   --help, -h         print this help and exit
   -- cmd...          custom startup command for newly-created sessions
 
-Examples (run via the Mac `moshi` wrapper, which prepends the host):
-  moshi manjaro-remote syndcast                       attach/create the primary session
-  moshi manjaro-remote syndcast --new --claude        fresh session running claude
-  moshi manjaro-remote syndcast --list                list syndcast's sessions
-  moshi manjaro-remote --resume                        pick any session from the tmux tree
+Examples (run via the moshi client, which prepends the host):
+  moshi manjaro-remote                            global session picker
+  moshi manjaro-remote syndcast                   picker scoped to syndcast
+  moshi manjaro-remote syndcast --primary         attach/create the primary session
+  moshi manjaro-remote syndcast --new --claude    fresh session running claude
+  moshi manjaro-remote syndcast --list            list syndcast's sessions
+  moshi manjaro-remote --resume                   pick any session
   ghostty-grid -8 -- moshi manjaro-remote syndcast --resume-or-new --claude
         8 panes: reattach existing syndcast sessions, fill the rest with new ones
         running claude (the everyday "open all my workspaces" command)
 EOF
-  exit 0
-fi
-
-# ---- resume modes -- handled BEFORE the "valid repo required" guard below, since
-#      they're allowed to run with no <repo>. (Skipping this is exactly the "always
-#      opens main" bug: a bare --resume used to fall through to new-session main.) --
-if (( wantpick )); then
-  if [[ -z "$pick" ]]; then
-    # No arg -> hand off to tmux's own session tree picker over ALL sessions.
-    # Need a live client to host the picker: attach to the most-recent session,
-    # then pop choose-tree zoomed. Selecting a session switch-clients to it.
-    "$TMUXBIN" has-session 2>/dev/null || exec "$TMUXBIN" new-session -A -s main
-    exec "$TMUXBIN" attach \; choose-tree -Zs
-  elif [[ "$pick" =~ ^[0-9]+$ ]]; then
-    # Numeric index -> Nth session, scoped to <repo> if one was given, else all.
-    if [[ -n "$repo" ]]; then
-      mapfile -t rs < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null \
-                          | grep -E "^${repo}(-[0-9]+)?$" | sort -V)
-    else
-      mapfile -t rs < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
-    fi
-    target="${rs[$((pick-1))]:-}"
-    if [[ -z "$target" ]]; then
-      echo "no session #$pick${repo:+ for '$repo'}. available:" >&2
-      i=1; for s in "${rs[@]}"; do echo "  $i) $s" >&2; ((i++)); done
-      exit 1
-    fi
-    exec "$TMUXBIN" attach -t "$target"
-  else
-    # Explicit session NAME. The '=' prefix forces an EXACT match, disabling tmux's
-    # prefix/fnmatch target fuzzing (so `syndcast` never silently grabs `syndcast-2`).
-    if "$TMUXBIN" has-session -t "=$pick" 2>/dev/null; then
-      exec "$TMUXBIN" attach -t "=$pick"
-    fi
-    echo "no session named '$pick'. available:" >&2
-    "$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V | sed 's/^/  /' >&2
-    exit 1
-  fi
-fi
-
-# Pretty-print a numbered session list from the `sessions` array. Two names per
-# row: the tmux SESSION name and the active window's name -- which session-sync.py
-# renames to the running Claude session's label (the same name the status bar
-# shows), so a Claude session reads as e.g. "Syndcast Backlog" instead of just
-# "syndcast-2". Plain -t (not =name): names come from list-sessions so they're
-# already exact, and =name would blank out the window/pane format fields.
-# Two display-message calls (not one tab-delimited format): tmux substitutes a
-# literal tab in format output with '_' (control-char/locale mangling), which would
-# merge the columns. Separate calls keep a window name with spaces ("Syndcast
-# Backlog") intact in $cname while $meta carries the window count / attach state /
-# current command.
-print_list() {
-  local i=1 s cname meta
-  for s in "${sessions[@]}"; do
-    cname=$("$TMUXBIN" display-message -p -t "$s" '#{window_name}')
-    meta=$("$TMUXBIN" display-message -p -t "$s" \
-             '#{session_windows}w #{?session_attached,attached,detached} #{pane_current_command}')
-    printf '%d) %-16s %-22s %s\n' "$i" "$s" "$cname" "$meta"
-    ((i++))
-  done
-}
-
-# ---- list mode -- handled BEFORE the "valid repo required" guard so a repo-less
-#      `--list` lists EVERY tmux session. (Previously no <repo> fell through the
-#      guard to `new-session -A -s main`, which over ssh dies "not a terminal".)
-#      With a <repo>, scope to that repo's sessions; without one, list them all. --
-if (( list )); then
-  if [[ -n "$repo" ]]; then
-    mapfile -t sessions < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null \
-                              | grep -E "^${repo}(-[0-9]+)?$" | sort -V)
-  else
-    mapfile -t sessions < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
-  fi
-  if (( ${#sessions[@]} == 0 )); then
-    if [[ -n "$repo" ]]; then echo "no '$repo' sessions yet"; else echo "no tmux sessions running"; fi
     exit 0
   fi
-  print_list
-  exit 0
-fi
 
-dir="$base/$repo"
-if [[ -z "$repo" || ! -d "$dir" ]]; then
-  echo "repo-session: no repo '$repo' under $base" >&2
-  ls -1 "$base" 2>/dev/null | sed 's/^/  /' >&2
-  exec "$TMUXBIN" new-session -A -s main
-fi
+  # --resume with N or name (bare --resume falls through to picker later)
+  if (( wantpick )) && [[ -n "$pick" ]]; then
+    if [[ "$pick" =~ ^[0-9]+$ ]]; then
+      if [[ -n "$repo" ]]; then
+        mapfile -t sessions < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null \
+          | grep -E "^${repo}(-[0-9]+)?$" | sort -V)
+      else
+        mapfile -t sessions < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
+      fi
+      local target="${sessions[$((pick-1))]:-}"
+      if [[ -z "$target" ]]; then
+        echo "no session #$pick${repo:+ for '$repo'}. available:" >&2
+        local i=1 s
+        for s in "${sessions[@]}"; do echo "  $i) $s" >&2; ((i++)) || true; done
+        exit 1
+      fi
+      exec "$TMUXBIN" attach -t "$target"
+    else
+      if "$TMUXBIN" has-session -t "=$pick" 2>/dev/null; then
+        exec "$TMUXBIN" attach -t "=$pick"
+      fi
+      echo "no session named '$pick'. available:" >&2
+      "$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V | sed 's/^/  /' >&2
+      exit 1
+    fi
+  fi
 
-# every live session for this repo: <repo>, <repo>-2, <repo>-3, ... (version sorted)
-mapfile -t sessions < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null \
-                          | grep -E "^${repo}(-[0-9]+)?$" | sort -V)
+  # --list
+  if (( list )); then
+    if [[ -n "$repo" ]]; then
+      mapfile -t sessions < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null \
+        | grep -E "^${repo}(-[0-9]+)?$" | sort -V)
+    else
+      mapfile -t sessions < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
+    fi
+    if (( ${#sessions[@]} == 0 )); then
+      if [[ -n "$repo" ]]; then echo "no '$repo' sessions yet"; else echo "no tmux sessions running"; fi
+      exit 0
+    fi
+    print_list
+    exit 0
+  fi
 
-# --resume-closed / --resume-or-new: atomically claim a detached session.
-# ghostty-grid fires N copies of this at once, so the whole pick-or-create is
-# serialized with a per-repo flock. A claimed/created session is reserved with a
-# tmux @claim_ts marker (short TTL) that bridges the gap until tmux's own
-# attached-state catches up, so two panes can't grab the same one. The marker
-# self-expires, so a session you later detach from becomes claimable again.
-# We hold the lock through creation too (so concurrent --resume-or-new panes pick
-# distinct fresh names), then release it before attaching so panes attach in
-# parallel.
-if (( claim )); then
-  lockf="${TMPDIR:-/tmp}/repo-session-$repo.claim"
-  exec 9>"$lockf"; flock 9
-  now=$(date +%s); ttl=25; target=""
-  claimable() {   # not reserved by another pane in the last ttl seconds
-    local c; c=$("$TMUXBIN" show-options -t "$1" -v -q @claim_ts 2>/dev/null)
-    [[ -z "$c" ]] || (( now - c >= ttl ))
-  }
-  # pass 1: prefer a genuinely DETACHED session
-  for s in "${sessions[@]}"; do
-    [[ "$("$TMUXBIN" display-message -p -t "$s" '#{session_attached}')" == "0" ]] || continue
-    claimable "$s" || continue
-    target="$s"; "$TMUXBIN" set-option -t "$s" @claim_ts "$now" >/dev/null 2>&1; break
-  done
-  # pass 2: none detached → TAKE OVER an attached one. Its client is almost always a
-  # stale mosh-server from a window you closed; `attach -d` below kicks it loose.
-  if [[ -z "$target" ]]; then
+  # Typo guard: repo given but not a directory under base → error + list, never attach main.
+  if [[ -n "$repo" ]]; then
+    dir="${MOSHI_REPO_BASE}/${repo}"
+    if [[ ! -d "$dir" ]]; then
+      echo "repo-session: no repo '${repo}' under ${MOSHI_REPO_BASE} — pick one below, or run 'moshi <host>' to browse all sessions" >&2
+      ls -1 "$MOSHI_REPO_BASE" 2>/dev/null | sed 's/^/  /' >&2
+      exit 1
+    fi
+  fi
+
+  # --resume-closed / --resume-or-new: claim block (baseline, one blank-fallback change)
+  if (( claim )); then
+    if [[ -z "$repo" ]]; then
+      echo "repo-session: --resume-closed/--resume-or-new require a <repo>" >&2
+      exit 1
+    fi
+    _list_repo_sessions
+    local lockf now ttl target s n c
+    lockf="${TMPDIR:-/tmp}/repo-session-$repo.claim"
+    exec 9>"$lockf"; flock 9
+    now=$(date +%s); ttl=25; target=""
+    claimable() {   # not reserved by another pane in the last ttl seconds
+      local c; c=$("$TMUXBIN" show-options -t "$1" -v -q @claim_ts 2>/dev/null)
+      [[ -z "$c" ]] || (( now - c >= ttl ))
+    }
+    # pass 1: prefer a genuinely DETACHED session
     for s in "${sessions[@]}"; do
+      [[ "$("$TMUXBIN" display-message -p -t "$s" '#{session_attached}')" == "0" ]] || continue
       claimable "$s" || continue
       target="$s"; "$TMUXBIN" set-option -t "$s" @claim_ts "$now" >/dev/null 2>&1; break
     done
+    # pass 2: none detached → TAKE OVER an attached one.
+    if [[ -z "$target" ]]; then
+      for s in "${sessions[@]}"; do
+        claimable "$s" || continue
+        target="$s"; "$TMUXBIN" set-option -t "$s" @claim_ts "$now" >/dev/null 2>&1; break
+      done
+    fi
+    if [[ -z "$target" && $fill -eq 1 ]]; then
+      n=2; target="$repo"
+      while "$TMUXBIN" has-session -t "$target" 2>/dev/null; do target="$repo-$n"; ((n++)) || true; done
+      "$TMUXBIN" new-session -d -s "$target" -c "$dir"
+      "$TMUXBIN" send-keys -t "$target" "${startcmd:-$MOSHI_DEFAULT_CMD}" C-m
+      "$TMUXBIN" set-option -t "$target" @claim_ts "$now" >/dev/null 2>&1
+    fi
+    flock -u 9
+    if [[ -n "$target" ]]; then exec "$TMUXBIN" attach -d -t "$target"; fi
+    echo "no '$repo' sessions left to resume — blank shell" >&2
+    # Blank fallback: plain login shell (no env -u SSH_CONNECTION; .bashrc auto-attach removed in Phase 2).
+    exec "${SHELL:-/bin/bash}" -l
   fi
-  if [[ -z "$target" && $fill -eq 1 ]]; then         # nothing to reuse → make a fresh one, still locked
-    n=2; target="$repo"
-    while "$TMUXBIN" has-session -t "$target" 2>/dev/null; do target="$repo-$n"; ((n++)); done
-    "$TMUXBIN" new-session -d -s "$target" -c "$dir"
-    "$TMUXBIN" send-keys -t "$target" "${startcmd:-neofetch}" C-m
-    "$TMUXBIN" set-option -t "$target" @claim_ts "$now" >/dev/null 2>&1
+
+  # --primary: attach primary or create (baseline default, now explicit)
+  if (( primary )); then
+    if [[ -z "$repo" ]]; then
+      echo "repo-session: --primary requires a <repo>" >&2
+      exit 1
+    fi
+    local session="$repo"
+    local lockf="${TMPDIR:-/tmp}/repo-session-$repo.claim"
+    exec 9>"$lockf"; flock 9
+    if ! "$TMUXBIN" has-session -t "$session" 2>/dev/null; then
+      "$TMUXBIN" new-session -d -s "$session" -c "$dir"
+      "$TMUXBIN" send-keys -t "$session" "${startcmd:-$MOSHI_DEFAULT_CMD}" C-m
+    fi
+    flock -u 9
+    exec "$TMUXBIN" attach -t "$session"
   fi
-  flock -u 9
-  # -d detaches any other client (the stale mosh) so exactly one pane owns the
-  # session; it's a harmless no-op when the session was already detached.
-  if [[ -n "$target" ]]; then exec "$TMUXBIN" attach -d -t "$target"; fi
-  echo "no '$repo' sessions left to resume — blank shell" >&2
-  # Stay BLANK: ~/.bashrc auto-attaches to a shared "main" session when it sees
-  # SSH_CONNECTION set, which would pile every empty pane into one session. Clear
-  # SSH_CONNECTION just for this fallback shell so that guard skips — the shell is
-  # otherwise a normal login shell (aliases, prompt intact), just not in tmux.
-  exec env -u SSH_CONNECTION "${SHELL:-/bin/bash}" -l
+
+  # --new: force fresh session
+  if (( fresh )); then
+    if [[ -z "$repo" ]]; then
+      echo "repo-session: --new requires a <repo>" >&2
+      exit 1
+    fi
+    local session="$repo" n=2
+    local lockf="${TMPDIR:-/tmp}/repo-session-$repo.claim"
+    exec 9>"$lockf"; flock 9
+    while "$TMUXBIN" has-session -t "$session" 2>/dev/null; do
+      session="$repo-$n"
+      ((n++)) || true
+    done
+    "$TMUXBIN" new-session -d -s "$session" -c "$dir"
+    "$TMUXBIN" send-keys -t "$session" "${startcmd:-$MOSHI_DEFAULT_CMD}" C-m
+    flock -u 9
+    exec "$TMUXBIN" attach -t "$session"
+  fi
+
+  # Default action / bare --resume: the picker.
+  # Zero-session fast path when a repo is given and no live sessions exist.
+  if [[ -n "$repo" ]]; then
+    _list_repo_sessions
+    if (( ${#sessions[@]} == 0 )); then
+      echo "no live sessions for '${repo}' — created primary"
+      local session="$repo"
+      local lockf="${TMPDIR:-/tmp}/repo-session-$repo.claim"
+      exec 9>"$lockf"; flock 9
+      if ! "$TMUXBIN" has-session -t "$session" 2>/dev/null; then
+        "$TMUXBIN" new-session -d -s "$session" -c "$dir"
+        "$TMUXBIN" send-keys -t "$session" "${startcmd:-$MOSHI_DEFAULT_CMD}" C-m
+      fi
+      flock -u 9
+      exec "$TMUXBIN" attach -t "$session"
+    fi
+  fi
+
+  run_picker
+}
+
+# LIB mode: define helpers only (for unit tests / sourcing).
+if [[ "${REPO_SESSION_LIB:-}" == "1" ]]; then
+  # When sourced: return to caller. When executed with LIB=1: exit quietly.
+  return 0 2>/dev/null || exit 0
 fi
 
-# default / --new — name selection + creation is lock-guarded, so a grid that
-# fires N of these at once picks distinct names instead of colliding on one.
-# (A single uncontended moshi takes the lock instantly: behaviour is unchanged.)
-session="$repo"
-lockf="${TMPDIR:-/tmp}/repo-session-$repo.claim"
-exec 9>"$lockf"; flock 9
-if (( fresh )); then
-  n=2
-  while "$TMUXBIN" has-session -t "$session" 2>/dev/null; do session="$repo-$n"; ((n++)); done
-fi
-if ! "$TMUXBIN" has-session -t "$session" 2>/dev/null; then
-  "$TMUXBIN" new-session -d -s "$session" -c "$dir"
-  "$TMUXBIN" send-keys -t "$session" "${startcmd:-neofetch}" C-m
-fi
-flock -u 9
-exec "$TMUXBIN" attach -t "$session"
+main "$@"
