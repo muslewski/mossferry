@@ -535,9 +535,83 @@ t25() {
   teardown
 }
 
+# Strip ANSI SGR sequences for byte-exact art comparison.
+_strip_ansi() {
+  sed $'s/\033\\[[0-9;]*m//g'
+}
+
+# ---- t26: LINES=30 ferry_banner → 4-line canonical art (ANSI-stripped) ----
+t26() {
+  setup
+  local out stripped expected nlines rc
+  expected=$'        __|__\n   ____|_____|____\n   \\  mossferry  /\n ~~~\___________/~~~'
+  out=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    LINES=30 ferry_banner
+  )
+  rc=$?
+  nlines=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
+  stripped=$(printf '%s' "$out" | _strip_ansi)
+  if [[ $rc -eq 0 ]] && [[ $nlines -eq 4 ]] && [[ "$stripped" == "$expected" ]]; then
+    ok t26
+  else
+    fail t26 "rc=$rc nlines=$nlines stripped=[$(printf '%s' "$stripped" | cat -A)]"
+  fi
+  teardown
+}
+
+# ---- t27: LINES=10 ferry_banner → 1 line with ⛴ mossferry ----
+t27() {
+  setup
+  local out nlines rc
+  out=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    LINES=10 ferry_banner
+  )
+  rc=$?
+  nlines=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
+  if [[ $rc -eq 0 ]] && [[ $nlines -eq 1 ]] && [[ "$out" == *"⛴ mossferry"* ]]; then
+    ok t27
+  else
+    fail t27 "rc=$rc nlines=$nlines out=[$out]"
+  fi
+  teardown
+}
+
+# ---- t28: FERRY_BANNER=off and =0 → empty stdout, exit 0 ----
+t28() {
+  setup
+  local out1 out2 rc1 rc2
+  out1=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    LINES=30 FERRY_BANNER=off ferry_banner
+  )
+  rc1=$?
+  out2=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    LINES=30 FERRY_BANNER=0 ferry_banner
+  )
+  rc2=$?
+  if [[ $rc1 -eq 0 ]] && [[ $rc2 -eq 0 ]] && [[ -z "$out1" ]] && [[ -z "$out2" ]]; then
+    ok t28
+  else
+    fail t28 "rc1=$rc1 rc2=$rc2 out1=[$out1] out2=[$out2]"
+  fi
+  teardown
+}
+
 export TEST_TMPDIR_ROOT="${TMPDIR:-/tmp}"
 set +e
 t1; t2; t3; t4; t5; t6; t7; t8; t9; t10; t11; t12
 t13; t14; t15; t16; t17; t18; t19; t20
 t21; t22; t23; t24; t25
+t26; t27; t28
 exit $FAIL
