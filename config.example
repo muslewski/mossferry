@@ -1,0 +1,7 @@
+# moshi configuration — every key is optional; environment variables override.
+#MOSHI_REMOTE_BIN=".local/bin/repo-session"  # repo-session path, relative to remote $HOME
+#MOSHI_REPO_BASE="$HOME/Repositories"        # remote: where repos live
+#MOSHI_DEFAULT_CMD="neofetch"                # remote: startup command in fresh sessions
+#MOSHI_DEFAULT_HOST=""                       # local: host used by bare `moshi`
+#MOSHI_SERVER_TIMEOUT="86400"                # local: mosh-server self-exit after N s clientless
+#MOSHI_REMOTE_REPO="Repositories/moshi"      # remote: repo checkout, relative to remote $HOME
