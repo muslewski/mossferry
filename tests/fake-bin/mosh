@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Fake mosh: log invocation, exit 0.
+printf '%s\n' "$0 $*" >> "${FAKE_NET_LOG:?FAKE_NET_LOG not set}"
+exit 0
