@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Wrapper so tapes can type `ferry` while invoking the worktree binary.
+set -u
+ROOT="${FERRY_DEMO_ROOT:?FERRY_DEMO_ROOT not set}"
+exec bash "$ROOT/bin/mossferry" "$@"

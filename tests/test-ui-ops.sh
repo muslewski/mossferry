@@ -384,7 +384,7 @@ EOS
 }
 
 # ---------------------------------------------------------------------------
-# f7: bash -n both bins + kit; VERSION is 2.5.0
+# f7: bash -n both bins + kit; VERSION is 2.6.0
 # ---------------------------------------------------------------------------
 {
   name=f7
@@ -400,10 +400,10 @@ EOS
   else
     FAIL "${name}-bash-n"
   fi
-  if [[ "$VERSION" == "2.5.0" ]]; then
+  if [[ "$VERSION" == "2.6.0" ]]; then
     ok "${name}-version"
   else
-    FAIL "${name}-version (got=$VERSION want=2.5.0)"
+    FAIL "${name}-version (got=$VERSION want=2.6.0)"
   fi
 }
 
