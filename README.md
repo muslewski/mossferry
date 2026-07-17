@@ -13,6 +13,10 @@ sessions. Short daily command: **`ferry`**.
  ~~~\_____________/~~~~~~~~~~~~~~~~~~~~~~~~ |__/ ~~
 ```
 
+<p align="center"><img src="./assets/demo-picker.gif" width="720" alt="ferry picker demo"></p>
+
+---
+
 A two-part tool for opening remote tmux sessions over mosh. Host-agnostic:
 written for a laptop ↔ workstation pair, but nothing is hard-coded to those
 machines.
@@ -82,6 +86,10 @@ steps). Ensure `~/.local/bin` is on your `PATH`.
 | `ferry doctor [host]` | health checks (see § Health) |
 | `ferry --help\|-h` | usage printed locally, no connection (unchanged behavior) |
 | `ferry <host> typoo` | `no repo 'typoo' under <base> — pick one below, or run 'ferry <host>' to browse all sessions` + repo list, exit 1 |
+
+<details><summary>▶ demo</summary>
+<p><img src="./assets/demo-help.gif" width="600" alt="ferry --help demo"></p>
+</details>
 
 `mossferry` is the long form of the same binary; everyday use is **`ferry`**.
 
@@ -189,6 +197,10 @@ fails. On a TTY: small ferry banner, green ✓ / red ✗ / dim info glyphs,
 end summary, and a dim fix hint (e.g. `ferry update`) when versions
 mismatch. Non-TTY keeps the plain `ok` / `FAIL` / `info` tokens for
 scripts and tests.
+
+<details><summary>▶ demo</summary>
+<p><img src="./assets/demo-doctor.gif" width="600" alt="ferry doctor demo"></p>
+</details>
 
 ## Ops screens (v2.5.0)
 
