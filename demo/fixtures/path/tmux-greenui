@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Wrap real tmux so repo-session only ever talks to -L greenui-demo.
+# Never touches the user's live tmux server.
+set -u
+exec /usr/bin/tmux -L greenui-demo -f /dev/null "$@"

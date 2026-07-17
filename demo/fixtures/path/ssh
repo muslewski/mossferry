@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Demo ssh stub — never touches real network or ~/.ssh.
+# Supports mossferry doctor checks + VERSION handshake with canned output.
+set -u
+
+joined="$*"
+
+# ssh -G <host> — synthetic config so doctor resolves and MagicDNS notes an IP.
+if [[ "${1-}" == "-G" ]]; then
+  host="${2:-workstation}"
+  printf 'host %s\n' "$host"
+  printf 'hostname 10.0.0.42\n'
+  printf 'user ferry\n'
+  printf 'batchmode yes\n'
+  exit 0
+fi
+
+# BatchMode connect probes (`ssh ... true`) and bare success probes.
+if [[ "$joined" == *" true" || "$joined" == *" true "* || "${!#}" == "true" ]]; then
+  exit 0
+fi
+
+# Remote bin executable check.
+if [[ "$joined" == *"test -x"* || "$joined" == *"-x "* ]]; then
+  exit 0
+fi
+
+# VERSION cat for doctor/update.
+if [[ "$joined" == *cat* && "$joined" == *VERSION* ]]; then
+  if [[ -n "${FERRY_DEMO_VERSION:-}" ]]; then
+    printf '%s\n' "$FERRY_DEMO_VERSION"
+  elif [[ -n "${FERRY_DEMO_VERSION_FILE:-}" && -r "$FERRY_DEMO_VERSION_FILE" ]]; then
+    tr -d '[:space:]' <"$FERRY_DEMO_VERSION_FILE"
+    printf '\n'
+  else
+    printf '2.6.0\n'
+  fi
+  exit 0
+fi
+
+# Remote fzf presence.
+if [[ "$joined" == *"command -v fzf"* || ( "$joined" == *command* && "$joined" == *fzf* ) ]]; then
+  printf '/usr/bin/fzf\n'
+  exit 0
+fi
+
+# mosh-server count (info).
+if [[ "$joined" == *pgrep* ]]; then
+  printf '2\n'
+  exit 0
+fi
+
+# --validate path: success by default.
+if [[ "$joined" == *"--validate"* ]]; then
+  exit 0
+fi
+
+# Fallback: success with no output (doctor-safe).
+exit 0

@@ -1,0 +1,9 @@
+# Demo sandbox config — no real hosts or personal paths.
+FERRY_DEFAULT_HOST="workstation"
+FERRY_REMOTE_BIN=".local/bin/repo-session"
+FERRY_REPO_BASE="$HOME/Repositories"
+FERRY_DEFAULT_CMD="neofetch"
+FERRY_SERVER_TIMEOUT="86400"
+FERRY_REMOTE_REPO="Repositories/mossferry"
+FERRY_BANNER="on"
+FERRY_LAUNCHERS="ctrl-a:claude,ctrl-g:grok"

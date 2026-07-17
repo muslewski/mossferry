@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Demo mosh stub — runs the remote command locally (no real mosh).
+# Invocation from mossferry:
+#   mosh --server="MOSH_SERVER_NETWORK_TMOUT=N mosh-server" <host> -- <bin> [args...]
+set -u
+
+host=""
+args=()
+seen_dd=0
+while [[ $# -gt 0 ]]; do
+  if [[ $seen_dd -eq 1 ]]; then
+    args+=("$1")
+    shift
+    continue
+  fi
+  case "$1" in
+    --)
+      seen_dd=1
+      shift
+      ;;
+    --server=*)
+      shift
+      ;;
+    --server)
+      shift 2
+      ;;
+    -*)
+      # Skip unknown flags (with or without =value).
+      if [[ "$1" == *=* ]]; then
+        shift
+      else
+        shift
+      fi
+      ;;
+    *)
+      if [[ -z "$host" ]]; then
+        host="$1"
+        shift
+      else
+        args+=("$1")
+        shift
+      fi
+      ;;
+  esac
+done
+
+if [[ ${#args[@]} -eq 0 ]]; then
+  printf 'mosh-demo: no remote command\n' >&2
+  exit 1
+fi
+
+cmd="${args[0]}"
+unset 'args[0]'
+# Re-index remaining args
+rest=()
+for a in "${args[@]+"${args[@]}"}"; do
+  rest+=("$a")
+done
+
+case "$cmd" in
+  /*) ;;
+  *)
+    if [[ -x "${HOME}/${cmd}" ]]; then
+      cmd="${HOME}/${cmd}"
+    elif [[ -x "${HOME}/.local/bin/$(basename "$cmd")" ]]; then
+      cmd="${HOME}/.local/bin/$(basename "$cmd")"
+    fi
+    ;;
+esac
+
+export REPO_SESSION_TMUXBIN="${REPO_SESSION_TMUXBIN:-}"
+exec "$cmd" "${rest[@]+"${rest[@]}"}"
