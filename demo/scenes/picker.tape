@@ -1,18 +1,18 @@
 # Hero: global session picker — wide boat banner + fzf list + cycle navigation.
-# COLUMNS=160 on the command line: picker header uses 40% of cols for the
-# banner (≥52 → boat+figlet wide tier). ttyd overwrites shell COLUMNS from
-# pixel size; the env-prefix survives into repo-session via the mosh stub.
+# COLUMNS=160 (hidden): picker header uses 40% of cols for the banner
+# (≥52 → boat+figlet wide tier). vhs is a real pty so GREEN_UI_FORCE_TTY
+# is not required; no env-var noise may appear in any visible frame.
 Output ../assets/demo-picker.gif
 Output build/demo-picker.txt
 Set Width 1200
 Set Height 640
 Hide
-Type "export PS1='$ '"
+Type "export PS1='$ ' COLUMNS=160 LINES=40"
 Enter
 Type "clear"
 Enter
 Show
-Type "COLUMNS=160 LINES=40 GREEN_UI_FORCE_TTY=1 ferry"
+Type "ferry"
 Sleep 400ms
 Enter
 Sleep 2500ms
