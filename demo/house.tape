@@ -3,7 +3,8 @@
 # GitHub-dark palette so GIFs blend into GitHub dark READMEs.
 Set Shell "bash"
 Set FontSize 14
-Set FontFamily "JetBrainsMono Nerd Font"
+# Font family must exist in fc-list — vhs falls back SILENTLY with broken metrics (THE FONT LESSON).
+Set FontFamily "JetBrains Mono"
 Set Padding 20
 Set Framerate 24
 Set TypingSpeed 45ms
