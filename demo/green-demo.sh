@@ -142,8 +142,15 @@ demo_record() {
   build_tape="build/${scene_base}.tape"
   cat "$house_tape" "$scene" >"$build_tape"
 
+  # ENV LESSON: recordings must not inherit color-hostile caller environment.
+  # Sanitize only the vhs subprocess (env -u / forced TERM); leave caller shell alone.
+  local vhs_term
+  vhs_term=${TERM:-}
+  if [ -z "$vhs_term" ] || [ "$vhs_term" = "dumb" ]; then
+    vhs_term=xterm-256color
+  fi
   # Run vhs from the calling repo's demo/ directory (caller cwd).
-  vhs "$build_tape" || {
+  env -u NO_COLOR -u CLICOLOR_FORCE TERM="$vhs_term" vhs "$build_tape" || {
     printf 'demo_record: vhs failed for %s\n' "$build_tape" >&2
     return 1
   }
