@@ -1,0 +1,47 @@
+{
+  "name": "mossferry",
+  "version": "2.6.0",
+  "description": "The green ferry between your machines — open remote tmux sessions over mosh/ssh with a fzf picker.",
+  "bin": {
+    "mossferry": "bin/mossferry",
+    "ferry": "bin/mossferry",
+    "repo-session": "bin/repo-session"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "config.example",
+    "VERSION",
+    "install.sh",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=14"
+  },
+  "os": [
+    "!win32"
+  ],
+  "scripts": {
+    "test": "bash tests/run.sh"
+  },
+  "keywords": [
+    "mosh",
+    "ssh",
+    "tmux",
+    "remote",
+    "session",
+    "fzf",
+    "cli",
+    "ferry"
+  ],
+  "author": "Mateusz Muślewski <10kento10@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/muslewski/mossferry.git"
+  },
+  "bugs": {
+    "url": "https://github.com/muslewski/mossferry/issues"
+  },
+  "homepage": "https://mossferry.muslewski.com/"
+}

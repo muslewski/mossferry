@@ -355,17 +355,45 @@ own_version() {
   fi
 }
 
+# Hermes coding-ops registry (same host as tmux). Override with FERRY_CCOPS_STATE.
+_ferry_ccops_state() {
+  printf '%s\n' "${FERRY_CCOPS_STATE:-$HOME/.hermes/state/ccops}"
+}
+
+# Badge from registry for a ccops-* tmux session (status or empty).
+_ferry_ccops_badge() {
+  local sess="$1" active st
+  active="$(_ferry_ccops_state)/active.json"
+  [[ -r "$active" ]] || return 0
+  st=$(python3 -c "
+import json,sys
+try:
+  d=json.load(open(sys.argv[1]))
+  for j in d.get('jobs') or []:
+    if j.get('tmux')==sys.argv[2]:
+      print(j.get('status') or '')
+      break
+except Exception:
+  pass
+" "$active" "$sess" 2>/dev/null || true)
+  [[ -n "$st" ]] && printf '%s' "$st"
+}
+
 # One line per live session (optionally scoped to <repo>):
 #   <session>\t<display_window>\t<N>w\t<attached|detached>\t<cmd>\t<preview_target>
 # Display window skips FERRY_HIDDEN_WINDOW_GLOB (default _*); preview_target is session:index.
+# Hermes coding-ops sessions (ccops-<repo>-*) are included when filter matches that repo
+# or when browsing globally; display window prefixed with hermes:status for ferry visibility.
 build_session_rows() {
   local filter="${1:-}" s cname wins att cmd attword
   local active_name active_idx display_name preview_target glob wline widx wname found
   local -a names=()
+  local badge
   glob="${FERRY_HIDDEN_WINDOW_GLOB:-_*}"
   if [[ -n "$filter" ]]; then
+    # Classic repo sessions + Hermes coding-ops for that repo
     mapfile -t names < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null \
-      | grep -E "^${filter}(-[0-9]+)?$" | sort -V)
+      | grep -E "^(${filter}(-[0-9]+)?|ccops-${filter}-.+)$" | sort -V)
   else
     mapfile -t names < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
   fi
@@ -396,6 +424,16 @@ build_session_rows() {
       done < <("$TMUXBIN" list-windows -t "$s" -F '#{window_index}:#{window_name}' 2>/dev/null)
       # all-matching → keep active as-is (found stays 0)
       :
+    fi
+
+    # Badge Hermes coding sessions so they stand out in ferry picker
+    if [[ "$s" == ccops-* ]]; then
+      badge="$(_ferry_ccops_badge "$s")"
+      if [[ -n "$badge" ]]; then
+        display_name="hermes:${badge}:${display_name}"
+      else
+        display_name="hermes:${display_name}"
+      fi
     fi
 
     printf '%s\t%s\t%sw\t%s\t%s\t%s\n' "$s" "$display_name" "$wins" "$attword" "$cmd" "$preview_target"

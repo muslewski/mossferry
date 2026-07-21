@@ -52,30 +52,33 @@ GitHub. Identity color: green.
 
 ## Install
 
-**On the remote host** (where tmux sessions live):
+**Local machine** (where you type `ferry`):
 
 ```sh
-git clone <url-or-path> ~/Repositories/mossferry
-cd ~/Repositories/mossferry
-./install.sh
+npm install -g mossferry    # or: npx mossferry …
+# bins: ferry | mossferry | repo-session
+ferry doctor
 ```
 
-**On the local machine** (where you type `ferry`):
+Seeds config on first run if needed; or copy `config.example` → `~/.config/mossferry/config`.
+
+**Remote host** (where tmux sessions live) still needs the same tools on PATH —
+install the package there too, or clone + `./install.sh`:
 
 ```sh
-git clone <host>:Repositories/mossferry ~/Repositories/mossferry
+# option A — npm (same as local)
+npm install -g mossferry
+
+# option B — git checkout (symlinks into ~/.local/bin)
+git clone <url-or-path> ~/Repositories/mossferry
 cd ~/Repositories/mossferry
 ./install.sh
 ```
 
 `install.sh` is idempotent: it creates `~/.local/bin` and `~/.config/mossferry`,
 symlinks `bin/mossferry` as both `mossferry` and `ferry`, plus `repo-session`,
-into `~/.local/bin/`, removes a repo-owned legacy short-name symlink if present,
-migrates the old `~/.config/<previous-name>/config` (prefix `MOSHI_` → `FERRY_`)
-when the new config is absent, and seeds `~/.config/mossferry/config` from
-`config.example` **only if absent**. On a TTY it prints a MEDIUM hull banner,
-✓ per step, and a ready card (linked commands, config path, PATH check, next
-steps). Ensure `~/.local/bin` is on your `PATH`.
+into `~/.local/bin/`, migrates legacy config when present, and seeds
+`~/.config/mossferry/config` from `config.example` **only if absent**.
 
 ## Usage
 
