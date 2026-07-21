@@ -399,6 +399,8 @@ build_session_rows() {
   fi
   for s in "${names[@]}"; do
     [[ -z "$s" ]] && continue
+    # Hide coding-ops monitor side-sessions (ccops-*-mon) — attach the main job session only
+    [[ "$s" == *-mon || "$s" == *-mon-* ]] && continue
     active_name=$("$TMUXBIN" display-message -p -t "$s" '#{window_name}')
     active_idx=$("$TMUXBIN" display-message -p -t "$s" '#{window_index}')
     wins=$("$TMUXBIN" display-message -p -t "$s" '#{session_windows}')

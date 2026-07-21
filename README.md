@@ -5,6 +5,13 @@
   <a href="https://mossferry.muslewski.com"><img src="https://img.shields.io/badge/website-mossferry.muslewski.com-3dff9a?style=flat-square&labelColor=02060c" alt="Website"></a>
 </p>
 
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/mossferry"><img src="https://img.shields.io/npm/v/mossferry?style=flat-square" alt="npm"></a>
+  <a href="https://github.com/muslewski/mossferry/discussions"><img src="https://img.shields.io/badge/discussions-join-3dff9a?style=flat-square&labelColor=02060c" alt="Discussions"></a>
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT">
+</p>
+
 <p align="center">
   <a href="https://mossferry.muslewski.com"><img src="https://raw.githubusercontent.com/muslewski/mossferry-website/main/public/mossferry4.webp" alt="mossferry spore" width="360"></a>
 </p>
@@ -265,3 +272,15 @@ functions, or a `.bashrc` block that auto-attaches tmux on `SSH_CONNECTION`):
 ## Open-sourcing
 
 mossferry is built with no personal paths or hardcoded hosts. When you want to open-source it, just add a GitHub remote and push: `git remote add origin <url> && git push -u origin main`.
+
+## Community
+
+- **Website:** [mossferry.muslewski.com](https://mossferry.muslewski.com)
+- **Questions & ideas:** [Discussions](https://github.com/muslewski/mossferry/discussions)
+- **Bugs & features:** [Issues](https://github.com/muslewski/mossferry/issues/new/choose)
+- **Contributing:** [CONTRIBUTING.md](./CONTRIBUTING.md)
+- **Code of Conduct:** [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+- **Security:** [SECURITY.md](./SECURITY.md) (private reports only)
+- **Support matrix:** [SUPPORT.md](./SUPPORT.md)
+
+If you're not sure whether something is a bug, **start a Discussion** — maintainers can promote it to an issue when it is.
