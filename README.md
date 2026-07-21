@@ -1,5 +1,16 @@
 # mossferry
 
+
+<p align="center">
+  <a href="https://mossferry.muslewski.com"><img src="https://img.shields.io/badge/website-mossferry.muslewski.com-3dff9a?style=flat-square&labelColor=02060c" alt="Website"></a>
+</p>
+
+<p align="center">
+  <a href="https://mossferry.muslewski.com"><img src="https://raw.githubusercontent.com/muslewski/mossferry-website/main/public/mossferry4.webp" alt="mossferry spore" width="360"></a>
+</p>
+
+<p align="center"><b>Site:</b> <a href="https://mossferry.muslewski.com">mossferry.muslewski.com</a></p>
+
 The green ferry between your machines. *Moss* carries the green identity and the
 mosh phonetics; *ferry* is the job — carrying you across to your remote tmux
 sessions. Short daily command: **`ferry`**.
