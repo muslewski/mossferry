@@ -399,6 +399,87 @@ trap 'rm -rf "$tmpdir"' EXIT
   fi
 }
 
+# --- m17: FERRY_WRAP=auto + fake grok on PATH → grok wrap then mosh ---
+{
+  name=m17
+  outf="$tmpdir/m17.out" errf="$tmpdir/m17.err" logf="$tmpdir/m17.log"
+  # fake-bin/grok is on PATH via run_ferry; default FERRY_WRAP=auto
+  unset FERRY_WRAP FERRY_TRANSPORT 2>/dev/null || true
+  run_ferry "$outf" "$errf" "$logf" -- h repo --primary
+  has_wrap=0 has_mosh=0
+  while IFS= read -r l || [[ -n "$l" ]]; do
+    base="${l%% *}"; base="${base##*/}"
+    [[ "$base" == grok && "$l" == *" wrap "* ]] && has_wrap=1
+    [[ "$base" == mosh ]] && has_mosh=1
+  done <"$logf"
+  if [[ $has_wrap -eq 1 && $has_mosh -eq 1 ]]; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  expected grok wrap + mosh; log=%s\n' "$(cat "$logf")" >&2
+  fi
+}
+
+# --- m18: FERRY_WRAP=off → plain mosh, no grok wrap line ---
+{
+  name=m18
+  outf="$tmpdir/m18.out" errf="$tmpdir/m18.err" logf="$tmpdir/m18.log"
+  FERRY_WRAP=off run_ferry "$outf" "$errf" "$logf" -- h repo --primary
+  has_wrap=0 has_mosh=0
+  while IFS= read -r l || [[ -n "$l" ]]; do
+    base="${l%% *}"; base="${base##*/}"
+    [[ "$base" == grok && "$l" == *" wrap "* ]] && has_wrap=1
+    [[ "$base" == mosh ]] && has_mosh=1
+  done <"$logf"
+  if [[ $has_wrap -eq 0 && $has_mosh -eq 1 ]]; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  expected mosh without wrap; log=%s\n' "$(cat "$logf")" >&2
+  fi
+  unset FERRY_WRAP || true
+}
+
+# --- m19: FERRY_TRANSPORT=ssh + wrap → grok wrap ssh -t … ---
+{
+  name=m19
+  outf="$tmpdir/m19.out" errf="$tmpdir/m19.err" logf="$tmpdir/m19.log"
+  FERRY_TRANSPORT=ssh FERRY_WRAP=auto run_ferry "$outf" "$errf" "$logf" -- h repo --primary
+  has_wrap_ssh=0 has_mosh=0
+  while IFS= read -r l || [[ -n "$l" ]]; do
+    base="${l%% *}"; base="${base##*/}"
+    [[ "$base" == grok && "$l" == *" wrap "* && "$l" == *" ssh "* ]] && has_wrap_ssh=1
+    [[ "$base" == mosh ]] && has_mosh=1
+  done <"$logf"
+  if [[ $has_wrap_ssh -eq 1 && $has_mosh -eq 0 ]]; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  expected grok wrap ssh, no mosh; log=%s\n' "$(cat "$logf")" >&2
+  fi
+  unset FERRY_TRANSPORT FERRY_WRAP || true
+}
+
+# --- m20: --list never wraps (even with FERRY_WRAP=on) ---
+{
+  name=m20
+  outf="$tmpdir/m20.out" errf="$tmpdir/m20.err" logf="$tmpdir/m20.log"
+  FERRY_WRAP=on run_ferry "$outf" "$errf" "$logf" -- h --list
+  has_wrap=0 has_ssh=0
+  while IFS= read -r l || [[ -n "$l" ]]; do
+    base="${l%% *}"; base="${base##*/}"
+    [[ "$base" == grok && "$l" == *" wrap "* ]] && has_wrap=1
+    [[ "$base" == ssh ]] && has_ssh=1
+  done <"$logf"
+  if [[ $has_wrap -eq 0 && $has_ssh -eq 1 ]]; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  expected bare ssh --list; log=%s\n' "$(cat "$logf")" >&2
+  fi
+  unset FERRY_WRAP || true
+}
+
 if [[ $fail -ne 0 ]]; then
   exit 1
 fi

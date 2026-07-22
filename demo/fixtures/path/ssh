@@ -33,7 +33,7 @@ if [[ "$joined" == *cat* && "$joined" == *VERSION* ]]; then
     tr -d '[:space:]' <"$FERRY_DEMO_VERSION_FILE"
     printf '\n'
   else
-    printf '2.6.0\n'
+    printf '2.7.0\n'
   fi
   exit 0
 fi

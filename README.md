@@ -151,6 +151,16 @@ Runs on the remote, inside the mosh session:
   via `FERRY_LAUNCHERS` (`key:command` pairs, comma-separated; empty disables).
   Sub-picker header shows a dynamic hints line from the parsed config. No-fzf
   menu is unaffected (always uses the default command).
+- **Grok wrap (local, not remote):** AI launchers only set the *remote* start
+  command. Clipboard OSC 52 and dirty-disconnect restore need `grok wrap` on the
+  **laptop** around the whole mosh/ssh hop. With default `FERRY_WRAP=auto`, ferry
+  runs `grok wrap mosh …` / `grok wrap ssh …` whenever local `grok` is on PATH —
+  so you keep typing `ferry`, press `ctrl-g` for a grok session, and wrap is
+  already under you. Install the Grok CLI on the client machine (`curl -fsSL
+  https://x.ai/cli/install.sh | bash`). Set `FERRY_WRAP=off` to disable.
+  **mosh note:** many mosh builds strip OSC 52, so wrap cannot invent clipboard
+  bytes that never arrive; use `FERRY_TRANSPORT=ssh` when you need reliable Grok
+  → local clipboard, or keep host-side yank pipes (e.g. tmux → `pbcopy`).
 - Repo-scoped picker's new-session chain stays pre-filtered — no special rows.
 - **Zero-session fast path:** `ferry <host> <repo>` with no live sessions
   skips the picker and creates + attaches the primary.
@@ -176,8 +186,33 @@ defaults.
 | `FERRY_HIDDEN_WINDOW_GLOB` | `_*` | remote: window-name glob skipped for picker labels/previews |
 | `FERRY_BANNER` | `on` | green ferry art in picker header and `--help` (`off`/`0` hides) |
 | `FERRY_LAUNCHERS` | `ctrl-a:claude,ctrl-g:grok` | remote: picker AI-launcher keys (`key:command` pairs; empty disables; `ctrl-x`/`ctrl-r` reserved) |
+| `FERRY_WRAP` | `auto` | local: prefix interactive transport with `grok wrap` when local `grok` exists (`auto`/`on`/`off`); not used for `--list` |
+| `FERRY_TRANSPORT` | `mosh` | local interactive hop: `mosh` (roam) or `ssh` (better OSC 52 with wrap) |
 
 See `config.example` for a ready-to-edit template.
+
+### Grok + ferry (Mac client → headless host)
+
+Keep **`ferry`** as the entrypoint. Do not replace it with raw `grok wrap ssh`.
+
+| Layer | Who | What |
+|---|---|---|
+| `ferry` on Mac | local | mosh/ssh (+ optional `grok wrap`) into remote `repo-session` |
+| picker `ctrl-g` | remote | create session whose start command is `grok` |
+| picker `ctrl-a` | remote | same, but `claude` |
+| enter | remote | `FERRY_DEFAULT_CMD` (default `neofetch`) |
+
+```sh
+# on the Mac (once)
+curl -fsSL https://x.ai/cli/install.sh | bash   # provides `grok wrap`
+# optional, only if you want SSH clipboard over mosh roam:
+# echo 'FERRY_WRAP=auto' >> ~/.config/mossferry/config
+# echo 'FERRY_TRANSPORT=ssh' >> ~/.config/mossferry/config
+
+ferry                          # same as always
+# in picker: ctrl-g on ➕ new / repo / 🏠 home → remote grok session
+ferry doctor                   # reports local grok wrap + transport
+```
 
 ## Composition with ghostty-grid
 

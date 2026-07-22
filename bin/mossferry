@@ -122,9 +122,9 @@ own_version() {
 load_config() {
   local _had_remote_bin=0 _had_repo_base=0 _had_default_cmd=0
   local _had_default_host=0 _had_server_timeout=0 _had_remote_repo=0
-  local _had_banner=0
+  local _had_banner=0 _had_wrap=0 _had_transport=0
   local _v_remote_bin _v_repo_base _v_default_cmd _v_default_host
-  local _v_server_timeout _v_remote_repo _v_banner
+  local _v_server_timeout _v_remote_repo _v_banner _v_wrap _v_transport
 
   if [[ -n "${FERRY_REMOTE_BIN+x}" ]]; then
     _had_remote_bin=1
@@ -154,6 +154,14 @@ load_config() {
     _had_banner=1
     _v_banner="$FERRY_BANNER"
   fi
+  if [[ -n "${FERRY_WRAP+x}" ]]; then
+    _had_wrap=1
+    _v_wrap="$FERRY_WRAP"
+  fi
+  if [[ -n "${FERRY_TRANSPORT+x}" ]]; then
+    _had_transport=1
+    _v_transport="$FERRY_TRANSPORT"
+  fi
 
   FERRY_REMOTE_BIN=".local/bin/repo-session"
   FERRY_REPO_BASE="${HOME}/Repositories"
@@ -162,6 +170,13 @@ load_config() {
   FERRY_SERVER_TIMEOUT="86400"
   FERRY_REMOTE_REPO="Repositories/mossferry"
   FERRY_BANNER="on"
+  # Local: prefix interactive mosh/ssh with `grok wrap` when available.
+  # auto = wrap only if `grok` is on PATH; on = require wrap (warn + bare if missing);
+  # off = never wrap. Does not apply to --list / doctor / update.
+  FERRY_WRAP="auto"
+  # Local interactive transport: mosh (default) or ssh. ssh + wrap is best for
+  # Grok OSC 52 clipboard; mosh reconnects better but often strips OSC 52.
+  FERRY_TRANSPORT="mosh"
 
   local cfg="${HOME}/.config/mossferry/config"
   if [[ -r "$cfg" ]]; then
@@ -179,6 +194,8 @@ load_config() {
   : "${FERRY_SERVER_TIMEOUT:=86400}"
   : "${FERRY_REMOTE_REPO:=Repositories/mossferry}"
   : "${FERRY_BANNER:=on}"
+  : "${FERRY_WRAP:=auto}"
+  : "${FERRY_TRANSPORT:=mosh}"
 
   [[ $_had_remote_bin -eq 1 ]] && FERRY_REMOTE_BIN="$_v_remote_bin"
   [[ $_had_repo_base -eq 1 ]] && FERRY_REPO_BASE="$_v_repo_base"
@@ -187,6 +204,8 @@ load_config() {
   [[ $_had_server_timeout -eq 1 ]] && FERRY_SERVER_TIMEOUT="$_v_server_timeout"
   [[ $_had_remote_repo -eq 1 ]] && FERRY_REMOTE_REPO="$_v_remote_repo"
   [[ $_had_banner -eq 1 ]] && FERRY_BANNER="$_v_banner"
+  [[ $_had_wrap -eq 1 ]] && FERRY_WRAP="$_v_wrap"
+  [[ $_had_transport -eq 1 ]] && FERRY_TRANSPORT="$_v_transport"
 }
 
 # ASCII ferry art for --help (and shared brand with remote picker).
@@ -255,6 +274,9 @@ ${S}Picker keys${Z}
   enter=attach · ctrl-x=kill · ctrl-r=rename · ctrl-a/ctrl-g=AI launchers
   --cycle wraps the list · esc=quit
   (Launchers configurable via FERRY_LAUNCHERS; defaults: ctrl-a:claude, ctrl-g:grok)
+  Local: FERRY_WRAP=auto runs interactive sessions under \`grok wrap\` when
+  \`grok\` is on PATH (clipboard + terminal restore). FERRY_TRANSPORT=ssh
+  forces ssh instead of mosh (better OSC 52 with wrap; no mosh roam).
 
 ${S}Flags${Z}
   (none)             open the session picker
@@ -485,6 +507,38 @@ cmd_doctor() {
     failed=1
   fi
 
+  # 4b. local grok wrap (clipboard / terminal restore for remote TUIs)
+  local wrap_mode="${FERRY_WRAP:-auto}"
+  case "$wrap_mode" in
+    off|0|false|no)
+      _doc_emit info "FERRY_WRAP=$wrap_mode — not prefixing transport with grok wrap"
+      ;;
+    *)
+      if command -v grok >/dev/null 2>&1 && grok wrap -h >/dev/null 2>&1; then
+        _doc_emit ok "local grok wrap available (FERRY_WRAP=$wrap_mode)"
+      elif [[ "$wrap_mode" == on || "$wrap_mode" == 1 || "$wrap_mode" == true || "$wrap_mode" == yes ]]; then
+        _doc_emit FAIL "FERRY_WRAP=$wrap_mode but grok not on PATH (curl -fsSL https://x.ai/cli/install.sh | bash)"
+        failed=1
+      else
+        _doc_emit info "grok not on PATH — interactive ferry will not use grok wrap (install Grok CLI on this machine)"
+      fi
+      ;;
+  esac
+
+  # 4c. transport preference
+  case "${FERRY_TRANSPORT:-mosh}" in
+    ssh|SSH)
+      _doc_emit info "FERRY_TRANSPORT=ssh (interactive; better OSC 52 with wrap, no mosh roam)"
+      ;;
+    mosh|MOSH|"")
+      _doc_emit info "FERRY_TRANSPORT=mosh (default; OSC 52 often stripped — keep host clipboard pipes if needed)"
+      ;;
+    *)
+      _doc_emit FAIL "FERRY_TRANSPORT=${FERRY_TRANSPORT} (want mosh|ssh)"
+      failed=1
+      ;;
+  esac
+
   # 5. remote FERRY_REMOTE_BIN executable (relative to remote $HOME)
   if ssh "$host" "test -x $FERRY_REMOTE_BIN || test -x \"\$HOME/$FERRY_REMOTE_BIN\"" >/dev/null 2>&1; then
     _doc_emit ok "remote $FERRY_REMOTE_BIN executable"
@@ -568,13 +622,44 @@ repo_token_from_args() {
   done
 }
 
-# Launch remote: ssh for --list/-l, mosh otherwise.
+# True when interactive transport should run under `grok wrap`.
+# Local-only: wrap intercepts OSC 52 for Mac clipboard + cleans dirty TUI exits.
+# Remote AI launchers (ctrl-g → grok) are orthogonal — they set the start command
+# inside tmux; wrap must already surround the whole ferry hop from this machine.
+_ferry_should_wrap() {
+  case "${FERRY_WRAP:-auto}" in
+    off|0|false|no) return 1 ;;
+    on|1|true|yes)
+      if command -v grok >/dev/null 2>&1; then
+        return 0
+      fi
+      _ferry_err "FERRY_WRAP=on but grok not on PATH — launching without wrap (install: curl -fsSL https://x.ai/cli/install.sh | bash)"
+      return 1
+      ;;
+    auto|*)
+      command -v grok >/dev/null 2>&1
+      ;;
+  esac
+}
+
+# Run interactive transport, optionally: grok wrap <mosh|ssh> ...
+_ferry_run_transport() {
+  if _ferry_should_wrap; then
+    grok wrap "$@"
+    return $?
+  fi
+  "$@"
+  return $?
+}
+
+# Launch remote: ssh for --list/-l; interactive mosh (default) or ssh (FERRY_TRANSPORT).
 # Prepends --client-version <v> before user args.
-# Repo-bearing mosh launches pre-validate over ssh so typos print locally.
+# Repo-bearing interactive launches pre-validate over ssh so typos print locally.
+# Interactive hops use FERRY_WRAP (auto → grok wrap when local grok exists).
 launch_remote() {
   local host="$1"
   shift
-  local ver a repo val_out val_rc=0
+  local ver a repo val_out val_rc=0 transport
   ver="$(own_version)"
 
   for a in "$@"; do
@@ -589,6 +674,7 @@ launch_remote() {
   for a in "$@"; do
     case "$a" in
       --list|-l)
+        # Non-interactive listing — never wrap (no TUI / no OSC 52).
         ssh "$host" "$FERRY_REMOTE_BIN" --client-version "$ver" "$@"
         return $?
         ;;
@@ -604,9 +690,24 @@ launch_remote() {
     fi
   fi
 
-  mosh --server="MOSH_SERVER_NETWORK_TMOUT=${FERRY_SERVER_TIMEOUT} mosh-server" \
-    "$host" -- "$FERRY_REMOTE_BIN" --client-version "$ver" "$@"
-  return $?
+  transport="${FERRY_TRANSPORT:-mosh}"
+  case "$transport" in
+    ssh|SSH)
+      _ferry_run_transport ssh -t "$host" \
+        "$FERRY_REMOTE_BIN" --client-version "$ver" "$@"
+      return $?
+      ;;
+    mosh|MOSH|"")
+      _ferry_run_transport mosh \
+        --server="MOSH_SERVER_NETWORK_TMOUT=${FERRY_SERVER_TIMEOUT} mosh-server" \
+        "$host" -- "$FERRY_REMOTE_BIN" --client-version "$ver" "$@"
+      return $?
+      ;;
+    *)
+      _ferry_err "unknown FERRY_TRANSPORT='$transport' (want mosh|ssh)"
+      return 1
+      ;;
+  esac
 }
 
 main() {

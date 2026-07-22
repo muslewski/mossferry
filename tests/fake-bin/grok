@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Fake grok: log invocation. `grok wrap <cmd…>` logs then execs the real cmd
+# so transport still hits fake mosh/ssh (matches real wrap's "run this command").
+printf '%s\n' "$0 $*" >> "${FAKE_NET_LOG:?FAKE_NET_LOG not set}"
+if [[ "${1:-}" == wrap ]]; then
+  shift
+  exec "$@"
+fi
+exit 0
