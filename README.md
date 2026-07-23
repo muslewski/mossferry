@@ -94,7 +94,7 @@ into `~/.local/bin/`, migrates legacy config when present, and seeds
 | `ferry` | uses `FERRY_DEFAULT_HOST` → global picker (error if key unset) |
 | `ferry <host>` | fzf picker, all sessions + `➕ new session…` row |
 | `ferry <host> <repo>` | fzf picker, that repo's sessions + `➕ new session…` row |
-| _(picker keys)_ | `enter=attach · ctrl-x=kill · ctrl-r=rename · ctrl-a/ctrl-g=AI · cycle · esc`; launchers on `➕ new session…` and destination rows |
+| _(picker keys)_ | `enter=attach · ctrl-x=kill` (instant, no confirm — spam-friendly) `· ctrl-r=rename · ctrl-a/ctrl-g=AI · cycle · esc`; kill/rename stay in-picker. Optional `FERRY_KILL_CONFIRM=1` |
 | `ferry <host> <repo> --primary\|-p` | attach primary, create if missing (old default, now explicit) |
 | `ferry <host> <repo> --new` | force fresh session (unchanged) |
 | `ferry <host> [repo] --list\|-l` | list sessions via ssh (unchanged) |

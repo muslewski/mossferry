@@ -384,7 +384,7 @@ EOS
 }
 
 # ---------------------------------------------------------------------------
-# f7: bash -n both bins + kit; VERSION is 2.7.0
+# f7: bash -n both bins + kit; VERSION matches package.json
 # ---------------------------------------------------------------------------
 {
   name=f7
@@ -400,10 +400,12 @@ EOS
   else
     FAIL "${name}-bash-n"
   fi
-  if [[ "$VERSION" == "2.7.0" ]]; then
+  local pkg_ver
+  pkg_ver=$(node -pe "require('$ROOT/package.json').version" 2>/dev/null || true)
+  if [[ -n "$pkg_ver" && "$VERSION" == "$pkg_ver" ]]; then
     ok "${name}-version"
   else
-    FAIL "${name}-version (got=$VERSION want=2.7.0)"
+    FAIL "${name}-version (got=$VERSION want=$pkg_ver)"
   fi
 }
 

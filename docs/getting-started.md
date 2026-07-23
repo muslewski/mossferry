@@ -60,7 +60,7 @@ ferry doctor                   # local health
 ferry doctor <host>            # local + remote checks
 ```
 
-Picker keys (remote): `enter` attach · `ctrl-x` kill · `ctrl-r` rename · `ctrl-a`/`ctrl-g` AI launchers · cycle · esc.
+Picker keys (remote): `enter` attach · `ctrl-x` kill (instant, no confirm — spam to clear many sessions) · `ctrl-r` rename · `ctrl-a`/`ctrl-g` AI launchers · cycle · esc. Kill stays in the picker (no teardown). Set `FERRY_KILL_CONFIRM=1` for single-key y/N confirm.
 
 ## 5. Update both sides
 

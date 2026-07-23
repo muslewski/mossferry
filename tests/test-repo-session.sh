@@ -823,6 +823,51 @@ t32() {
   teardown
 }
 
+# ---- t36: --picker-kill dispatches kill-session (no confirm) ----
+t36() {
+  setup
+  local log rc
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  bash "$RS" --picker-kill s1
+  rc=$?
+  log=$(cat "$FAKE_TMUX_LOG")
+  if [[ $rc -eq 0 ]] && grep -q 'kill-session -t =s1' <<<"$log"; then
+    ok t36
+  else
+    fail t36 "rc=$rc log=[$log]"
+  fi
+  teardown
+}
+
+# ---- t37: --picker-rows ends with new-session sentinel ----
+t37() {
+  setup
+  local out last
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  export FAKE_TMUX_SESSIONS=$'s1\ns2'
+  out=$(bash "$RS" --picker-rows 2>/dev/null) || true
+  last=$(printf '%s\n' "$out" | tail -n 1)
+  if [[ "$last" == *"new session"* ]] && printf '%s\n' "$out" | grep -q '^s1'; then
+    ok t37
+  else
+    fail t37 "last=[$last] out=[$out]"
+  fi
+  teardown
+}
+
+# ---- t38: kill/rename use fzf --bind (not --expect) ----
+t38() {
+  local src
+  src=$(cat "$RS")
+  if grep -q 'ctrl-x:execute-silent' <<<"$src" \
+    && grep -q 'ctrl-r:execute(' <<<"$src" \
+    && ! grep -qE -- '--expect=.*ctrl-x' <<<"$src"; then
+    ok t38
+  else
+    fail t38 "bind/expect pattern missing"
+  fi
+}
+
 export TEST_TMPDIR_ROOT="${TMPDIR:-/tmp}"
 set +e
 t1; t2; t3; t4; t5; t6; t7; t8; t9; t10; t11; t12
@@ -831,4 +876,5 @@ t21; t22; t23; t24; t25
 t26; t27; t28
 t29; t30; t31; t32
 t33; t34; t35
+t36; t37; t38
 exit $FAIL

@@ -443,11 +443,27 @@ build_session_rows() {
 }
 
 picker_kill() {
-  "$TMUXBIN" kill-session -t "=$1"
+  # Exact session name. Fast path for picker spam — no confirm here.
+  "$TMUXBIN" kill-session -t "=$1" 2>/dev/null || true
 }
 
 picker_rename() {
   "$TMUXBIN" rename-session -t "=$1" "$2"
+}
+
+# Rows for fzf (tab-delimited) + the "new session" sentinel. Used by --picker-rows
+# and by fzf --bind reload so kill/rename never tear down the picker.
+_NEW_SESSION_LABEL=$'➕ new session…'
+print_picker_rows() {
+  local r="${1:-}"
+  build_session_rows "$r"
+  printf '%s\n' "$_NEW_SESSION_LABEL"
+}
+
+# True if the fzf field-1 token is the synthetic "new session" row (not a tmux session).
+_is_new_session_row() {
+  local n="${1:-}"
+  [[ -z "$n" || "$n" == "$_NEW_SESSION_LABEL" || "$n" == "➕ new session…" || "$n" == ➕* ]]
 }
 
 # Create a new git repo under FERRY_REPO_BASE. No tmux.
@@ -763,17 +779,49 @@ run_picker() {
     return
   fi
 
-  # fzf path: loop so kill/rename / invalid create can reload the list.
+  # fzf path: kill/rename stay *inside* one fzf instance (bind+reload).
+  # Optimistic kill: one keystroke, no confirm, no picker teardown — spam-friendly.
+  # Optional FERRY_KILL_CONFIRM=1 restores single-key y/N confirm.
   pickfile="${TMPDIR:-/tmp}/repo-session-pick.$$"
-  local banner hints header expect_keys lc
+  local banner hints header expect_keys lc self self_q rows_cmd bind_kill bind_rename
+  local launcher_expect fzf_status
+  new_label="$_NEW_SESSION_LABEL"
+  self=$(_ferry_resolve_self) || self="${BASH_SOURCE[0]}"
+  self_q=$(printf '%q' "$self")
+  if [[ -n "$repo" ]]; then
+    rows_cmd="bash ${self_q} --picker-rows $(printf '%q' "$repo")"
+  else
+    rows_cmd="bash ${self_q} --picker-rows"
+  fi
   hints='enter=attach · ctrl-x=kill · ctrl-r=rename · esc=quit'
-  expect_keys="ctrl-x,ctrl-r$(_launcher_expect_suffix)"
-  while true; do
-    rows=()
-    while IFS= read -r line; do
-      [[ -n "$line" ]] && rows+=("$line")
-    done < <(build_session_rows "$repo")
+  # Kill: execute-silent then reload list in place (no exit, no y/Enter).
+  # Skip the synthetic "new session" row. Optional confirm via FERRY_KILL_CONFIRM.
+  bind_kill="ctrl-x:execute-silent(
+    n={1}
+    case \"\$n\" in ''|➕*) exit 0 ;; esac
+    if [ \"\${FERRY_KILL_CONFIRM:-0}\" = 1 ]; then
+      printf 'kill %s? [y/N] ' \"\$n\" >/dev/tty
+      read -rsn1 a </dev/tty || exit 0
+      printf '\\n' >/dev/tty
+      case \"\$a\" in y|Y) ;; *) exit 0 ;; esac
+    fi
+    bash ${self_q} --picker-kill \"\$n\"
+  )+reload(${rows_cmd})"
+  # Rename: still needs a name; stays in-picker via execute+reload.
+  bind_rename="ctrl-r:execute(
+    n={1}
+    case \"\$n\" in ''|➕*) exit 0 ;; esac
+    printf 'new name: ' >/dev/tty
+    read -r nn </dev/tty || exit 0
+    [ -n \"\$nn\" ] || exit 0
+    bash ${self_q} --picker-rename \"\$n\" \"\$nn\"
+  )+reload(${rows_cmd})"
 
+  # Launchers still use --expect (they must exit fzf to arm create / attach).
+  launcher_expect="$(_launcher_expect_suffix | sed 's/^,//')"
+  expect_keys="$launcher_expect"
+
+  while true; do
     # Header lives left of right:60% preview → banner width is 40% of cols.
     local cols banner_w
     cols="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
@@ -785,22 +833,32 @@ run_picker() {
       header="$hints"
     fi
 
-    {
-      printf '%s\n' "${rows[@]}"
-      printf '%s\n' "$new_label"
-    } | fzf --ansi --delimiter=$'\t' \
-        --layout=reverse --header-first --cycle \
-        --expect="$expect_keys" \
-        --header "$header" \
-        --preview "$TMUXBIN capture-pane -ep -t {6}" \
-        --preview-window=right:60% \
-        >"$pickfile" || {
+    local -a fzf_args=(
+      --ansi --delimiter=$'\t'
+      --layout=reverse --header-first --cycle
+      --header "$header"
+      --preview "$TMUXBIN capture-pane -ep -t {6}"
+      --preview-window=right:60%
+      --bind "$bind_kill"
+      --bind "$bind_rename"
+    )
+    if [[ -n "$expect_keys" ]]; then
+      fzf_args+=(--expect="$expect_keys")
+    fi
+    print_picker_rows "$repo" | fzf "${fzf_args[@]}" >"$pickfile"
+    fzf_status=$?
+    if (( fzf_status != 0 )); then
       rm -f "$pickfile"
       exit 130
-    }
+    fi
 
-    key=$(head -n 1 "$pickfile")
-    choice=$(sed -n '2p' "$pickfile")
+    if [[ -n "$expect_keys" ]]; then
+      key=$(head -n 1 "$pickfile")
+      choice=$(sed -n '2p' "$pickfile")
+    else
+      key=""
+      choice=$(head -n 1 "$pickfile")
+    fi
     rm -f "$pickfile"
 
     is_new=0
@@ -808,13 +866,8 @@ run_picker() {
       is_new=1
     fi
 
-    # Action keys on the new-session row: ignore and reload.
-    if (( is_new )) && [[ "$key" == "ctrl-x" || "$key" == "ctrl-r" ]]; then
-      continue
-    fi
-
+    # Launcher keys on the new-session row arm create; kill/rename are binds (no expect).
     if (( is_new )); then
-      # Launcher key arms start command for this one creation (overrides flags).
       if [[ -n "$key" ]] && lc=$(launcher_cmd "$key"); then
         startcmd="$lc"
       fi
@@ -826,36 +879,12 @@ run_picker() {
     name="${choice%%$'\t'*}"
     [[ -z "$name" ]] && exit 130
 
-    case "$key" in
-      ctrl-x)
-        printf 'kill %s? [y/N] ' "$name" >/dev/tty
-        if ! read -r ans </dev/tty; then
-          continue
-        fi
-        if [[ "$ans" == "y" || "$ans" == "Y" ]]; then
-          picker_kill "$name"
-        fi
-        continue
-        ;;
-      ctrl-r)
-        printf 'new name: ' >/dev/tty
-        if ! read -r newname </dev/tty; then
-          continue
-        fi
-        if [[ -n "$newname" ]]; then
-          picker_rename "$name" "$newname"
-        fi
-        continue
-        ;;
-      *)
-        # Launcher keys on existing-session rows: ignore, reload.
-        if [[ -n "$key" ]] && launcher_cmd "$key" >/dev/null 2>&1; then
-          continue
-        fi
-        # Enter (or empty expect key) → attach
-        exec "$TMUXBIN" attach -t "=$name"
-        ;;
-    esac
+    # Launcher keys on existing-session rows: ignore, reload.
+    if [[ -n "$key" ]] && launcher_cmd "$key" >/dev/null 2>&1; then
+      continue
+    fi
+    # Enter (or empty expect key) → attach
+    exec "$TMUXBIN" attach -t "=$name"
   done
 }
 
@@ -864,6 +893,7 @@ run_picker() {
 main() {
   local repo="" fresh=0 list=0 pick="" startcmd="" claim=0 fill=0 wantpick=0 help=0 primary=0
   local client_version="" validate=0 validate_arg=""
+  local picker_rows=0 picker_kill_name="" picker_rename_old="" picker_rename_new=""
   local dir sessions
   sessions=()
 
@@ -888,6 +918,28 @@ main() {
         validate_arg="$2"
         shift 2
         ;;
+      # Internal: fzf --bind reload / execute (not user-facing).
+      --picker-rows)
+        picker_rows=1
+        if [[ -n "${2:-}" && "${2:-}" != -* ]]; then repo="$2"; shift 2; else shift; fi
+        ;;
+      --picker-kill)
+        if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+          echo "repo-session: --picker-kill requires a <session>" >&2
+          exit 1
+        fi
+        picker_kill_name="$2"
+        shift 2
+        ;;
+      --picker-rename)
+        if [[ -z "${2:-}" || "${2:-}" == -* || -z "${3:-}" || "${3:-}" == -* ]]; then
+          echo "repo-session: --picker-rename requires <old> <new>" >&2
+          exit 1
+        fi
+        picker_rename_old="$2"
+        picker_rename_new="$3"
+        shift 3
+        ;;
       --)                 shift; startcmd="$*"; break ;;
       -*)                 echo "repo-session: ignoring unknown flag '$1'" >&2; shift ;;
       *)                  if [[ -z "$repo" ]]; then repo="$1"; else startcmd="${startcmd:+$startcmd }$1"; fi; shift ;;
@@ -900,6 +952,20 @@ main() {
   # --validate dispatches first (before help/list/resume); never touches tmux.
   if (( validate )); then
     validate_repo "$validate_arg"
+    exit $?
+  fi
+
+  # Internal picker helpers (fzf bind+reload) — exit immediately.
+  if (( picker_rows )); then
+    print_picker_rows "$repo"
+    exit 0
+  fi
+  if [[ -n "$picker_kill_name" ]]; then
+    picker_kill "$picker_kill_name"
+    exit 0
+  fi
+  if [[ -n "$picker_rename_old" ]]; then
+    picker_rename "$picker_rename_old" "$picker_rename_new"
     exit $?
   fi
 
@@ -925,8 +991,10 @@ ${S}Usage${Z}
   repo-session [repo] [flags]   remote brain for mossferry (picker default)
 
 ${S}Picker keys${Z}
-  enter=attach · ctrl-x=kill · ctrl-r=rename · ctrl-a/ctrl-g=AI launchers
-  list navigation wraps (cycle) · esc=quit
+  enter=attach · ctrl-x=kill (instant, no confirm) · ctrl-r=rename
+  ctrl-a/ctrl-g=AI launchers · list wraps (cycle) · esc=quit
+  Kill stays in the picker — spam ctrl-x to clear many sessions fast.
+  Set FERRY_KILL_CONFIRM=1 for single-key y/N confirm before kill.
   (Launchers via FERRY_LAUNCHERS; defaults: ctrl-a:claude, ctrl-g:grok)
 
 ${S}Flags${Z}

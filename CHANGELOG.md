@@ -7,6 +7,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+## [2.7.2] — 2026-07-23
+
+### Changed
+
+- **Picker kill is instant and in-place**: `ctrl-x` no longer exits fzf or asks
+  `y`+Enter. One keystroke kills the focused session and reloads the list so you
+  can spam kills across ~20 sessions without UI teardown. Optional
+  `FERRY_KILL_CONFIRM=1` restores single-key y/N. Rename (`ctrl-r`) also reloads
+  in place.
+
 ## [2.7.1] — 2026-07-23
 
 ### Added

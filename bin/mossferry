@@ -271,7 +271,7 @@ ${S}Usage${Z}
   Bare \`ferry\` uses FERRY_DEFAULT_HOST from config/env when set.
 
 ${S}Picker keys${Z}
-  enter=attach · ctrl-x=kill · ctrl-r=rename · ctrl-a/ctrl-g=AI launchers
+  enter=attach · ctrl-x=kill (instant) · ctrl-r=rename · ctrl-a/ctrl-g=AI launchers
   --cycle wraps the list · esc=quit
   (Launchers configurable via FERRY_LAUNCHERS; defaults: ctrl-a:claude, ctrl-g:grok)
   Local: FERRY_WRAP=auto runs interactive sessions under \`grok wrap\` when
