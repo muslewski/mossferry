@@ -207,7 +207,7 @@ EOS
   stripped=$(printf '%s' "$out" | strip_ansi)
 
   miss=()
-  for needle in "ctrl-a" "ctrl-g" "--cycle" "Usage" "Picker" "Flags" "Config" "Examples" \
+  for needle in "start menu" "FERRY_START_MENU" "--cycle" "Usage" "Picker" "Flags" "Config" "Examples" \
     "mossferry ${VERSION}" "green ferry"; do
     if [[ "$stripped" != *"$needle"* ]]; then
       # allow case-insensitive section headers for single words
@@ -235,7 +235,7 @@ EOS
   out="$(cat "$outf"; cat "$errf")"
   stripped=$(printf '%s' "$out" | strip_ansi)
   miss=()
-  for needle in "ctrl-a" "ctrl-g" "Flags" "mossferry ${VERSION}"; do
+  for needle in "start menu" "FERRY_START_MENU" "Flags" "mossferry ${VERSION}"; do
     if [[ "$stripped" != *"$needle"* ]]; then
       miss+=("$needle")
     fi

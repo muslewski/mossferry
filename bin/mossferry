@@ -271,9 +271,10 @@ ${S}Usage${Z}
   Bare \`ferry\` uses FERRY_DEFAULT_HOST from config/env when set.
 
 ${S}Picker keys${Z}
-  enter=attach · ctrl-x=kill (instant) · ctrl-r=rename · ctrl-a/ctrl-g=AI launchers
-  --cycle wraps the list · esc=quit
-  (Launchers configurable via FERRY_LAUNCHERS; defaults: ctrl-a:claude, ctrl-g:grok)
+  enter=attach · ➕ new → nested start menu (default / AI CLIs)
+  ctrl-x=kill (instant) · ctrl-r=rename · --cycle · esc=quit
+  Start menu: FERRY_START_MENU (default claude,grok — put personal profiles in your config)
+  Optional hotkeys: FERRY_LAUNCHERS (empty by default; ctrl-x/ctrl-r reserved)
   Local: FERRY_WRAP=auto runs interactive sessions under \`grok wrap\` when
   \`grok\` is on PATH (clipboard + terminal restore). FERRY_TRANSPORT=ssh
   forces ssh instead of mosh (better OSC 52 with wrap; no mosh roam).

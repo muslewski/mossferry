@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Picker kill of oddly-named sessions**: fzf bind used unquoted `n={1}`, so a
+  session name with trailing/embedded spaces was truncated before
+  `kill-session -t =…` and failed silently. Fields are now quoted; rename
+  rejects invalid names; scoped repo filter tolerates trailing whitespace so
+  those sessions still appear under `ferry … <repo>`.
+
+### Changed
+
+- **Nested start-command menu** on create (`FERRY_START_MENU`, default
+  `claude,grok`): after picking a destination you choose **default (no AI)** or
+  an AI CLI. Optional `FERRY_LAUNCHERS` hotkeys are **empty by default** (prefer
+  the menu). Personal profile names stay in user config only — not in shipped
+  defaults.
+
 
 ## [2.7.3] — 2026-07-23
 

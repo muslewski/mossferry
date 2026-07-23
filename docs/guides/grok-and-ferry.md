@@ -14,9 +14,9 @@ Two layers must not be confused:
 | Layer | Who | What |
 |-------|-----|------|
 | `ferry` on Mac | **local** | mosh/ssh (+ optional `grok wrap`) into remote `repo-session` |
-| picker `ctrl-g` | **remote** | create session whose start command is `grok` |
-| picker `ctrl-a` | **remote** | same, but `claude` |
-| enter | **remote** | `FERRY_DEFAULT_CMD` (default `neofetch`) |
+| picker `➕` + start menu | **remote** | nested pick: default (no AI) or a CLI from `FERRY_START_MENU` |
+| optional hotkeys | **remote** | `FERRY_LAUNCHERS` chords (empty by default) |
+| enter on existing | **remote** | attach |
 
 ## Local: `FERRY_WRAP` / `grok wrap`
 
@@ -33,7 +33,7 @@ curl -fsSL https://x.ai/cli/install.sh | bash   # provides `grok wrap`
 # echo 'FERRY_TRANSPORT=ssh' >> ~/.config/mossferry/config
 
 ferry                          # same as always
-# in picker: ctrl-g on ➕ new / repo / 🏠 home → remote grok session
+# in picker: ➕ → destination → start menu → pick grok (or default / claude)
 ferry doctor                   # reports local grok wrap + transport
 ```
 
@@ -41,13 +41,21 @@ ferry doctor                   # reports local grok wrap + transport
 |-----|---------|---------|
 | `FERRY_WRAP` | `auto` | Prefix interactive transport with `grok wrap` when local `grok` exists (`auto` / `on` / `off`). Not used for `--list`. |
 | `FERRY_TRANSPORT` | `mosh` | Interactive hop: `mosh` (roam) or `ssh` (better OSC 52 with wrap). |
-| `FERRY_LAUNCHERS` | `ctrl-a:claude,ctrl-g:grok` | Remote picker AI-launcher keys (`key:command` pairs; empty disables; `ctrl-x` / `ctrl-r` reserved). |
+| `FERRY_START_MENU` | `claude,grok` | Nested create menu: comma-separated start commands (generic defaults only — put personal profiles in *your* config). Empty disables. |
+| `FERRY_LAUNCHERS` | _(empty)_ | Optional hotkeys (`key:command` pairs; empty = menu-only; `ctrl-x` / `ctrl-r` reserved). |
 
 Set `FERRY_WRAP=off` to disable wrap.
 
-## Remote: picker AI launchers
+## Remote: nested start menu (+ optional hotkeys)
 
-On destination rows (repo / `➕ new repo…` / `🏠 home session…`) and on the main picker's `➕ new session…` row, press a configured launcher key instead of enter to create that session with that start command. Overrides `FERRY_DEFAULT_CMD`, `--claude`, and `-- cmd…` for that one creation. Enter keeps the default. On an existing-session row, launcher keys are ignored (list reloads).
+Creating a session (`➕ new session…` → destination) opens a **second nested picker** when `FERRY_START_MENU` (or hotkey commands) is non-empty:
+
+1. **default (no AI)** — runs `FERRY_DEFAULT_CMD` (default `neofetch`)
+2. each entry from `FERRY_START_MENU` (and unique `FERRY_LAUNCHERS` commands)
+
+Personal wallet / profile command names belong only in your `~/.config/mossferry/config` — mossferry ships generic `claude,grok` so open-source defaults never leak private profile labels.
+
+Optional power-user hotkeys via `FERRY_LAUNCHERS` (e.g. `ctrl-a:claude,ctrl-g:grok`) still arm the start command and skip the menu for that creation. On an existing-session row, launcher keys are ignored (list reloads).
 
 ## mosh and clipboard
 

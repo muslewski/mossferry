@@ -21,6 +21,8 @@ TMUXBIN="${REPO_SESSION_TMUXBIN:-/usr/bin/tmux}"
 # Populated by parse_launchers (after load_config). Empty = feature off.
 LAUNCHER_KEYS=()
 LAUNCHER_CMDS=()
+# Populated by parse_start_menu — nested create-menu entries (no hotkeys).
+START_MENU_CMDS=()
 
 # Symlink-safe path resolution (stock macOS bash 3.2 + Linux).
 # Never depends on GNU `readlink -f`.
@@ -114,7 +116,7 @@ _rs_err() {
 load_config() {
   # Snapshot env (env > file > default).
   local e_REMOTE_BIN e_REPO_BASE e_DEFAULT_CMD e_DEFAULT_HOST e_SERVER_TIMEOUT e_REMOTE_REPO
-  local e_HIDDEN_WINDOW_GLOB e_BANNER e_LAUNCHERS
+  local e_HIDDEN_WINDOW_GLOB e_BANNER e_LAUNCHERS e_START_MENU
   e_REMOTE_BIN="${FERRY_REMOTE_BIN-__UNSET__}"
   e_REPO_BASE="${FERRY_REPO_BASE-__UNSET__}"
   e_DEFAULT_CMD="${FERRY_DEFAULT_CMD-__UNSET__}"
@@ -124,6 +126,7 @@ load_config() {
   e_HIDDEN_WINDOW_GLOB="${FERRY_HIDDEN_WINDOW_GLOB-__UNSET__}"
   e_BANNER="${FERRY_BANNER-__UNSET__}"
   e_LAUNCHERS="${FERRY_LAUNCHERS-__UNSET__}"
+  e_START_MENU="${FERRY_START_MENU-__UNSET__}"
 
   FERRY_REMOTE_BIN=".local/bin/repo-session"
   FERRY_REPO_BASE="${HOME}/Repositories"
@@ -133,7 +136,12 @@ load_config() {
   FERRY_REMOTE_REPO="Repositories/mossferry"
   FERRY_HIDDEN_WINDOW_GLOB="_*"
   FERRY_BANNER="on"
-  FERRY_LAUNCHERS="ctrl-a:claude,ctrl-g:grok"
+  # Nested create menu (generic CLI names only — put personal profiles in user config).
+  FERRY_START_MENU="claude,grok"
+  # Optional hotkeys; empty by default (prefer the nested menu). Set e.g.
+  # ctrl-a:claude,ctrl-g:grok for power-user chords. Personal wallet names
+  # belong in the user's config file, never in shipped defaults.
+  FERRY_LAUNCHERS=""
 
   if [[ -r "${HOME}/.config/mossferry/config" ]]; then
     # shellcheck source=/dev/null
@@ -149,6 +157,7 @@ load_config() {
   [[ "$e_HIDDEN_WINDOW_GLOB" != "__UNSET__" ]] && FERRY_HIDDEN_WINDOW_GLOB="$e_HIDDEN_WINDOW_GLOB"
   [[ "$e_BANNER" != "__UNSET__" ]] && FERRY_BANNER="$e_BANNER"
   [[ "$e_LAUNCHERS" != "__UNSET__" ]] && FERRY_LAUNCHERS="$e_LAUNCHERS"
+  [[ "$e_START_MENU" != "__UNSET__" ]] && FERRY_START_MENU="$e_START_MENU"
 }
 
 # Parse FERRY_LAUNCHERS into LAUNCHER_KEYS / LAUNCHER_CMDS (parallel arrays).
@@ -180,6 +189,26 @@ parse_launchers() {
   done < <(printf '%s\n' "$raw" | tr ',' '\n')
 }
 
+# Parse FERRY_START_MENU into START_MENU_CMDS (deduped, non-empty).
+# Comma-separated bare commands (may contain spaces/args; no commas inside a cmd).
+parse_start_menu() {
+  START_MENU_CMDS=()
+  local raw="${FERRY_START_MENU:-}" item
+  [[ -z "$raw" ]] && return 0
+  while IFS= read -r item || [[ -n "${item:-}" ]]; do
+    # trim leading/trailing whitespace
+    item="${item#"${item%%[![:space:]]*}"}"
+    item="${item%"${item##*[![:space:]]}"}"
+    [[ -z "$item" ]] && continue
+    local seen=0 c
+    for c in "${START_MENU_CMDS[@]+"${START_MENU_CMDS[@]}"}"; do
+      [[ "$c" == "$item" ]] && { seen=1; break; }
+    done
+    (( seen )) && continue
+    START_MENU_CMDS+=("$item")
+  done < <(printf '%s\n' "$raw" | tr ',' '\n')
+}
+
 # Print the start command for a launcher key. Exit 1 if unknown.
 launcher_cmd() {
   local want="${1:-}" i
@@ -202,14 +231,88 @@ _launcher_expect_suffix() {
   printf '%s' "$out"
 }
 
-# Sub-picker hints: enter=<default> · key=cmd · ...
+# Sub-picker hints: enter=start menu (or default) · optional hotkeys
 _subpicker_hints() {
   local i line
-  line="enter=${FERRY_DEFAULT_CMD:-neofetch}"
+  if (( ${#START_MENU_CMDS[@]} > 0 )); then
+    line="enter=start menu"
+  else
+    line="enter=${FERRY_DEFAULT_CMD:-neofetch}"
+  fi
   for i in "${!LAUNCHER_KEYS[@]}"; do
     line+=" · ${LAUNCHER_KEYS[$i]}=${LAUNCHER_CMDS[$i]}"
   done
   printf '%s' "$line"
+}
+
+# Nested fzf/menu: pick how a *new* session starts.
+# Prints the chosen command on stdout. Exit 1 on cancel.
+# Skipped by caller when startcmd already armed (hotkey / --claude / -- cmd).
+_pick_start_cmd() {
+  local def="${FERRY_DEFAULT_CMD:-neofetch}"
+  local -a opts=()
+  local c choice i pickfile
+  local def_label="default (no AI) — ${def}"
+
+  opts+=("$def_label")
+  for c in "${START_MENU_CMDS[@]+"${START_MENU_CMDS[@]}"}"; do
+    [[ "$c" == "$def" ]] && continue
+    opts+=("$c")
+  done
+  # Also surface unique hotkey commands so the menu is the single source of truth
+  # even when the user only configured FERRY_LAUNCHERS.
+  for c in "${LAUNCHER_CMDS[@]+"${LAUNCHER_CMDS[@]}"}"; do
+    [[ "$c" == "$def" ]] && continue
+    local seen=0 o
+    for o in "${opts[@]}"; do
+      [[ "$o" == "$c" ]] && { seen=1; break; }
+    done
+    (( seen )) && continue
+    opts+=("$c")
+  done
+
+  # Only default row → no real menu.
+  if (( ${#opts[@]} <= 1 )); then
+    printf '%s\n' "$def"
+    return 0
+  fi
+
+  if command -v fzf >/dev/null 2>&1 && [[ -z "${FERRY_NO_FZF:-}" ]]; then
+    pickfile="${TMPDIR:-/tmp}/repo-session-start.$$"
+    printf '%s\n' "${opts[@]}" | fzf --layout=reverse --header-first --cycle \
+      --header "start command · enter=pick · esc=cancel" \
+      --prompt='start> ' >"$pickfile" || { rm -f "$pickfile"; return 1; }
+    choice=$(cat "$pickfile")
+    rm -f "$pickfile"
+  else
+    # Numbered fallback — read stdin (same as other no-fzf menus; tests pipe here).
+    i=1
+    for o in "${opts[@]}"; do
+      printf '%d) %s\n' "$i" "$o" >&2
+      ((i++)) || true
+    done
+    printf 'q) cancel\n' >&2
+    if ! read -r choice; then
+      return 1
+    fi
+    case "$choice" in
+      q|Q|"") return 1 ;;
+      *)
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#opts[@]} )); then
+          choice="${opts[$((choice-1))]}"
+        else
+          return 1
+        fi
+        ;;
+    esac
+  fi
+  [[ -z "$choice" ]] && return 1
+  if [[ "$choice" == "$def_label" || "$choice" == default* ]]; then
+    printf '%s\n' "$def"
+  else
+    printf '%s\n' "$choice"
+  fi
+  return 0
 }
 
 # ASCII ferry art for picker header / --help / no-fzf menu.
@@ -418,9 +521,10 @@ build_session_rows() {
   local badge
   glob="${FERRY_HIDDEN_WINDOW_GLOB:-_*}"
   if [[ -n "$filter" ]]; then
-    # Classic repo sessions + Hermes coding-ops for that repo
+    # Classic repo sessions + Hermes coding-ops for that repo.
+    # Allow trailing whitespace on the session name (corrupt/legacy names still show).
     mapfile -t names < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null \
-      | grep -E "^(${filter}(-[0-9]+)?|ccops-${filter}-.+)$" | sort -V)
+      | grep -E "^(${filter}[[:space:]]*$|${filter}-[0-9]+[[:space:]]*$|ccops-${filter}-.+)$" | sort -V)
   else
     mapfile -t names < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
   fi
@@ -470,12 +574,20 @@ build_session_rows() {
 }
 
 picker_kill() {
-  # Exact session name. Fast path for picker spam — no confirm here.
+  # Exact session name (may contain trailing spaces — must match byte-for-byte).
+  # Fast path for picker spam — no confirm here.
   "$TMUXBIN" kill-session -t "=$1" 2>/dev/null || true
 }
 
 picker_rename() {
-  "$TMUXBIN" rename-session -t "=$1" "$2"
+  local old="$1" new="$2"
+  # Same name grammar as create_repo / create_home_session — blocks trailing spaces
+  # and other names that break fzf field extraction / exact-match targets.
+  if [[ -z "$new" || ! "$new" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    echo "repo-session: invalid session name '${new}'" >&2
+    return 1
+  fi
+  "$TMUXBIN" rename-session -t "=$old" "$new"
 }
 
 # Rows for fzf (tab-delimited) + the "new session" sentinel. Used by --picker-rows
@@ -734,11 +846,25 @@ _flow_home_session() {
   create_home_session "$name" || return 1
 }
 
+# If startcmd not already armed (hotkey / --claude / -- cmd), offer nested menu.
+# default (no AI) is always the first row. Cancel → exit 130.
+_arm_start_cmd_if_needed() {
+  local picked
+  [[ -n "${startcmd:-}" ]] && return 0
+  if (( ${#START_MENU_CMDS[@]} > 0 || ${#LAUNCHER_CMDS[@]} > 0 )); then
+    picked=$(_pick_start_cmd) || exit 130
+    startcmd="$picked"
+  fi
+  return 0
+}
+
 # Returns 1 on invalid input (reload picker); exits 130 on cancel; execs on success.
 _do_new_session_flow() {
   local chosen name
+  # Destination first, then start-command menu (unless already armed).
   chosen=$(_pick_repo_for_new) || exit 130
   [[ -z "$chosen" ]] && exit 130
+  _arm_start_cmd_if_needed
 
   case "$chosen" in
     "$_TOKEN_NEW_REPO")
@@ -823,11 +949,17 @@ run_picker() {
   else
     rows_cmd="bash ${self_q} --picker-rows"
   fi
-  hints='enter=attach · ctrl-x=kill · ctrl-r=rename · esc=quit'
+  if (( ${#START_MENU_CMDS[@]} > 0 || ${#LAUNCHER_KEYS[@]} > 0 )); then
+    hints='enter=attach · ➕=start menu · ctrl-x=kill · ctrl-r=rename · esc=quit'
+  else
+    hints='enter=attach · ctrl-x=kill · ctrl-r=rename · esc=quit'
+  fi
   # Kill: execute-silent then reload list in place (no exit, no y/Enter).
+  # Quote "{1}" so trailing spaces / embedded spaces survive shell assignment
+  # (unquoted n={1} drops them → kill-session -t =name fails silently).
   # Skip the synthetic "new session" row. Optional confirm via FERRY_KILL_CONFIRM.
   bind_kill="ctrl-x:execute-silent(
-    n={1}
+    n=\"{1}\"
     case \"\$n\" in ''|➕*) exit 0 ;; esac
     if [ \"\${FERRY_KILL_CONFIRM:-0}\" = 1 ]; then
       printf 'kill %s? [y/N] ' \"\$n\" >/dev/tty
@@ -839,7 +971,7 @@ run_picker() {
   )+reload(${rows_cmd})"
   # Rename: still needs a name; stays in-picker via execute+reload.
   bind_rename="ctrl-r:execute(
-    n={1}
+    n=\"{1}\"
     case \"\$n\" in ''|➕*) exit 0 ;; esac
     printf 'new name: ' >/dev/tty
     read -r nn </dev/tty || exit 0
@@ -980,6 +1112,7 @@ main() {
 
   load_config
   parse_launchers
+  parse_start_menu
 
   # --validate dispatches first (before help/list/resume); never touches tmux.
   if (( validate )); then
@@ -1024,11 +1157,12 @@ ${S}Usage${Z}
   repo-session [repo] [flags]   remote brain for mossferry (picker default)
 
 ${S}Picker keys${Z}
-  enter=attach · ctrl-x=kill (instant, no confirm) · ctrl-r=rename
-  ctrl-a/ctrl-g=AI launchers · list wraps (cycle) · esc=quit
+  enter=attach · ➕ new → nested start menu (default / AI CLIs)
+  ctrl-x=kill (instant, no confirm) · ctrl-r=rename · list wraps · esc=quit
   Kill stays in the picker — spam ctrl-x to clear many sessions fast.
   Set FERRY_KILL_CONFIRM=1 for single-key y/N confirm before kill.
-  (Launchers via FERRY_LAUNCHERS; defaults: ctrl-a:claude, ctrl-g:grok)
+  Start menu: FERRY_START_MENU (default claude,grok — generic only).
+  Optional hotkeys: FERRY_LAUNCHERS (empty by default; ctrl-x/ctrl-r reserved).
 
 ${S}Flags${Z}
   (none)             open the session picker (scoped to <repo> when given)
@@ -1051,7 +1185,7 @@ ${S}Flags${Z}
 
 ${S}Config${Z}
   ~/.config/mossferry/config  (FERRY_* keys; env overrides file)
-  FERRY_REPO_BASE, FERRY_DEFAULT_CMD, FERRY_LAUNCHERS, FERRY_BANNER, …
+  FERRY_REPO_BASE, FERRY_DEFAULT_CMD, FERRY_START_MENU, FERRY_LAUNCHERS, FERRY_BANNER, …
 
 ${S}Examples${Z}
   ferry manjaro-remote                            global session picker

@@ -283,7 +283,8 @@ t12() {
   mkdir -p "$FERRY_REPO_BASE/myrepo"
   export FERRY_NO_FZF=1
   export FAKE_TMUX_SESSIONS=""
-  printf 'n\n1\n' | bash "$RS" >/dev/null 2>&1
+  # n = new session → 1 = first repo → 1 = default (no AI) from start menu
+  printf 'n\n1\n1\n' | bash "$RS" >/dev/null 2>&1
   log=$(cat "$FAKE_TMUX_LOG")
   if grep -q 'new-session -d -s myrepo' <<<"$log" && grep -q 'attach -t myrepo' <<<"$log"; then
     ok t12
@@ -715,18 +716,19 @@ t34() {
 t35() {
   local n
   n=$(grep -c -- '--cycle' "$RS" || true)
-  if [[ "$n" -eq 3 ]]; then
+  # main picker + destination sub-picker + start-command menu + (legacy third path)
+  if [[ "$n" -eq 4 ]]; then
     ok t35
   else
-    fail t35 "grep -c -- '--cycle' = $n (want 3)"
+    fail t35 "grep -c -- '--cycle' = $n (want 4)"
   fi
 }
 
-# ---- t29: default FERRY_LAUNCHERS → parse_launchers + launcher_cmd ----
+# ---- t29: default FERRY_LAUNCHERS empty; FERRY_START_MENU=claude,grok ----
 t29() {
   setup
-  local keys="" cmds="" lc="" out
-  unset FERRY_LAUNCHERS 2>/dev/null || true
+  local keys="" cmds="" menu="" out
+  unset FERRY_LAUNCHERS FERRY_START_MENU 2>/dev/null || true
   export REPO_SESSION_TMUXBIN="$FAKE"
   out=$(
     export REPO_SESSION_LIB=1
@@ -734,17 +736,18 @@ t29() {
     source "$RS"
     load_config
     parse_launchers
+    parse_start_menu
     printf 'KEYS:%s\n' "${LAUNCHER_KEYS[*]-}"
     printf 'CMDS:%s\n' "${LAUNCHER_CMDS[*]-}"
-    printf 'LC:%s\n' "$(launcher_cmd ctrl-g 2>/dev/null || true)"
+    printf 'MENU:%s\n' "${START_MENU_CMDS[*]-}"
   ) 2>/dev/null || true
   keys=$(printf '%s\n' "$out" | sed -n 's/^KEYS://p')
   cmds=$(printf '%s\n' "$out" | sed -n 's/^CMDS://p')
-  lc=$(printf '%s\n' "$out" | sed -n 's/^LC://p')
-  if [[ "$keys" == "ctrl-a ctrl-g" ]] && [[ "$cmds" == "claude grok" ]] && [[ "$lc" == "grok" ]]; then
+  menu=$(printf '%s\n' "$out" | sed -n 's/^MENU://p')
+  if [[ -z "$keys" ]] && [[ -z "$cmds" ]] && [[ "$menu" == "claude grok" ]]; then
     ok t29
   else
-    fail t29 "keys=[$keys] cmds=[$cmds] lc=[$lc] out=[$out]"
+    fail t29 "keys=[$keys] cmds=[$cmds] menu=[$menu] out=[$out]"
   fi
   teardown
 }
@@ -785,7 +788,8 @@ t31() {
   mkdir -p "$FERRY_REPO_BASE/myrepo"
   export FAKE_TMUX_SESSIONS=""
   export REPO_SESSION_TMUXBIN="$FAKE"
-  unset FERRY_LAUNCHERS 2>/dev/null || true
+  # Explicit hotkeys (defaults are menu-only / empty launchers).
+  export FERRY_LAUNCHERS="ctrl-a:claude,ctrl-g:grok"
 
   # Home path with launcher armed (ctrl-a → claude)
   : >"$FAKE_TMUX_LOG"
@@ -897,17 +901,90 @@ t37() {
   teardown
 }
 
-# ---- t38: kill/rename use fzf --bind (not --expect) ----
+# ---- t38: kill/rename use fzf --bind (not --expect); fields quoted ----
 t38() {
   local src
   src=$(cat "$RS")
+  # n="{1}" (quoted) so trailing/embedded spaces survive shell assignment
   if grep -q 'ctrl-x:execute-silent' <<<"$src" \
     && grep -q 'ctrl-r:execute(' <<<"$src" \
+    && grep -q 'n=\\"{1}\\"' <<<"$src" \
     && ! grep -qE -- '--expect=.*ctrl-x' <<<"$src"; then
     ok t38
   else
-    fail t38 "bind/expect pattern missing"
+    fail t38 "bind/expect/quote pattern missing"
   fi
+}
+
+# ---- t40: --picker-kill preserves trailing space in session name ----
+t40() {
+  setup
+  local log rc
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  bash "$RS" --picker-kill $'s1 '
+  rc=$?
+  log=$(cat "$FAKE_TMUX_LOG")
+  # fake-tmux logs "$*" — exact target must keep the trailing space after =
+  if [[ $rc -eq 0 ]] && grep -qF 'kill-session -t =s1 ' <<<"$log"; then
+    ok t40
+  else
+    fail t40 "rc=$rc log=[$log]"
+  fi
+  teardown
+}
+
+# ---- t41: parse_start_menu dedupes; empty disables ----
+t41() {
+  setup
+  local menu n out
+  export FERRY_START_MENU="claude, grok,claude, "
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  out=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    parse_start_menu
+    printf 'MENU:%s\n' "${START_MENU_CMDS[*]-}"
+    printf 'N:%s\n' "${#START_MENU_CMDS[@]}"
+  ) 2>/dev/null || true
+  menu=$(printf '%s\n' "$out" | sed -n 's/^MENU://p')
+  n=$(printf '%s\n' "$out" | sed -n 's/^N://p')
+  if [[ "$menu" == "claude grok" ]] && [[ "$n" == "2" ]]; then
+    ok t41
+  else
+    fail t41 "menu=[$menu] n=[$n] out=[$out]"
+  fi
+  # empty menu
+  export FERRY_START_MENU=""
+  out=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    parse_start_menu
+    printf 'N:%s\n' "${#START_MENU_CMDS[@]}"
+  ) 2>/dev/null || true
+  n=$(printf '%s\n' "$out" | sed -n 's/^N://p')
+  if [[ "$n" == "0" ]]; then
+    ok t41b
+  else
+    fail t41b "n=$n"
+  fi
+  teardown
+}
+
+# ---- t42: scoped picker-rows includes trailing-space session name ----
+t42() {
+  setup
+  local out
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  export FAKE_TMUX_SESSIONS=$'syndcast \nother'
+  out=$(bash "$RS" --picker-rows syndcast 2>/dev/null) || true
+  if printf '%s\n' "$out" | grep -qF $'syndcast \t' || printf '%s\n' "$out" | grep -q '^syndcast '; then
+    ok t42
+  else
+    fail t42 "out=[$out]"
+  fi
+  teardown
 }
 
 export TEST_TMPDIR_ROOT="${TMPDIR:-/tmp}"
@@ -920,4 +997,5 @@ t29; t30; t31; t32
 t33; t34; t35
 t36; t37; t38
 t39
+t40; t41; t42
 exit $FAIL

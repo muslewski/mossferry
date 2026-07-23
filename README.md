@@ -94,7 +94,7 @@ into `~/.local/bin/`, migrates legacy config when present, and seeds
 | `ferry` | uses `FERRY_DEFAULT_HOST` → global picker (error if key unset) |
 | `ferry <host>` | fzf picker, all sessions + `➕ new session…` row |
 | `ferry <host> <repo>` | fzf picker, that repo's sessions + `➕ new session…` row |
-| _(picker keys)_ | `enter=attach · ctrl-x=kill` (instant, no confirm — spam-friendly) `· ctrl-r=rename · ctrl-a/ctrl-g=AI · cycle · esc`; kill/rename stay in-picker. Optional `FERRY_KILL_CONFIRM=1`. Version skew shows a subtle `↑ update … ferry update` header line |
+| _(picker keys)_ | `enter=attach · ctrl-x=kill` (instant, no confirm — spam-friendly) `· ctrl-r=rename · ➕ → nested start menu · cycle · esc`; kill/rename stay in-picker. Optional `FERRY_KILL_CONFIRM=1`. Version skew shows a subtle `↑ update … ferry update` header line |
 | `ferry <host> <repo> --primary\|-p` | attach primary, create if missing (old default, now explicit) |
 | `ferry <host> <repo> --new` | force fresh session (unchanged) |
 | `ferry <host> [repo] --list\|-l` | list sessions via ssh (unchanged) |
@@ -188,7 +188,8 @@ defaults.
 | `FERRY_REMOTE_REPO` | `Repositories/mossferry` | remote: repo checkout, relative to remote `$HOME` |
 | `FERRY_HIDDEN_WINDOW_GLOB` | `_*` | remote: window-name glob skipped for picker labels/previews |
 | `FERRY_BANNER` | `on` | green ferry art in picker header and `--help` (`off`/`0` hides) |
-| `FERRY_LAUNCHERS` | `ctrl-a:claude,ctrl-g:grok` | remote: picker AI-launcher keys (`key:command` pairs; empty disables; `ctrl-x`/`ctrl-r` reserved) |
+| `FERRY_START_MENU` | `claude,grok` | remote: nested create menu (comma-separated start commands; empty disables). Personal profile names stay in *your* config only. |
+| `FERRY_LAUNCHERS` | _(empty)_ | remote: optional picker hotkeys (`key:command` pairs; empty = menu-only; `ctrl-x`/`ctrl-r` reserved) |
 | `FERRY_WRAP` | `auto` | local: prefix interactive transport with `grok wrap` when local `grok` exists (`auto`/`on`/`off`); not used for `--list` |
 | `FERRY_TRANSPORT` | `mosh` | local interactive hop: `mosh` (roam) or `ssh` (better OSC 52 with wrap) |
 
@@ -201,9 +202,9 @@ Keep **`ferry`** as the entrypoint. Do not replace it with raw `grok wrap ssh`.
 | Layer | Who | What |
 |---|---|---|
 | `ferry` on Mac | local | mosh/ssh (+ optional `grok wrap`) into remote `repo-session` |
-| picker `ctrl-g` | remote | create session whose start command is `grok` |
-| picker `ctrl-a` | remote | same, but `claude` |
-| enter | remote | `FERRY_DEFAULT_CMD` (default `neofetch`) |
+| picker `➕` + start menu | remote | nested pick: default (no AI) or a CLI from `FERRY_START_MENU` |
+| optional hotkeys | remote | `FERRY_LAUNCHERS` chords (off by default) |
+| enter on existing | remote | attach |
 
 ```sh
 # on the Mac (once)
@@ -212,8 +213,12 @@ curl -fsSL https://x.ai/cli/install.sh | bash   # provides `grok wrap`
 # echo 'FERRY_WRAP=auto' >> ~/.config/mossferry/config
 # echo 'FERRY_TRANSPORT=ssh' >> ~/.config/mossferry/config
 
+# remote ~/.config/mossferry/config — your CLIs / profiles (not shipped):
+# FERRY_START_MENU="claude,grok,grok --profile work"
+# FERRY_LAUNCHERS="ctrl-a:claude"   # optional hotkeys
+
 ferry                          # same as always
-# in picker: ctrl-g on ➕ new / repo / 🏠 home → remote grok session
+# in picker: ➕ new → pick destination → start menu (default / claude / grok / …)
 ferry doctor                   # reports local grok wrap + transport
 ```
 

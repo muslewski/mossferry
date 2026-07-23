@@ -4,11 +4,11 @@
 
 | Zone | Status | Freshness | Summary |
 |------|--------|-----------|---------|
-| client | seeded | seeded | Local ferry CLI (bin/mossferry, npm aliases ferry|mossferry): load FERRY_* config, mosh/ssh launch of repo-session, pre-validate typos over ssh, doctor and update ops chrome. |
+| client | active | seeded | Local ferry CLI (bin/mossferry): FERRY_* config, mosh/ssh launch of repo-session, optional grok wrap, pre-validate over ssh, doctor/update. |
 | demo | seeded | seeded | Demo recording pipeline (demo/) and published GIF assets (assets/): VHS tapes for picker/help/doctor, green-demo.sh, fixtures with stub ferry/mosh/ssh/tmux-greenui for offline capture. |
 | green-ui | seeded | seeded | Vendored GREEN-UI-KIT (lib/green-ui.sh): source-able bash UI library — detect_color, ui_tty, banner/ok/warn/die/panel/checklist; stdout=data stderr=chrome; missing kit never kills ferry tools. |
-| install-config | seeded | seeded | Install and packaging surface: install.sh (symlink ferry/mossferry/repo-session into ~/.local/bin, seed/migrate config), config.example FERRY_* keys, package.json npm bins, VERSION. |
-| repo-session | seeded | seeded | Remote brain (bin/repo-session): fzf/menu tmux session picker, create/attach, atomic grid claim (--resume-closed / --resume-or-new), AI launchers, validate_repo, ferry banner header. |
+| install-config | seeded | seeded | Install and packaging surface: install.sh (symlink ferry/mossferry/repo-session into ~/.local/bin, seed/migrate config), config.example FERRY_* keys (START_MENU + optional LAUNCHERS), package.json npm bins, VERSION. |
+| repo-session | seeded | seeded | Remote brain (bin/repo-session): fzf/menu tmux session picker, create/attach, atomic grid claim, nested start menu (FERRY_START_MENU) + optional FERRY_LAUNCHERS hotkeys, in-place kill/rename, validate_repo. |
 | tests | seeded | seeded | Bash test harness (tests/): run.sh drives test-mossferry, test-repo-session, test-install, test-ui-ops with fake-tmux and fake-bin mosh/ssh stubs — no framework beyond bash. |
 
 ## ⚠ Verification gaps
@@ -19,6 +19,8 @@
 - zone install-config: seeded — not yet verified (verifiedAt: unverified)
 - zone repo-session: seeded — not yet verified (verifiedAt: unverified)
 - zone tests: seeded — not yet verified (verifiedAt: unverified)
+- zone client: invariant missing rule field (flow-style YAML maps are not supported — use block style)
+- zone client: invariant missing rule field (flow-style YAML maps are not supported — use block style)
 
 ## ⚠ Graph coherence
 
@@ -30,4 +32,20 @@ _none_
 
 ## Ledger
 
+- specs: 8 (? 8)
+- plans: 7 (? 7)
 - reports: 1 (snapshot 1)
+- decisions: 1 (active 1)
+
+### Recent
+
+- [[2026-07-17-picker-launchers-plan]]
+- [[2026-07-17-picker-launchers-design]]
+- [[2026-07-17-picker-banner-plan]]
+- [[2026-07-17-picker-banner-design]]
+- [[2026-07-17-mossferry-ui-ops-design]]
+- [[2026-07-17-banner-v2-cycle-plan]]
+- [[2026-07-17-banner-v2-cycle-design]]
+- [[2026-07-16-picker-create-plan]]
+- [[2026-07-16-picker-create-design]]
+- [[2026-07-16-mossferry-rename-plan]]
