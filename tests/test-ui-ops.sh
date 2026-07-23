@@ -400,7 +400,6 @@ EOS
   else
     FAIL "${name}-bash-n"
   fi
-  local pkg_ver
   pkg_ver=$(node -pe "require('$ROOT/package.json').version" 2>/dev/null || true)
   if [[ -n "$pkg_ver" && "$VERSION" == "$pkg_ver" ]]; then
     ok "${name}-version"
