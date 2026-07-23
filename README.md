@@ -161,6 +161,9 @@ Runs on the remote, inside the mosh session:
   **mosh note:** many mosh builds strip OSC 52, so wrap cannot invent clipboard
   bytes that never arrive; use `FERRY_TRANSPORT=ssh` when you need reliable Grok
   → local clipboard, or keep host-side yank pipes (e.g. tmux → `pbcopy`).
+  **voice / mic:** `ctrl-g` starts Grok **on the remote host** — laptop microphone
+  and Ctrl+Space PTT do not cross mosh/ssh. Use local Mac `grok` for voice; ferry
+  for remote coding. See [docs/guides/grok-and-ferry.md](docs/guides/grok-and-ferry.md).
 - Repo-scoped picker's new-session chain stays pre-filtered — no special rows.
 - **Zero-session fast path:** `ferry <host> <repo>` with no live sessions
   skips the picker and creates + attaches the primary.
