@@ -62,6 +62,10 @@ ferry doctor <host>            # local + remote checks
 
 Picker keys (remote): `enter` attach · `ctrl-x` kill (instant, no confirm — spam to clear many sessions) · `ctrl-r` rename · `ctrl-a`/`ctrl-g` AI launchers · cycle · esc. Kill stays in the picker (no teardown). Set `FERRY_KILL_CONFIRM=1` for single-key y/N confirm.
 
+If local and remote mossferry versions differ, the picker header shows a subtle
+`↑ update  client X · remote Y  →  ferry update` line (stderr still gets a one-line
+warn). Run `ferry update` (or `ferry update <host>`) to sync.
+
 ## 5. Update both sides
 
 ```sh

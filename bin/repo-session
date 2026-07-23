@@ -355,6 +355,33 @@ own_version() {
   fi
 }
 
+# Set when --client-version ≠ remote VERSION (picker header + stderr). Empty = silent.
+_FERRY_UPDATE_NUDGE=""
+
+# Build subtle one-liner for picker header / numbered menu.
+_set_version_nudge() {
+  local client="$1" remote="$2"
+  _FERRY_UPDATE_NUDGE=""
+  [[ -n "$client" && -n "$remote" && "$client" != "unknown" && "$remote" != "unknown" ]] || return 0
+  [[ "$client" == "$remote" ]] && return 0
+  # Keep short: fzf header sits in ~40% of terminal width.
+  _FERRY_UPDATE_NUDGE="↑ update  client ${client} · remote ${remote}  →  ferry update"
+  # Dim/yellow when green-ui is active (TTY); plain text otherwise.
+  if ui_tty 2>/dev/null && [[ ${GREEN_UI_MODE-none} != none ]]; then
+    _FERRY_UPDATE_NUDGE="${UI_Y-}${UI_D-}${_FERRY_UPDATE_NUDGE}${UI_Z-}"
+  fi
+}
+
+# Append nudge under hints/banner when present.
+_header_with_nudge() {
+  local base="$1"
+  if [[ -n "${_FERRY_UPDATE_NUDGE:-}" ]]; then
+    printf '%s\n%s\n' "$base" "$_FERRY_UPDATE_NUDGE"
+  else
+    printf '%s\n' "$base"
+  fi
+}
+
 # Hermes coding-ops registry (same host as tmux). Override with FERRY_CCOPS_STATE.
 _ferry_ccops_state() {
   printf '%s\n' "${FERRY_CCOPS_STATE:-$HOME/.hermes/state/ccops}"
@@ -748,6 +775,9 @@ run_picker() {
         [[ -n "$line" ]] && rows+=("$line")
       done < <(build_session_rows "$repo")
       ferry_banner
+      if [[ -n "${_FERRY_UPDATE_NUDGE:-}" ]]; then
+        printf '%s\n' "$_FERRY_UPDATE_NUDGE"
+      fi
       i=1
       for line in "${rows[@]}"; do
         name="${line%%$'\t'*}"
@@ -832,6 +862,8 @@ run_picker() {
     else
       header="$hints"
     fi
+    # Subtle update line when client/remote VERSION diverge (set in main handshake).
+    header="$(_header_with_nudge "$header")"
 
     local -a fzf_args=(
       --ansi --delimiter=$'\t'
@@ -969,12 +1001,13 @@ main() {
     exit $?
   fi
 
-  # Version handshake (warn only; never block).
+  # Version handshake (warn only; never block). Surfaces in picker header too.
   if [[ -n "$client_version" ]]; then
     local ov
     ov="$(own_version | tr -d '[:space:]')"
     if [[ -n "$ov" && "$client_version" != "$ov" ]]; then
       echo "mossferry: client ${client_version} / remote ${ov} — run 'ferry update'" >&2
+      _set_version_nudge "$client_version" "$ov"
     fi
   fi
 

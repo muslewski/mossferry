@@ -84,6 +84,48 @@ t3() {
   teardown
 }
 
+# ---- t39: version mismatch sets picker header nudge ----
+t39() {
+  setup
+  local out nudge
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  out=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    GREEN_UI_MODE=none
+    _set_version_nudge "0.0.1" "2.7.2"
+    printf '%s\n' "$_FERRY_UPDATE_NUDGE"
+    _header_with_nudge "hints-line"
+  )
+  nudge=$(printf '%s\n' "$out" | head -n 1)
+  if [[ "$nudge" == *"↑ update"* ]] \
+    && [[ "$nudge" == *"0.0.1"* ]] \
+    && [[ "$nudge" == *"2.7.2"* ]] \
+    && [[ "$nudge" == *"ferry update"* ]] \
+    && printf '%s\n' "$out" | grep -q 'hints-line' \
+    && printf '%s\n' "$out" | grep -q '↑ update'; then
+    ok t39
+  else
+    fail t39 "out=[$out]"
+  fi
+  # match → no nudge
+  out=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    GREEN_UI_MODE=none
+    _set_version_nudge "2.7.2" "2.7.2"
+    printf 'NUDGE:[%s]\n' "$_FERRY_UPDATE_NUDGE"
+  )
+  if [[ "$out" == "NUDGE:[]" ]]; then
+    ok t39b
+  else
+    fail t39b "out=[$out]"
+  fi
+  teardown
+}
+
 # ---- t4: --primary with no sessions creates + attaches ----
 t4() {
   setup
@@ -877,4 +919,5 @@ t26; t27; t28
 t29; t30; t31; t32
 t33; t34; t35
 t36; t37; t38
+t39
 exit $FAIL

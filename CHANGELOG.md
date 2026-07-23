@@ -7,6 +7,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 
+## [2.7.3] — 2026-07-23
+
+### Added
+
+- **Picker update nudge**: when client and remote `VERSION` differ, the fzf
+  header (and numbered menu) shows a subtle line
+  `↑ update  client X · remote Y  →  ferry update` so hoppers notice without
+  digging through doctor/stderr.
+
 ## [2.7.2] — 2026-07-23
 
 ### Changed
