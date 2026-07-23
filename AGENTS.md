@@ -9,3 +9,8 @@ This repository has an Atlas: a plain-markdown knowledge base of what the code i
 - Route spec-writing output to `mossferry-mind/specs/` and plan-writing output to `mossferry-mind/plans/`; keep each note's `summary` field crisp — retrieval engines surface the summary plus one section, not the whole note.
 - Detailed procedures (navigation, recollection on finish, note authoring, toolkit update) are plain markdown files under `.claude/skills/<name>/SKILL.md` — read the matching one before doing those tasks.
 <!-- /atlas:onramp -->
+
+## Docs vs mind
+
+- **Public product docs** → [`docs/`](./docs/) (what marketing sites SSG at `/docs/`)
+- **Specs / plans / internal notes** → [`mossferry-mind/`](./mossferry-mind/) (memory-atlas vault — **not** `docs/superpowers/`)
