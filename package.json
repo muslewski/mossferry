@@ -22,7 +22,9 @@
     "!win32"
   ],
   "scripts": {
-    "test": "bash tests/run.sh"
+    "test": "bash tests/run.sh",
+    "docs:check": "node ../docs-kit/bin/docs-kit.mjs check docs/",
+    "docs:health": "node ../docs-kit/bin/docs-kit.mjs health docs/"
   },
   "keywords": [
     "mosh",
