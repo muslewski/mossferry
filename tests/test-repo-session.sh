@@ -987,6 +987,22 @@ t42() {
   teardown
 }
 
+# ---- t43: preview must not capture-pane with empty {6} (➕ row / cycle wrap) ----
+# Missing field 6 on the new-session sentinel: fzf expands {6} to shell-empty `''`.
+# Bare `capture-pane -ep -t {6}` then self-captures / errors → recursive/duplicated UI
+# when cycling up onto ➕. Require an `[ -n {6} ]` guard before capture-pane.
+t43() {
+  local src prev
+  src=$(cat "$RS")
+  prev=$(printf '%s\n' "$src" | grep -E -- '--preview' | head -1)
+  if printf '%s\n' "$prev" | grep -q 'capture-pane' \
+    && printf '%s\n' "$prev" | grep -qF '[ -n {6} ]'; then
+    ok t43
+  else
+    fail t43 "preview lacks empty-{6} guard: [$prev]"
+  fi
+}
+
 export TEST_TMPDIR_ROOT="${TMPDIR:-/tmp}"
 set +e
 t1; t2; t3; t4; t5; t6; t7; t8; t9; t10; t11; t12
@@ -998,4 +1014,5 @@ t33; t34; t35
 t36; t37; t38
 t39
 t40; t41; t42
+t43
 exit $FAIL

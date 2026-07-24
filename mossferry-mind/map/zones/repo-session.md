@@ -47,6 +47,9 @@ None claimed yet on seed. Candidates for later verification:
 - `ctrl-x` / `ctrl-r` reserved (kill/rename); not valid launcher keys.
 - fzf kill/rename binds quote `"{1}"` so session names with trailing/embedded
   spaces match `kill-session -t =name` exactly.
+- Main picker preview guards empty `{6}` (`[ -n {6} ]` before `capture-pane`)
+  so the ➕ new-session row (no field 6) does not self-capture the picker when
+  cycling up onto last — that used to mirror/duplicate the list in the preview.
 - Create path: destination first, then nested start menu when
   `FERRY_START_MENU` or launcher cmds are non-empty; hotkey-armed `startcmd`
   skips the menu.

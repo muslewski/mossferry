@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Picker cycle wrap duplicated the list**: pressing up onto `➕ new session…`
+  ran `capture-pane -t` with an empty field-6 target, so the preview mirrored
+  the picker itself (looked like duplicate sessions). Preview now guards
+  `[ -n {6} ]` and shows a create hint on that row.
 - **Picker kill of oddly-named sessions**: fzf bind used unquoted `n={1}`, so a
   session name with trailing/embedded spaces was truncated before
   `kill-session -t =…` and failed silently. Fields are now quoted; rename

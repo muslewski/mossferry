@@ -997,11 +997,17 @@ run_picker() {
     # Subtle update line when client/remote VERSION diverge (set in main handshake).
     header="$(_header_with_nudge "$header")"
 
+    # Preview: field 6 is session:window. The ➕ new-session sentinel has no
+    # field 6 — fzf expands missing placeholders to shell-empty `''`. A bare
+    # `capture-pane -t {6}` then targets the empty name (or, historically,
+    # self-captured the picker pane) → recursive/"duplicated" list when cycling
+    # up onto ➕. Leave {6} unquoted so fzf's shell-escaping applies; guard with
+    # `[ -n {6} ]` (false for `''`).
     local -a fzf_args=(
       --ansi --delimiter=$'\t'
       --layout=reverse --header-first --cycle
       --header "$header"
-      --preview "$TMUXBIN capture-pane -ep -t {6}"
+      --preview "if [ -n {6} ]; then $TMUXBIN capture-pane -ep -t {6}; else printf '%s\n' '➕ new session — enter to create'; fi"
       --preview-window=right:60%
       --bind "$bind_kill"
       --bind "$bind_rename"
