@@ -11,7 +11,7 @@ order: 5
 
 | Package | Relationship to mossferry | Links |
 |---------|---------------------------|--------|
-| **agentic-sage** | Passive fleet judge for parallel AI coding sessions. SAGE hooks and boards run **on the host**; ferry is how you get there from a laptop (and optionally land in a judged session via `ctrl-a` / `ctrl-g` launchers). | [sage.muslewski.com](https://sage.muslewski.com) · [npm](https://www.npmjs.com/package/agentic-sage) |
+| **agentic-sage** | Passive fleet judge for parallel AI coding sessions. After install, sessions use the **CLI** for facts (`board` / `territory` / …); optional **`sage judge run`** starts a living passive judge that publishes briefs. All of that runs **on the host**; ferry is how you get there from a laptop (and optionally land via `ctrl-a` / `ctrl-g` launchers). | [sage.muslewski.com](https://sage.muslewski.com) · [npm](https://www.npmjs.com/package/agentic-sage) |
 | **status-herald** | Curtain cards / status bars for agent panes in tmux. Once ferry attaches you to a session, herald is the status surface inside that pane. | [herald.muslewski.com](https://herald.muslewski.com) · [npm](https://www.npmjs.com/package/status-herald) |
 | **llm-armory** | Named executor loadouts (advisor → Grok children). Armory sessions are started **on the host**; ferry + wrap + `ctrl-g` is the laptop path into a Grok-shaped remote session. | [armory.muslewski.com](https://armory.muslewski.com) · [npm](https://www.npmjs.com/package/llm-armory) |
 | **token-oracle** | Offline token/cap forecasts used by statuslines and boards on the host. Ferry does not call oracle; it lands you where oracle is wired. | [oracle.muslewski.com](https://oracle.muslewski.com) · [npm](https://www.npmjs.com/package/token-oracle) |

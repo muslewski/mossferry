@@ -50,6 +50,12 @@ machines.
 
 Installed paths are **symlinks into this repo**, so `git pull` is deploy.
 
+## Safety (door, not building)
+
+mossferry is the **hop** into remote tmux — not an agent sandbox or secrets manager. Host AI-session safety (trust tiers, YOLO sandboxes, env hygiene) stays on the machine you land on.
+
+**Coming soon:** optional share/preview modes and clearer doctor guidance. See **[docs/safety-roadmap.md](./docs/safety-roadmap.md)** for the boundary and planned nits. Vulnerability reporting: [SECURITY.md](./SECURITY.md).
+
 ## Name origin
 
 **mossferry** was chosen after the previous short name collided hard with a

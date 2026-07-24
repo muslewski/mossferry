@@ -17,6 +17,7 @@ Site: [mossferry.muslewski.com](https://mossferry.muslewski.com) · npm: [`mossf
 |------|-----|
 | [Getting started](./getting-started.md) | Install local + remote → config → `ferry doctor` |
 | [Grok + ferry](./guides/grok-and-ferry.md) | `FERRY_WRAP`, picker `ctrl-g` / `ctrl-a`, mosh vs ssh clipboard |
+| [Safety roadmap](./safety-roadmap.md) | **Coming soon** host-boundary + safety-oriented product nits |
 | [Works with](./works-with.md) | Fleet siblings on the host ferry lands you on |
 
 ## What it does

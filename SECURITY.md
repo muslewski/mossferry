@@ -30,7 +30,11 @@ You will receive a response within **72 hours**. We aim to ship a patch within
 mossferry is a local bash client that launches mosh/ssh and a remote session picker. Primary risk: command injection via host/repo args, unsafe ssh options, or symlink attacks during install.sh.
 
 Out of scope: issues in Node.js / Python / the OS, third-party CLIs this tool
-launches, or GitHub Actions runners themselves.
+launches, or GitHub Actions runners themselves. Also out of scope as *ferry
+features*: multi-tenant isolation of AI agent panes, host secret stores, and
+vendor sandboxes — those belong on the host. Product direction (including
+**coming soon** safety-oriented nits) is tracked in
+[docs/safety-roadmap.md](./docs/safety-roadmap.md).
 
 ## Local secrets
 

@@ -7,7 +7,8 @@
     {
       "title": "Guides",
       "items": [
-        { "title": "Grok + ferry", "href": "guides/grok-and-ferry.md" }
+        { "title": "Grok + ferry", "href": "guides/grok-and-ferry.md" },
+        { "title": "Safety roadmap", "href": "safety-roadmap.md" }
       ]
     },
     { "title": "Works with", "href": "works-with.md" }
