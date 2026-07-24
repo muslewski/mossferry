@@ -4,6 +4,29 @@
 printf '%s\n' "$0 $*" >> "${FAKE_NET_LOG:?FAKE_NET_LOG not set}"
 joined="$*"
 
+# Connectivity probe used by resolve_default_host: `ssh … <host> true`
+# FAKE_SSH_UNREACHABLE=comma,list of host tokens that should fail BatchMode.
+if [[ "$joined" == *" true" || "$joined" == *" true "* ]]; then
+  if [[ "${@: -1}" == "true" ]]; then
+    if [[ -n "${FAKE_SSH_UNREACHABLE:-}" ]]; then
+      _ifs="$IFS"
+      IFS=','
+      # shellcheck disable=SC2086
+      set -- ${FAKE_SSH_UNREACHABLE}
+      IFS="$_ifs"
+      for _bad in "$@"; do
+        _bad="${_bad#"${_bad%%[![:space:]]*}"}"
+        _bad="${_bad%"${_bad##*[![:space:]]}"}"
+        [[ -z "$_bad" ]] && continue
+        if [[ "$joined" == *" ${_bad} "* || "$joined" == *" ${_bad} true" ]]; then
+          exit 1
+        fi
+      done
+    fi
+    exit 0
+  fi
+fi
+
 # Pre-validation: --validate <repo>
 if [[ "$joined" == *"--validate"* ]]; then
   exit_code="${FAKE_SSH_VALIDATE_EXIT:-0}"

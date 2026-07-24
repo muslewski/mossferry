@@ -121,9 +121,9 @@ own_version() {
 # Snapshot pre-set FERRY_* vars, apply defaults, source file, restore snapshot.
 load_config() {
   local _had_remote_bin=0 _had_repo_base=0 _had_default_cmd=0
-  local _had_default_host=0 _had_server_timeout=0 _had_remote_repo=0
+  local _had_default_host=0 _had_host_candidates=0 _had_server_timeout=0 _had_remote_repo=0
   local _had_banner=0 _had_wrap=0 _had_transport=0
-  local _v_remote_bin _v_repo_base _v_default_cmd _v_default_host
+  local _v_remote_bin _v_repo_base _v_default_cmd _v_default_host _v_host_candidates
   local _v_server_timeout _v_remote_repo _v_banner _v_wrap _v_transport
 
   if [[ -n "${FERRY_REMOTE_BIN+x}" ]]; then
@@ -141,6 +141,10 @@ load_config() {
   if [[ -n "${FERRY_DEFAULT_HOST+x}" ]]; then
     _had_default_host=1
     _v_default_host="$FERRY_DEFAULT_HOST"
+  fi
+  if [[ -n "${FERRY_HOST_CANDIDATES+x}" ]]; then
+    _had_host_candidates=1
+    _v_host_candidates="$FERRY_HOST_CANDIDATES"
   fi
   if [[ -n "${FERRY_SERVER_TIMEOUT+x}" ]]; then
     _had_server_timeout=1
@@ -167,6 +171,10 @@ load_config() {
   FERRY_REPO_BASE="${HOME}/Repositories"
   FERRY_DEFAULT_CMD="neofetch"
   FERRY_DEFAULT_HOST=""
+  # Optional comma-separated SSH host aliases for bare `ferry` / doctor / update
+  # when no host is given. First BatchMode-reachable wins (e.g. LAN then Tailscale).
+  # Explicit CLI hosts always win. IPs stay in the user's ~/.ssh/config — not here.
+  FERRY_HOST_CANDIDATES=""
   FERRY_SERVER_TIMEOUT="86400"
   FERRY_REMOTE_REPO="Repositories/mossferry"
   FERRY_BANNER="on"
@@ -191,6 +199,7 @@ load_config() {
   : "${FERRY_REPO_BASE:=${HOME}/Repositories}"
   : "${FERRY_DEFAULT_CMD:=neofetch}"
   : "${FERRY_DEFAULT_HOST:=}"
+  : "${FERRY_HOST_CANDIDATES:=}"
   : "${FERRY_SERVER_TIMEOUT:=86400}"
   : "${FERRY_REMOTE_REPO:=Repositories/mossferry}"
   : "${FERRY_BANNER:=on}"
@@ -201,11 +210,50 @@ load_config() {
   [[ $_had_repo_base -eq 1 ]] && FERRY_REPO_BASE="$_v_repo_base"
   [[ $_had_default_cmd -eq 1 ]] && FERRY_DEFAULT_CMD="$_v_default_cmd"
   [[ $_had_default_host -eq 1 ]] && FERRY_DEFAULT_HOST="$_v_default_host"
+  [[ $_had_host_candidates -eq 1 ]] && FERRY_HOST_CANDIDATES="$_v_host_candidates"
   [[ $_had_server_timeout -eq 1 ]] && FERRY_SERVER_TIMEOUT="$_v_server_timeout"
   [[ $_had_remote_repo -eq 1 ]] && FERRY_REMOTE_REPO="$_v_remote_repo"
   [[ $_had_banner -eq 1 ]] && FERRY_BANNER="$_v_banner"
   [[ $_had_wrap -eq 1 ]] && FERRY_WRAP="$_v_wrap"
   [[ $_had_transport -eq 1 ]] && FERRY_TRANSPORT="$_v_transport"
+}
+
+# Pick default SSH host for bare ferry / doctor / update.
+# Priority: FERRY_HOST_CANDIDATES (first reachable) → FERRY_DEFAULT_HOST → empty.
+# Explicit CLI host is never rewritten — only used when the operator omitted a host.
+# Candidates are ssh config aliases (or raw hostnames); network paths (LAN vs
+# Tailscale vs MagicDNS) live in the operator's ~/.ssh/config for flexibility.
+resolve_default_host() {
+  local list c first=""
+  list="${FERRY_HOST_CANDIDATES:-}"
+  if [[ -n "$list" ]]; then
+    local IFS=','
+    # shellcheck disable=SC2086
+    set -- $list
+    for c in "$@"; do
+      # trim whitespace
+      c="${c#"${c%%[![:space:]]*}"}"
+      c="${c%"${c##*[![:space:]]}"}"
+      [[ -z "$c" ]] && continue
+      [[ -z "$first" ]] && first="$c"
+      if ssh -o BatchMode=yes -o ConnectTimeout=2 \
+        "$c" true >/dev/null 2>&1; then
+        printf '%s\n' "$c"
+        return 0
+      fi
+    done
+    # None reachable: still return first candidate so callers emit a real host
+    # in error messages / doctor (better than empty).
+    if [[ -n "$first" ]]; then
+      printf '%s\n' "$first"
+      return 0
+    fi
+  fi
+  if [[ -n "${FERRY_DEFAULT_HOST:-}" ]]; then
+    printf '%s\n' "$FERRY_DEFAULT_HOST"
+    return 0
+  fi
+  return 1
 }
 
 # ASCII ferry art for --help (and shared brand with remote picker).
@@ -268,7 +316,9 @@ ${S}Usage${Z}
   Default action is the session picker (global with no <repo>, scoped with one).
   Nothing attaches or creates a shared main session implicitly.
   Repo typos are caught locally via automatic pre-validation (no mosh).
-  Bare \`ferry\` uses FERRY_DEFAULT_HOST from config/env when set.
+  Bare \`ferry\` picks a host via FERRY_HOST_CANDIDATES (first reachable) or
+  FERRY_DEFAULT_HOST. Put LAN vs Tailscale aliases in ~/.ssh/config — mossferry
+  only tries the names you list (OSS-flexible; no hard-coded IPs).
 
 ${S}Picker keys${Z}
   enter=attach · ➕ new → nested start menu (default / AI CLIs)
@@ -320,9 +370,12 @@ EOF
 }
 
 cmd_update() {
-  local host="${1:-${FERRY_DEFAULT_HOST:-}}"
+  local host="${1:-}"
   if [[ -z "$host" ]]; then
-    _ferry_err "update: no host (pass one or set FERRY_DEFAULT_HOST)"
+    host="$(resolve_default_host)" || host=""
+  fi
+  if [[ -z "$host" ]]; then
+    _ferry_err "update: no host (pass one, or set FERRY_HOST_CANDIDATES / FERRY_DEFAULT_HOST)"
     return 1
   fi
 
@@ -435,9 +488,12 @@ cmd_update() {
 }
 
 cmd_doctor() {
-  local host="${1:-${FERRY_DEFAULT_HOST:-}}"
+  local host="${1:-}"
   if [[ -z "$host" ]]; then
-    _ferry_err "doctor: no host (pass one or set FERRY_DEFAULT_HOST)"
+    host="$(resolve_default_host)" || host=""
+  fi
+  if [[ -z "$host" ]]; then
+    _ferry_err "doctor: no host (pass one, or set FERRY_HOST_CANDIDATES / FERRY_DEFAULT_HOST)"
     return 1
   fi
 
@@ -716,8 +772,9 @@ main() {
 
   # Subcommand / zero-arg dispatch before host parsing.
   if [[ $# -eq 0 ]]; then
-    if [[ -n "${FERRY_DEFAULT_HOST:-}" ]]; then
-      set -- "$FERRY_DEFAULT_HOST"
+    local _def
+    if _def="$(resolve_default_host)"; then
+      set -- "$_def"
     else
       usage >&2
       return 1

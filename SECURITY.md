@@ -31,3 +31,7 @@ mossferry is a local bash client that launches mosh/ssh and a remote session pic
 
 Out of scope: issues in Node.js / Python / the OS, third-party CLIs this tool
 launches, or GitHub Actions runners themselves.
+
+## Local secrets
+
+Do not commit `.env` files. This repo ships a gitleaks pre-commit hook (`.pre-commit-config.yaml`). Install with `pre-commit install` if you use pre-commit; otherwise run `gitleaks detect` before push.

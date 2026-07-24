@@ -2,7 +2,16 @@
 #FERRY_REMOTE_BIN=".local/bin/repo-session"  # repo-session path, relative to remote $HOME
 #FERRY_REPO_BASE="$HOME/Repositories"        # remote: where repos live
 #FERRY_DEFAULT_CMD="neofetch"                # remote: startup command in fresh sessions
-#FERRY_DEFAULT_HOST=""                       # local: host used by bare `ferry`
+#                                            # tip: set to "true" or "clear" for quiet panes
+#FERRY_DEFAULT_HOST=""                       # local: single host for bare `ferry`
+#FERRY_HOST_CANDIDATES=""                    # local: comma-separated ssh aliases tried in
+#                                            # order for bare ferry/doctor/update (first
+#                                            # BatchMode-reachable wins). Example when home
+#                                            # LAN is faster and you still want remote fallback:
+#                                            #   FERRY_HOST_CANDIDATES="manjaro,manjaro-remote"
+#                                            # with ~/.ssh/config Host manjaro → LAN IP and
+#                                            # Host manjaro-remote → Tailscale IP/MagicDNS.
+#                                            # Explicit `ferry manjaro-remote` always forces TS.
 #FERRY_SERVER_TIMEOUT="86400"                # local: mosh-server self-exit after N s clientless
 #FERRY_REMOTE_REPO="Repositories/mossferry"  # remote: repo checkout, relative to remote $HOME
 #FERRY_HIDDEN_WINDOW_GLOB="_*"               # skip matching windows in picker names/previews

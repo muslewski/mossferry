@@ -480,6 +480,58 @@ trap 'rm -rf "$tmpdir"' EXIT
   unset FERRY_WRAP || true
 }
 
+# --- m21: FERRY_HOST_CANDIDATES picks first reachable host for bare ferry ---
+{
+  name=m21
+  outf="$tmpdir/m21.out" errf="$tmpdir/m21.err" logf="$tmpdir/m21.log"
+  home="$(mktemp -d)"
+  mkdir -p "$home/.config/mossferry"
+  cat >"$home/.config/mossferry/config" <<'CFG'
+FERRY_HOST_CANDIDATES="lan-host,ts-host"
+FERRY_DEFAULT_CMD="true"
+CFG
+  # lan-host unreachable → should launch ts-host
+  FAKE_SSH_UNREACHABLE=lan-host \
+    run_ferry_home "$home" "$outf" "$errf" "$logf" --
+  picked_ts=0
+  while IFS= read -r l || [[ -n "$l" ]]; do
+    base="${l%% *}"; base="${base##*/}"
+    if [[ "$base" == mosh && "$l" == *" ts-host "* ]]; then
+      picked_ts=1
+    fi
+    if [[ "$base" == mosh && "$l" == *" lan-host "* ]]; then
+      picked_ts=0
+      break
+    fi
+  done <"$logf"
+  if [[ $picked_ts -eq 1 ]]; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  expected mosh to ts-host; log=%s\n' "$(cat "$logf")" >&2
+  fi
+  unset FAKE_SSH_UNREACHABLE || true
+}
+
+# --- m22: explicit CLI host wins over FERRY_HOST_CANDIDATES ---
+{
+  name=m22
+  outf="$tmpdir/m22.out" errf="$tmpdir/m22.err" logf="$tmpdir/m22.log"
+  home="$(mktemp -d)"
+  mkdir -p "$home/.config/mossferry"
+  cat >"$home/.config/mossferry/config" <<'CFG'
+FERRY_HOST_CANDIDATES="lan-host,ts-host"
+CFG
+  run_ferry_home "$home" "$outf" "$errf" "$logf" -- forced-host --list
+  line="$(head -n1 "$logf" 2>/dev/null || true)"
+  if [[ "$line" == *" forced-host "* || "$line" == *" forced-host" ]]; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  expected forced-host in log; got: %s\n' "$line" >&2
+  fi
+}
+
 if [[ $fail -ne 0 ]]; then
   exit 1
 fi
