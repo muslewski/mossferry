@@ -116,7 +116,7 @@ _rs_err() {
 load_config() {
   # Snapshot env (env > file > default).
   local e_REMOTE_BIN e_REPO_BASE e_DEFAULT_CMD e_DEFAULT_HOST e_SERVER_TIMEOUT e_REMOTE_REPO
-  local e_HIDDEN_WINDOW_GLOB e_BANNER e_LAUNCHERS e_START_MENU
+  local e_HIDDEN_WINDOW_GLOB e_BANNER e_LAUNCHERS e_START_MENU e_SAGE
   e_REMOTE_BIN="${FERRY_REMOTE_BIN-__UNSET__}"
   e_REPO_BASE="${FERRY_REPO_BASE-__UNSET__}"
   e_DEFAULT_CMD="${FERRY_DEFAULT_CMD-__UNSET__}"
@@ -127,6 +127,7 @@ load_config() {
   e_BANNER="${FERRY_BANNER-__UNSET__}"
   e_LAUNCHERS="${FERRY_LAUNCHERS-__UNSET__}"
   e_START_MENU="${FERRY_START_MENU-__UNSET__}"
+  e_SAGE="${FERRY_SAGE-__UNSET__}"
 
   FERRY_REMOTE_BIN=".local/bin/repo-session"
   FERRY_REPO_BASE="${HOME}/Repositories"
@@ -142,6 +143,8 @@ load_config() {
   # ctrl-a:claude,ctrl-g:grok for power-user chords. Personal wallet names
   # belong in the user's config file, never in shipped defaults.
   FERRY_LAUNCHERS=""
+  # Optional agentic-sage wire: auto when `sage` on PATH; off|0|false|no hard-kills.
+  FERRY_SAGE="auto"
 
   if [[ -r "${HOME}/.config/mossferry/config" ]]; then
     # shellcheck source=/dev/null
@@ -158,6 +161,17 @@ load_config() {
   [[ "$e_BANNER" != "__UNSET__" ]] && FERRY_BANNER="$e_BANNER"
   [[ "$e_LAUNCHERS" != "__UNSET__" ]] && FERRY_LAUNCHERS="$e_LAUNCHERS"
   [[ "$e_START_MENU" != "__UNSET__" ]] && FERRY_START_MENU="$e_START_MENU"
+  [[ "$e_SAGE" != "__UNSET__" ]] && FERRY_SAGE="$e_SAGE"
+}
+
+# Hybrid sage adapter: auto when sage on PATH; FERRY_SAGE=off hard-kills.
+# Never blocks picker when sage is broken — callers must tolerate failure.
+_ferry_sage_enabled() {
+  case "${FERRY_SAGE:-auto}" in
+    off|0|false|no|OFF|FALSE|NO) return 1 ;;
+  esac
+  command -v sage >/dev/null 2>&1 || return 1
+  return 0
 }
 
 # Parse FERRY_LAUNCHERS into LAUNCHER_KEYS / LAUNCHER_CMDS (parallel arrays).
@@ -590,19 +604,69 @@ picker_rename() {
   "$TMUXBIN" rename-session -t "=$old" "$new"
 }
 
-# Rows for fzf (tab-delimited) + the "new session" sentinel. Used by --picker-rows
+# Rows for fzf (tab-delimited) + synthetic create rows. Used by --picker-rows
 # and by fzf --bind reload so kill/rename never tear down the picker.
 _NEW_SESSION_LABEL=$'➕ new session…'
+_NEW_JUDGE_LABEL=$'⚖ new judge…'
 print_picker_rows() {
   local r="${1:-}"
   build_session_rows "$r"
   printf '%s\n' "$_NEW_SESSION_LABEL"
+  if _ferry_sage_enabled; then
+    printf '%s\n' "$_NEW_JUDGE_LABEL"
+  fi
 }
 
 # True if the fzf field-1 token is the synthetic "new session" row (not a tmux session).
 _is_new_session_row() {
   local n="${1:-}"
   [[ -z "$n" || "$n" == "$_NEW_SESSION_LABEL" || "$n" == "➕ new session…" || "$n" == ➕* ]]
+}
+
+_is_new_judge_row() {
+  local n="${1:-}"
+  [[ "$n" == "$_NEW_JUDGE_LABEL" || "$n" == "⚖ new judge…" || "$n" == ⚖* ]]
+}
+
+# fzf preview helper: optional sage chrome + pane capture.
+# Args: session_name (field 1) [preview_target field 6]
+print_picker_preview() {
+  local name="${1:-}" target="${2:-}"
+  if _is_new_session_row "$name"; then
+    printf '%s\n' '➕ new session — enter to create'
+    return 0
+  fi
+  if _is_new_judge_row "$name"; then
+    printf '%s\n' '⚖ new judge — enter → fleet or repo → sage judge run'
+    return 0
+  fi
+  if _ferry_sage_enabled && [[ -n "$name" ]]; then
+    local json chrome=""
+    if command -v timeout >/dev/null 2>&1; then
+      json=$(timeout 0.25 sage about --tmux "$name" --json 2>/dev/null) || true
+    else
+      json=$(sage about --tmux "$name" --json 2>/dev/null) || true
+    fi
+    if [[ -n "$json" ]] && command -v node >/dev/null 2>&1; then
+      chrome=$(printf '%s' "$json" | node -e '
+let d=""; process.stdin.on("data",c=>d+=c); process.stdin.on("end",()=>{
+  try {
+    const j=JSON.parse(d);
+    if (!j || !j.found) return;
+    if (j.facts) console.log(j.facts);
+    if (j.judge) console.log("⚖ "+j.judge);
+  } catch {}
+});') || true
+    fi
+    if [[ -n "$chrome" ]]; then
+      printf '%s\n' "$chrome"
+      printf '%s\n' '────────────────'
+    fi
+  fi
+  if [[ -n "$target" ]]; then
+    "$TMUXBIN" capture-pane -ep -t "$target" 2>/dev/null || true
+  fi
+  return 0
 }
 
 # Create a new git repo under FERRY_REPO_BASE. No tmux.
@@ -858,6 +922,92 @@ _arm_start_cmd_if_needed() {
   return 0
 }
 
+# Sage judge create: scope fleet | repo → tmux session running sage judge run.
+# Returns 1 on invalid/cancel-reload; exits 130 on hard cancel; execs on success.
+_do_new_judge_flow() {
+  local scope choice name dir="" i d
+  if ! _ferry_sage_enabled; then
+    echo "repo-session: sage not available (install agentic-sage or set FERRY_SAGE=auto)" >&2
+    return 1
+  fi
+  # Scope menu
+  if command -v fzf >/dev/null 2>&1 && [[ -z "${FERRY_NO_FZF:-}" ]]; then
+    choice=$(
+      printf '%s\n' 'fleet (desk-wide)' 'repo…' | fzf --layout=reverse --header-first --cycle \
+        --header 'judge scope · enter=pick · esc=cancel' --prompt='judge> '
+    ) || exit 130
+  else
+    printf '1) fleet (desk-wide)\n2) repo…\nq) cancel\n' >&2
+    if ! read -r choice; then exit 130; fi
+    case "$choice" in
+      q|Q|"") exit 130 ;;
+      1) choice='fleet (desk-wide)' ;;
+      2) choice='repo…' ;;
+      *) return 1 ;;
+    esac
+  fi
+  [[ -z "$choice" ]] && exit 130
+  if [[ "$choice" == fleet* ]]; then
+    scope=fleet
+    name="sage-judge"
+    dir="$HOME"
+    startcmd="sage judge run --fleet"
+  else
+    scope=repo
+    # Pick repo under base (no home/new-repo rows)
+    local -a dirs=()
+    if [[ -n "${repo:-}" ]]; then
+      dirs=("$repo")
+    elif [[ -d "$FERRY_REPO_BASE" ]]; then
+      while IFS= read -r d; do
+        [[ -n "$d" ]] && dirs+=("$d")
+      done < <(ls -1 "$FERRY_REPO_BASE" 2>/dev/null)
+    fi
+    if (( ${#dirs[@]} == 0 )); then
+      echo "repo-session: no repos under $FERRY_REPO_BASE for judge --repo" >&2
+      return 1
+    fi
+    if command -v fzf >/dev/null 2>&1 && [[ -z "${FERRY_NO_FZF:-}" ]]; then
+      choice=$(printf '%s\n' "${dirs[@]}" | fzf --layout=reverse --header-first --cycle \
+        --header 'judge repo · enter=pick · esc=cancel' --prompt='judge repo> ') || exit 130
+    else
+      i=1
+      for d in "${dirs[@]}"; do
+        printf '%d) %s\n' "$i" "$d" >&2
+        ((i++)) || true
+      done
+      printf 'q) cancel\n' >&2
+      if ! read -r choice; then exit 130; fi
+      case "$choice" in
+        q|Q|"") exit 130 ;;
+        *)
+          if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#dirs[@]} )); then
+            choice="${dirs[$((choice - 1))]}"
+          else
+            return 1
+          fi
+          ;;
+      esac
+    fi
+    [[ -z "$choice" ]] && exit 130
+    if [[ ! -d "${FERRY_REPO_BASE}/${choice}" ]]; then
+      echo "repo-session: no repo '${choice}' under $FERRY_REPO_BASE" >&2
+      return 1
+    fi
+    name="sage-judge-${choice}"
+    # Sanitize session name
+    name="${name// /-}"
+    dir="${FERRY_REPO_BASE}/${choice}"
+    startcmd="sage judge run --repo"
+  fi
+  # Create detached session if missing, then attach
+  if ! "$TMUXBIN" has-session -t "=$name" 2>/dev/null; then
+    "$TMUXBIN" new-session -d -s "$name" -c "$dir"
+    "$TMUXBIN" send-keys -t "$name" "$startcmd" C-m
+  fi
+  exec "$TMUXBIN" attach -t "=$name"
+}
+
 # Returns 1 on invalid input (reload picker); exits 130 on cancel; execs on success.
 _do_new_session_flow() {
   local chosen name
@@ -960,7 +1110,7 @@ run_picker() {
   # Skip the synthetic "new session" row. Optional confirm via FERRY_KILL_CONFIRM.
   bind_kill="ctrl-x:execute-silent(
     n=\"{1}\"
-    case \"\$n\" in ''|➕*) exit 0 ;; esac
+    case \"\$n\" in ''|➕*|⚖*) exit 0 ;; esac
     if [ \"\${FERRY_KILL_CONFIRM:-0}\" = 1 ]; then
       printf 'kill %s? [y/N] ' \"\$n\" >/dev/tty
       read -rsn1 a </dev/tty || exit 0
@@ -972,7 +1122,7 @@ run_picker() {
   # Rename: still needs a name; stays in-picker via execute+reload.
   bind_rename="ctrl-r:execute(
     n=\"{1}\"
-    case \"\$n\" in ''|➕*) exit 0 ;; esac
+    case \"\$n\" in ''|➕*|⚖*) exit 0 ;; esac
     printf 'new name: ' >/dev/tty
     read -r nn </dev/tty || exit 0
     [ -n \"\$nn\" ] || exit 0
@@ -997,17 +1147,14 @@ run_picker() {
     # Subtle update line when client/remote VERSION diverge (set in main handshake).
     header="$(_header_with_nudge "$header")"
 
-    # Preview: field 6 is session:window. The ➕ new-session sentinel has no
-    # field 6 — fzf expands missing placeholders to shell-empty `''`. A bare
-    # `capture-pane -t {6}` then targets the empty name (or, historically,
-    # self-captured the picker pane) → recursive/"duplicated" list when cycling
-    # up onto ➕. Leave {6} unquoted so fzf's shell-escaping applies; guard with
-    # `[ -n {6} ]` (false for `''`).
+    # Preview: sage chrome (optional) + pane capture via --picker-preview.
+    # Empty field 6 on synthetic rows is handled inside print_picker_preview
+    # (never bare capture-pane -t '' → self-mirror / duplicates).
     local -a fzf_args=(
       --ansi --delimiter=$'\t'
       --layout=reverse --header-first --cycle
       --header "$header"
-      --preview "if [ -n {6} ]; then $TMUXBIN capture-pane -ep -t {6}; else printf '%s\n' '➕ new session — enter to create'; fi"
+      --preview "bash ${self_q} --picker-preview {1} {6}"
       --preview-window=right:60%
       --bind "$bind_kill"
       --bind "$bind_rename"
@@ -1035,6 +1182,13 @@ run_picker() {
     if [[ "$choice" == "$new_label" || "$choice" == *$'\t'"$new_label" || "$choice" == "➕ new session…" ]]; then
       is_new=1
     fi
+    name="${choice%%$'\t'*}"
+
+    # ⚖ new judge (sage wire only)
+    if _is_new_judge_row "$name" || [[ "$choice" == "$_NEW_JUDGE_LABEL" ]]; then
+      _do_new_judge_flow || continue
+      continue
+    fi
 
     # Launcher keys on the new-session row arm create; kill/rename are binds (no expect).
     if (( is_new )); then
@@ -1046,7 +1200,6 @@ run_picker() {
       continue
     fi
 
-    name="${choice%%$'\t'*}"
     [[ -z "$name" ]] && exit 130
 
     # Launcher keys on existing-session rows: ignore, reload.
@@ -1064,6 +1217,7 @@ main() {
   local repo="" fresh=0 list=0 pick="" startcmd="" claim=0 fill=0 wantpick=0 help=0 primary=0
   local client_version="" validate=0 validate_arg=""
   local picker_rows=0 picker_kill_name="" picker_rename_old="" picker_rename_new=""
+  local picker_preview=0 picker_preview_name="" picker_preview_target=""
   local dir sessions
   sessions=()
 
@@ -1092,6 +1246,15 @@ main() {
       --picker-rows)
         picker_rows=1
         if [[ -n "${2:-}" && "${2:-}" != -* ]]; then repo="$2"; shift 2; else shift; fi
+        ;;
+      --picker-preview)
+        # fzf --preview: session name + optional pane target
+        picker_preview=1
+        picker_preview_name="${2:-}"
+        picker_preview_target="${3:-}"
+        shift
+        [[ $# -gt 0 && "${1:-}" != -* ]] && shift
+        [[ $# -gt 0 && "${1:-}" != -* ]] && shift
         ;;
       --picker-kill)
         if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
@@ -1129,6 +1292,10 @@ main() {
   # Internal picker helpers (fzf bind+reload) — exit immediately.
   if (( picker_rows )); then
     print_picker_rows "$repo"
+    exit 0
+  fi
+  if (( picker_preview )); then
+    print_picker_preview "$picker_preview_name" "$picker_preview_target"
     exit 0
   fi
   if [[ -n "$picker_kill_name" ]]; then

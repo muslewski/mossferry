@@ -22,6 +22,8 @@ setup() {
   export REPO_SESSION_TMUXBIN="$FAKE"
   unset FERRY_NO_FZF 2>/dev/null || true
   unset REPO_SESSION_LIB 2>/dev/null || true
+  # Default: no sage wire in tests (host may have real sage on PATH).
+  export FERRY_SAGE=off
   : >"$FAKE_TMUX_LOG"
   export FAKE_TMUX_SESSIONS=""
   export FAKE_TMUX_META=""
@@ -712,15 +714,15 @@ t34() {
   teardown
 }
 
-# ---- t35: --cycle on all three fzf invocations ----
+# ---- t35: --cycle on all fzf invocations (picker + menus + sage judge scopes) ----
 t35() {
   local n
   n=$(grep -c -- '--cycle' "$RS" || true)
-  # main picker + destination sub-picker + start-command menu + (legacy third path)
-  if [[ "$n" -eq 4 ]]; then
+  # main + dest sub-picker + start menu + judge scope + judge repo (≥4; judge wire adds 2)
+  if [[ "$n" -ge 4 ]]; then
     ok t35
   else
-    fail t35 "grep -c -- '--cycle' = $n (want 4)"
+    fail t35 "grep -c -- '--cycle' = $n (want ≥4)"
   fi
 }
 
@@ -987,20 +989,65 @@ t42() {
   teardown
 }
 
-# ---- t43: preview must not capture-pane with empty {6} (➕ row / cycle wrap) ----
-# Missing field 6 on the new-session sentinel: fzf expands {6} to shell-empty `''`.
-# Bare `capture-pane -ep -t {6}` then self-captures / errors → recursive/duplicated UI
-# when cycling up onto ➕. Require an `[ -n {6} ]` guard before capture-pane.
+# ---- t43: preview uses --picker-preview (guards empty target / sage chrome) ----
 t43() {
   local src prev
   src=$(cat "$RS")
   prev=$(printf '%s\n' "$src" | grep -E -- '--preview' | head -1)
-  if printf '%s\n' "$prev" | grep -q 'capture-pane' \
-    && printf '%s\n' "$prev" | grep -qF '[ -n {6} ]'; then
+  if printf '%s\n' "$prev" | grep -qF -- '--picker-preview' \
+    && grep -q 'print_picker_preview' <<<"$src" \
+    && grep -q '_ferry_sage_enabled' <<<"$src"; then
     ok t43
   else
-    fail t43 "preview lacks empty-{6} guard: [$prev]"
+    fail t43 "preview/sage adapter missing: [$prev]"
   fi
+}
+
+# ---- t44: FERRY_SAGE=off → no judge row; auto+fake sage → judge row ----
+t44() {
+  setup
+  local out last
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  export FAKE_TMUX_SESSIONS=$'s1'
+  export FERRY_SAGE=off
+  out=$(bash "$RS" --picker-rows 2>/dev/null) || true
+  if printf '%s\n' "$out" | grep -q 'new judge'; then
+    fail t44 "judge row present with FERRY_SAGE=off out=[$out]"
+    teardown
+    return
+  fi
+  export FERRY_SAGE=auto
+  export PATH="$ROOT/tests/fake-bin:$PATH"
+  out=$(bash "$RS" --picker-rows 2>/dev/null) || true
+  last=$(printf '%s\n' "$out" | tail -n 1)
+  if printf '%s\n' "$out" | grep -q 'new session' \
+    && printf '%s\n' "$out" | grep -q 'new judge'; then
+    ok t44
+  else
+    fail t44 "expected both create rows last=[$last] out=[$out]"
+  fi
+  teardown
+}
+
+# ---- t45: --picker-preview with fake sage prints facts then capture ----
+t45() {
+  setup
+  local out
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  export FAKE_TMUX_SESSIONS=$'demo'
+  export FAKE_TMUX_META=$'demo|bash|1w detached bash'
+  export FERRY_SAGE=auto
+  export PATH="$ROOT/tests/fake-bin:$PATH"
+  export FAKE_SAGE_LOG="$(mktemp "${TMPDIR}/sage-log.XXXXXX")"
+  out=$(bash "$RS" --picker-preview demo 'demo:0' 2>/dev/null) || true
+  if printf '%s\n' "$out" | grep -q 'working' \
+    && printf '%s\n' "$out" | grep -q 'watch merge' \
+    && grep -q 'about' "$FAKE_SAGE_LOG"; then
+    ok t45
+  else
+    fail t45 "out=[$out] sage_log=[$(cat "$FAKE_SAGE_LOG" 2>/dev/null)]"
+  fi
+  teardown
 }
 
 export TEST_TMPDIR_ROOT="${TMPDIR:-/tmp}"
@@ -1014,5 +1061,5 @@ t33; t34; t35
 t36; t37; t38
 t39
 t40; t41; t42
-t43
+t43; t44; t45
 exit $FAIL

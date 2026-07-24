@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Optional agentic-sage wire** (`FERRY_SAGE=auto` default): when `sage` is on
+  the remote PATH, the picker preview shows sage facts + judge one-liners above
+  the pane capture, and **⚖ new judge…** creates a session via
+  `sage judge run --fleet` or `--repo`. `FERRY_SAGE=off` restores classic ferry.
+  One-liners are produced by sage (not ferry). See works-with / design
+  `2026-07-24-ferry-sage-wire-design`.
+
 ### Fixed
 
 - **Picker cycle wrap duplicated the list**: pressing up onto `➕ new session…`

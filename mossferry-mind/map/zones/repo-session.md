@@ -1,7 +1,7 @@
 ---
 type: zone
-summary: "Remote brain (bin/repo-session): fzf/menu tmux session picker, create/attach, atomic grid claim, nested start menu (FERRY_START_MENU) + optional FERRY_LAUNCHERS hotkeys, in-place kill/rename, validate_repo."
-tags: [remote, tmux, picker, fzf]
+summary: "Remote brain (bin/repo-session): fzf/menu tmux session picker, create/attach, atomic grid claim, nested start menu, optional FERRY_LAUNCHERS, optional FERRY_SAGE wire (sage about preview + ⚖ new judge), kill/rename, validate_repo."
+tags: [remote, tmux, picker, fzf, sage]
 status: seeded
 created: 2026-07-21
 updated: 2026-07-23
@@ -47,9 +47,11 @@ None claimed yet on seed. Candidates for later verification:
 - `ctrl-x` / `ctrl-r` reserved (kill/rename); not valid launcher keys.
 - fzf kill/rename binds quote `"{1}"` so session names with trailing/embedded
   spaces match `kill-session -t =name` exactly.
-- Main picker preview guards empty `{6}` (`[ -n {6} ]` before `capture-pane`)
-  so the ➕ new-session row (no field 6) does not self-capture the picker when
-  cycling up onto last — that used to mirror/duplicate the list in the preview.
+- Main picker preview uses `--picker-preview` (sage chrome optional + capture);
+  synthetic rows never call bare `capture-pane -t ''` (cycle-to-➕ no self-mirror).
+- Optional **FERRY_SAGE** hybrid wire: when `sage` on PATH and not `off`, preview
+  shows `sage about --tmux` facts/judge lines; **⚖ new judge…** runs
+  `sage judge run --fleet|--repo`.
 - Create path: destination first, then nested start menu when
   `FERRY_START_MENU` or launcher cmds are non-empty; hotkey-armed `startcmd`
   skips the menu.

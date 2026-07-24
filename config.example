@@ -30,3 +30,7 @@
 #                                            # wrap is the Mac-side OSC 52 / terminal-restore layer.
 #FERRY_TRANSPORT="mosh"                      # local interactive hop: mosh (roam) or ssh (better
 #                                            # OSC 52 through grok wrap; no mosh reconnect)
+#FERRY_SAGE="auto"                           # remote: wire agentic-sage when `sage` on PATH
+#                                            # (picker preview one-liners + ⚖ new judge…).
+#                                            # auto|on|off — off hard-kills even if sage installed.
+

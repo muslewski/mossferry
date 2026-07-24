@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Fake sage for mossferry tests. Logs argv; answers about / judge run.
+logf="${FAKE_SAGE_LOG:-}"
+if [[ -n "$logf" ]]; then
+  printf '%s\n' "$*" >>"$logf"
+fi
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  about)
+    # sage about --tmux NAME [--json]
+    tmux_name=""
+    json=0
+    while (( $# )); do
+      case "$1" in
+        --tmux) tmux_name="${2:-}"; shift 2 ;;
+        --json) json=1; shift ;;
+        *)
+          [[ -z "$tmux_name" && "$1" != -* ]] && tmux_name="$1"
+          shift
+          ;;
+      esac
+    done
+    if [[ "${FAKE_SAGE_ABOUT_JSON:-}" ]]; then
+      printf '%s\n' "$FAKE_SAGE_ABOUT_JSON"
+      exit 0
+    fi
+    if (( json )); then
+      if [[ -n "$tmux_name" && "$tmux_name" != "unknown" ]]; then
+        printf '{"schema":1,"kind":"sage.about","tmux":"%s","found":true,"facts":"working · main · claim:src/**","judge":"watch merge","role":"worker","liveness":"working","session_id":"s1","repo_id":"r-1"}\n' "$tmux_name"
+      else
+        printf '{"schema":1,"kind":"sage.about","tmux":"%s","found":false,"facts":"","judge":"","role":"","liveness":"","session_id":"","repo_id":null}\n' "$tmux_name"
+      fi
+    else
+      printf 'working · main\n'
+    fi
+    exit 0
+    ;;
+  judge)
+    # log only; exit 0
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
