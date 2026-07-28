@@ -57,6 +57,28 @@ Personal wallet / profile command names belong only in your `~/.config/mossferry
 
 Optional power-user hotkeys via `FERRY_LAUNCHERS` (e.g. `ctrl-a:claude,ctrl-g:grok`) still arm the start command and skip the menu for that creation. On an existing-session row, launcher keys are ignored (list reloads).
 
+### Dual wallets (Delieta + Muslewski)
+
+When you keep two Grok identities on the host, put **wrappers** (not plain `grok`) in your personal config:
+
+```sh
+# ~/.config/mossferry/config  (host-side; never commit wallets into the OSS repo)
+FERRY_START_MENU="claude,grok-delieta,grok-muslewski"
+FERRY_LAUNCHERS="ctrl-a:claude,ctrl-g:grok-delieta,ctrl-m:grok-muslewski"
+```
+
+| Chord / menu entry | Wallet | Sessions live under |
+|--------------------|--------|---------------------|
+| `grok-delieta` / `ctrl-g` | company | `~/.grok-profiles/delieta/sessions/` |
+| `grok-muslewski` / `ctrl-m` | personal/work | `~/.grok-profiles/muslewski/sessions/` |
+
+**Switching wallets is create-time, not attach-time.** Attaching an old pane resumes that process and its context (and can feel “dumb” after multi-day threads). Fresh brain:
+
+1. `ctrl-x` kill the stale session (or soft-fresh all Grok panes), or
+2. `➕` → repo → start menu → `grok-delieta` / `grok-muslewski` (or chord)
+
+The picker shows a **wallet badge** when a pane is running Grok: display `g:delieta:…` / `g:muslewski:…` and cmd `grok[delieta]` so you never attach the wrong company.
+
 ## mosh and clipboard
 
 Many mosh builds **strip OSC 52**, so wrap cannot invent clipboard bytes that never arrive. Use `FERRY_TRANSPORT=ssh` when you need reliable Grok → local clipboard, or keep host-side yank pipes (e.g. tmux → `pbcopy`).

@@ -523,6 +523,48 @@ except Exception:
   [[ -n "$st" ]] && printf '%s' "$st"
 }
 
+# Wallet label for a live Grok pane (reads GROK_HOME from the pane process / children).
+# Prints delieta|muslewski|default|<basename> or empty if not a Grok session / unreadable.
+# Linux /proc only; silent no-op on macOS or when no matching process.
+_ferry_grok_wallet_badge() {
+  local sess="$1" pid tty home base child
+  # Match build_session_rows targeting: -t "$sess" (bare name). Exact =$sess can
+  # return empty pane_* fields on some tmux builds when only the session is given.
+  pid=$("$TMUXBIN" display-message -p -t "$sess" '#{pane_pid}' 2>/dev/null) || return 0
+  tty=$("$TMUXBIN" display-message -p -t "$sess" '#{pane_tty}' 2>/dev/null) || true
+  [[ -z "$pid" || "$pid" == '#{pane_pid}' ]] && return 0
+
+  _ferry_grok_home_from_pid() {
+    local p="$1"
+    [[ -r "/proc/$p/environ" ]] || return 1
+    tr '\0' '\n' <"/proc/$p/environ" 2>/dev/null | sed -n 's/^GROK_HOME=//p' | head -1
+  }
+
+  home=$(_ferry_grok_home_from_pid "$pid" || true)
+  # Pane may be a shell wrapper; walk children (and tty peers) for grok.real.
+  if [[ -z "$home" ]]; then
+    for child in $(pgrep -P "$pid" 2>/dev/null); do
+      home=$(_ferry_grok_home_from_pid "$child" || true)
+      [[ -n "$home" ]] && break
+    done
+  fi
+  if [[ -z "$home" && -n "$tty" && "$tty" != '#{pane_tty}' ]]; then
+    for child in $(pgrep -f 'grok\.real' 2>/dev/null); do
+      [[ "$(readlink "/proc/$child/fd/0" 2>/dev/null || true)" == "$tty" ]] || continue
+      home=$(_ferry_grok_home_from_pid "$child" || true)
+      [[ -n "$home" ]] && break
+    done
+  fi
+  [[ -z "${home:-}" ]] && return 0
+  base=$(basename "$home")
+  case "$home" in
+    */.grok-profiles/delieta|*/grok-profiles/delieta) printf 'delieta' ;;
+    */.grok-profiles/muslewski|*/grok-profiles/muslewski) printf 'muslewski' ;;
+    */.grok) printf 'default' ;;
+    *) printf '%s' "$base" ;;
+  esac
+}
+
 # One line per live session (optionally scoped to <repo>):
 #   <session>\t<display_window>\t<N>w\t<attached|detached>\t<cmd>\t<preview_target>
 # Display window skips FERRY_HIDDEN_WINDOW_GLOB (default _*); preview_target is session:index.
@@ -580,6 +622,16 @@ build_session_rows() {
         display_name="hermes:${badge}:${display_name}"
       else
         display_name="hermes:${display_name}"
+      fi
+    fi
+
+    # Badge Grok dual-wallet sessions (delieta vs muslewski vs default)
+    # so attach never guesses the wrong company identity.
+    if [[ "$cmd" == *grok* ]]; then
+      badge="$(_ferry_grok_wallet_badge "$s")"
+      if [[ -n "$badge" ]]; then
+        cmd="grok[$badge]"
+        display_name="g:${badge}:${display_name}"
       fi
     fi
 

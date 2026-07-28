@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Grok dual-wallet badge** in the picker: when a pane runs Grok, display
+  `g:delieta:…` / `g:muslewski:…` and cmd `grok[delieta]` by reading
+  `GROK_HOME` from the pane process (Linux `/proc`). Makes company vs personal
+  wallets visible so attach never guesses wrong. Personal start-menu names still
+  live only in user config.
 - **Optional agentic-sage wire** (`FERRY_SAGE=auto` default): when `sage` is on
   the remote PATH, the picker preview shows sage facts + judge one-liners above
   the pane capture, and **⚖ new judge…** creates a session via

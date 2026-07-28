@@ -1,10 +1,10 @@
 ---
 type: zone
-summary: "Remote brain (bin/repo-session): fzf/menu tmux session picker, create/attach, atomic grid claim, nested start menu, optional FERRY_LAUNCHERS, optional FERRY_SAGE wire (sage about preview + ⚖ new judge), kill/rename, validate_repo."
-tags: [remote, tmux, picker, fzf, sage]
+summary: "Remote brain (bin/repo-session): fzf/menu tmux session picker, create/attach, atomic grid claim, nested start menu, optional FERRY_LAUNCHERS, Grok wallet badge (GROK_HOME → delieta/muslewski), optional FERRY_SAGE wire, kill/rename, validate_repo."
+tags: [remote, tmux, picker, fzf, sage, grok]
 status: seeded
 created: 2026-07-21
-updated: 2026-07-23
+updated: 2026-07-28
 verifiedAt: unverified
 owns:
   routes: []
@@ -55,6 +55,9 @@ None claimed yet on seed. Candidates for later verification:
 - Create path: destination first, then nested start menu when
   `FERRY_START_MENU` or launcher cmds are non-empty; hotkey-armed `startcmd`
   skips the menu.
+- Live Grok panes badge wallet from `GROK_HOME` (`g:delieta:…` /
+  `g:muslewski:…`, cmd `grok[wallet]`) so dual-company hosts can tell identities
+  apart in the picker. Linux `/proc` only; silent empty on other OS.
 
 ## Lineage
 
