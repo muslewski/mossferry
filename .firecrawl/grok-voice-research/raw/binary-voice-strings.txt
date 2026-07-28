@@ -1,0 +1,74 @@
+[pw-record] @141948348 #1
+verflows MAX_SIZEskipping voice STT header (invalid value): pw-recordparecarecord:  exited immediately ()failed to poll no microphone recorder found on PATH: install pipewire (pw-record), pulseaudio-utils (parec), or alsa-utils (arecord)system recorder; uses the audio 
+
+[pw-record] @141948464 #2
+oll no microphone recorder found on PATH: install pipewire (pw-record), pulseaudio-utils (parec), or alsa-utils (arecord)system recorder; uses the audio server's default inputevent crates/codegen/xai-grok-voice/src/audio/capture_linux.rs:204xai_grok_voice::audio::captu
+
+[GROK_VOICE] @133928327 #1
+od.rs:413late_thememinimal downgrade: resolved regular themeGROK_VOICE_MODEgrok: --plugin-dir : not a directory; skipping|; skipping|Failed to set working directory to event crates/codegen/xai-grok-pager/src/app/mod.rs:917run_errorevent crates/codegen/xai-grok-pager/src
+
+[GROK_VOICE] @134296437 #2
+ning TUI. If you suspect the helper itself is misbehaving, `GROK_VOICE_CAPTURE=inprocess` forces the legacy in-process capture for comparison.||### Problem: Byobu + GNU screen||Byobu on screen has best-effort support only. Prefer Byobu on tmux.||---||## Still Stuck?||Ru
+
+[Ctrl+Space] @133871049 #1
+ or /usage manageusage/usage [show|manage]Toggle dictation (Ctrl+Space/F8; Esc/Enter to stop)Dictation (Ctrl+Space/F8; Esc/Enter to stop)voice/voiceUnable to find FormattedFields in extensions; this is a bugfieldfield_errorfield was no a valid objectView hookshooks/hook
+
+[Ctrl+Space] @133871093 #2
+ggle dictation (Ctrl+Space/F8; Esc/Enter to stop)Dictation (Ctrl+Space/F8; Esc/Enter to stop)voice/voiceUnable to find FormattedFields in extensions; this is a bugfieldfield_errorfield was no a valid objectView hookshooks/hooksPolled after ready.max requests in-flight; 
+
+[/voice requires] @133952626 #1
+turn-start shim)turn_start_shimImages removed (skill prompt)/voice requires SuperGrok ||| upgrade at prompt.enqueueevent crates/codegen/xai-grok-pager/src/app/dispatch/prompt.rs:1285pending_lenhas_pending_adoptionxai_grok_pager::app::dispatch::promptcrates/codegen/xai-grok-p
+
+[Voice capture] @133966945 #1
+/xai-grok-pager/src/app/dispatch/settings/setters.rs:187||| Voice capture: event crates/codegen/xai-grok-pager/src/app/dispatch/settings/setters.rs:239effective||| Voice language: System (||| Voice language: event crates/codegen/xai-grok-pager/src/app/dispatch/settings/set
+
+[Voice capture] @134367038 #2
+rce switching; use Fn+F8 on a laptop).|Behavior follows the Voice capture setting: toggle (press to start, press again to stop) or hold-to-talk (hold to record, release to stop), where hold needs a Kitty-protocol terminal and falls back to toggle elsewhere. `/voice` toggle
+
+[Voice language] @133967049 #1
+-pager/src/app/dispatch/settings/setters.rs:239effective||| Voice language: System (||| Voice language: event crates/codegen/xai-grok-pager/src/app/dispatch/settings/setters.rs:1427Action::PreviewAutoDarkTheme dispatched with invalid name ||| no-opevent crates/codegen/xai-g
+
+[Voice language] @133967077 #2
+ings/setters.rs:239effective||| Voice language: System (||| Voice language: event crates/codegen/xai-grok-pager/src/app/dispatch/settings/setters.rs:1427Action::PreviewAutoDarkTheme dispatched with invalid name ||| no-opevent crates/codegen/xai-grok-pager/src/app/dispatch/s
+
+[no microphone recorder] @141948408 #1
+pw-recordparecarecord:  exited immediately ()failed to poll no microphone recorder found on PATH: install pipewire (pw-record), pulseaudio-utils (parec), or alsa-utils (arecord)system recorder; uses the audio server's default inputevent crates/codegen/xai-grok-voice/src/audio/captu
+
+[system recorder] @141948525 #1
+w-record), pulseaudio-utils (parec), or alsa-utils (arecord)system recorder; uses the audio server's default inputevent crates/codegen/xai-grok-voice/src/audio/capture_linux.rs:204xai_grok_voice::audio::capture_linuxcrates/codegen/xai-grok-voice/src/audio/capture_linux.rsfai
+
+[no speech detected] @134295393 #1
+ ~10 seconds without a transcript Grok stops and shows a **"no speech detected ||| voice stopped"** toast with fix steps.||On macOS the most common cause is microphone permission: the OS feeds unauthorized apps silence instead of erroring, and the permission belongs to the *ter
+
+[no speech detected] @141949558 #2
+rtugueseroruRussianesSpanishsvSwedishthtrTurkishviVietnameseno speech detected ||| voice stoppedcheck the default input device and its volume in your sound settings (e.g. `pavucontrol`, or `wpctl status` on PipeWire).If your mic wasn't picked up, url::form_urlencoded::Serialize
+
+[no-input-device] @133890050 #1
+ system and restores terminal modes if the connection drops.no-input-deviceVoice dictation can't capture audio ||| Connect or select an input device in your system sound settings, then re-run /doctor or grok doctor.NO_COLOR set -- themed colors disabledTerminal.app is 256-co
+
+[stt_ws_path] @141949804 #1
+ url::form_urlencoded::Serializer finishedstruct VoiceConfigstt_ws_pathstt_endpointing_msstt_interim_resultsstruct variant SttServerEvent::Createdstruct variant SttServerEvent::Partialstruct variant SttServerEvent::Errorstruct variant SttServerEvent::Donevariant identifi
+
+[xai-grok-voice] @134545320 #1
+/src/registry/types.rs|/runner/_work/xai/xai/crates/codegen/xai-grok-voice/src/stt/streaming.rs|/runner/_work/xai/xai/crates/codegen/xai-grok-voice/src/auth.rs|/runner/_work/xai/xai/crates/codegen/xai-grok-voice/src/pipeline.rs|/runner/_work/xai/xai/crates/codegen/xai-grok-
+
+[xai-grok-voice] @134545393 #2
+e/src/stt/streaming.rs|/runner/_work/xai/xai/crates/codegen/xai-grok-voice/src/auth.rs|/runner/_work/xai/xai/crates/codegen/xai-grok-voice/src/pipeline.rs|/runner/_work/xai/xai/crates/codegen/xai-grok-update/src/auto_update.rs|/runner/_work/xai/xai/crates/codegen/xai-grok-u
+
+[voice_capture_mode] @133941260 #1
+spect_manual_foldsrender_mermaidhunk_tracker_modescreen_modevoice_capture_modevoice_stt_languagemax_thoughts_widthfork_secondary_modelunknown setting key for persist: `StringIntevent crates/codegen/xai-grok-pager/src/app/effects/helpers.rs:869request_seqserialize auth/cancel pa
+
+[voice_capture_mode] @134606929 #2
+roll_speedscroll_modeinvert_scrollscroll_linesrender_mermaidvoice_capture_modevoice_stt_languagemouse_reporting_togglecancel_subagents_on_turn_cancelremember_tool_approvalskeep_text_selectionselection_highlight_duration_msshow_thinking_blockscollapsed_edit_blocksprompt_suggesti
+
+[GROK_VOICE_CAPTURE] @134296437 #1
+ning TUI. If you suspect the helper itself is misbehaving, `GROK_VOICE_CAPTURE=inprocess` forces the legacy in-process capture for comparison.||### Problem: Byobu + GNU screen||Byobu on screen has best-effort support only. Prefer Byobu on tmux.||---||## Still Stuck?||Run `/feed
+
+[Microphone capture] @134366860 #1
+e modeStart voice dictation (Ctrl+Space / F8)Ctrl+Space / F8Microphone capture for dictation, bound to Ctrl+Space (or F8 ||| handy where Ctrl+Space is taken, e.g. macOS input-source switching; use Fn+F8 on a laptop).|Behavior follows the Voice capture setting: toggle (press to 
+
+[Hold to talk] @134384026 #1
+e / F8 starts dictation; press again (or Esc/Enter) to stop.Hold to talkHold Ctrl+Space / F8 to record, release to stop. Needs a Kitty-protocol terminal.Voice captureHow the voice chord (Ctrl+Space / F8) behaves: Toggle (press to start/stop) or Hold to talk (hold to recor
+
+[Hold to talk] @134384211 #2
+ (Ctrl+Space / F8) behaves: Toggle (press to start/stop) or Hold to talk (hold to record, release to stop; needs a Kitty-protocol terminal).localeenEnglishSystemUse the system locale when it is a supported STT language; otherwise English.arArabiccsCzechdaDanishnlDutchfilf

@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "1",
+  "facts": {
+    "terminal": {
+      "name": "unknown",
+      "xtversion": {
+        "status": "unavailable",
+        "value": null
+      }
+    },
+    "multiplexer": {
+      "kind": "tmux",
+      "byobu": null
+    },
+    "ssh": true,
+    "color": {
+      "level": {
+        "status": "available",
+        "value": "none"
+      },
+      "availableThemes": [
+        "groknight",
+        "grokday"
+      ],
+      "totalThemes": 5
+    },
+    "keyboard": null,
+    "newline": null,
+    "clipboard": {
+      "nativeRoute": true,
+      "nativeTool": "arboard",
+      "nativePreflight": "remote_only",
+      "tmuxRoute": true,
+      "osc52Route": true,
+      "osc52Capability": "supported",
+      "wrapSink": true,
+      "displayServer": "unknown",
+      "containerNoDisplay": false,
+      "dataControl": "not_applicable",
+      "delivery": "confirmed",
+      "fix": null
+    },
+    "voice": {
+      "status": "available",
+      "name": "pw-record",
+      "detail": "system recorder; uses the audio server's default input"
+    }
+  },
+  "findings": [
+    {
+      "id": "terminal.limited-color",
+      "disposition": "issue",
+      "message": "NO_COLOR set -- themed colors disabled",
+      "remediation": null,
+      "automaticRemediation": null,
+      "note": "Unset NO_COLOR and restart Grok."
+    }
+  ],
+  "probeNotes": [
+    {
+      "probe": "tmux.version",
+      "status": "unavailable",
+      "message": null
+    },
+    {
+      "probe": "tmux.extended-keys",
+      "status": "unavailable",
+      "message": null
+    },
+    {
+      "probe": "tmux.set-clipboard",
+      "status": "unavailable",
+      "message": null
+    },
+    {
+      "probe": "tmux.allow-passthrough-support",
+      "status": "unavailable",
+      "message": null
+    },
+    {
+      "probe": "tmux.control-mode",
+      "status": "unavailable",
+      "message": null
+    },
+    {
+      "probe": "runtime.fullscreen-active",
+      "status": "unavailable",
+      "message": null
+    },
+    {
+      "probe": "runtime.kitty-flags-pushed",
+      "status": "unavailable",
+      "message": null
+    },
+    {
+      "probe": "runtime.xtversion",
+      "status": "unavailable",
+      "message": null
+    }
+  ],
+  "counts": {
+    "issues": 1,
+    "recommendations": 0,
+    "probeNotes": 8
+  }
+}

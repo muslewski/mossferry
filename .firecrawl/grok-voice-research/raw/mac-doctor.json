@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1",
+  "facts": {
+    "terminal": {
+      "name": "unknown",
+      "xtversion": {
+        "status": "unavailable",
+        "value": null
+      }
+    },
+    "multiplexer": {
+      "kind": "undetected",
+      "byobu": null
+    },
+    "ssh": true,
+    "color": {
+      "level": {
+        "status": "unavailable",
+        "value": null
+      },
+      "availableThemes": [],
+      "totalThemes": 5
+    },
+    "keyboard": null,
+    "newline": {
+      "kind": "no_kitty_keyboard_protocol"
+    },
+    "clipboard": {
+      "nativeRoute": true,
+      "nativeTool": "pbcopy",
+      "nativePreflight": "remote_only",
+      "tmuxRoute": false,
+      "osc52Route": true,
+      "osc52Capability": "unknown",
+      "wrapSink": false,
+      "displayServer": "quartz",
+      "containerNoDisplay": false,
+      "dataControl": "not_applicable",
+      "delivery": "unverified",
+      "fix": "grok wrap <ssh command> or /minimal"
+    },
+    "voice": {
+      "status": "available",
+      "name": "AirPods Pro",
+      "detail": "24000 Hz, 1 ch, F32"
+    }
+  },
+  "findings": [
+    {
+      "id": "terminal.ssh-wrap",
+      "disposition": "recommendation",
+      "message": "Running over SSH without `grok wrap` -- clipboard copies depend on the terminal's escape-sequence support, and a dropped connection can leave your local terminal in a bad state",
+      "remediation": {
+        "fix": "grok wrap ssh <host>",
+        "configPath": null
+      },
+      "automaticRemediation": {
+        "fixId": "terminal.ssh-wrap",
+        "command": "grok doctor fix terminal.ssh-wrap"
+      },
+      "note": "Run it on your local machine in place of plain `ssh` -- it forwards clipboard copies to your local system and restores terminal modes if the connection drops."
+    }
+  ],
+  "probeNotes": [
+    {
+      "probe": "runtime.fullscreen-active",
+      "status": "unavailable",
+      "message": null
+    },
+    {
+      "probe": "runtime.kitty-flags-pushed",
+      "status": "unavailable",
+      "message": null
+    },
+    {
+      "probe": "runtime.xtversion",
+      "status": "unavailable",
+      "message": null
+    },
+    {
+      "probe": "terminal.color",
+      "status": "unavailable",
+      "message": null
+    }
+  ],
+  "counts": {
+    "issues": 1,
+    "recommendations": 1,
+    "probeNotes": 4
+  }
+}
