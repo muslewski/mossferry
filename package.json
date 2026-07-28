@@ -24,7 +24,14 @@
   "scripts": {
     "test": "bash tests/run.sh",
     "docs:check": "node ../docs-kit/bin/docs-kit.mjs check docs/",
-    "docs:health": "node ../docs-kit/bin/docs-kit.mjs health docs/"
+    "docs:health": "node ../docs-kit/bin/docs-kit.mjs health docs/",
+    "atlas": "atlas",
+    "atlas:gate": "atlas gate",
+    "atlas:doctor": "atlas doctor",
+    "atlas:wire": "atlas wire all",
+    "predev": "atlas gate",
+    "mind:check": "atlas check",
+    "mind:build": "atlas build"
   },
   "keywords": [
     "mosh",
@@ -45,5 +52,8 @@
   "bugs": {
     "url": "https://github.com/muslewski/mossferry/issues"
   },
-  "homepage": "https://mossferry.muslewski.com/"
+  "homepage": "https://mossferry.muslewski.com/",
+  "devDependencies": {
+    "memory-atlas": "0.5.3"
+  }
 }
