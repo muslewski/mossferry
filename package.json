@@ -45,5 +45,8 @@
   "bugs": {
     "url": "https://github.com/muslewski/mossferry/issues"
   },
-  "homepage": "https://mossferry.muslewski.com/"
+  "homepage": "https://mossferry.muslewski.com/",
+  "devDependencies": {
+    "memory-atlas": "0.5.3"
+  }
 }
