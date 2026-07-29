@@ -40,6 +40,16 @@ eq "live 3000 is LISTEN" "LISTEN" "$(printf '%s\n' "$rows" | awk -F'\t' '$1==300
 eq "postgres is loopback-only" "loopback-only" "$(printf '%s\n' "$rows" | awk -F'\t' '$1==5432{print $11}')"
 eq "no row is missing columns" "0" "$(printf '%s\n' "$rows" | awk -F'\t' 'NF!=14' | wc -l | tr -d '[:space:]')"
 
+
+echo "== servers_fix_plan =="
+eq "reachable → none"          "none"   "$(servers_fix_plan reachable dev 4000 /tmp | cut -f1)"
+eq "loopback dev → recipe"     "recipe" "$(servers_fix_plan loopback-only dev 4000 /tmp | cut -f1)"
+eq "loopback db → tunnel"      "tunnel" "$(servers_fix_plan loopback-only db 5432 /tmp | cut -f1)"
+eq "loopback spine → tunnel"   "tunnel" "$(servers_fix_plan loopback-only spine 8645 /tmp | cut -f1)"
+eq "reserved → refuse"         "refuse" "$(servers_fix_plan reserved infra 8791 /tmp | cut -f1)"
+eq "missing → declare"         "declare" "$(servers_fix_plan declared-missing dev 9999 /tmp | cut -f1)"
+eq "db never yields a recipe"  "0"      "$(servers_fix_plan loopback-only db 5432 /tmp | grep -c 'preview-serve' || true)"
+
 echo "== repo-session --servers =="
 # Fixture flag must not leak into live discovery / subprocess.
 unset FERRY_SERVERS_SS_FIXTURE FERRY_SERVERS_DECL 2>/dev/null || true
