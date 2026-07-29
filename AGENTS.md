@@ -11,6 +11,7 @@ This repository has an Atlas: a plain-markdown knowledge base of what the code i
 <!-- /atlas:onramp -->
 
 ## Docs vs mind
+<!-- desk:ship=human-end-gate -->
 
 - **Public product docs** → [`docs/`](./docs/) (what marketing sites SSG at `/docs/`)
 - **Specs / plans / internal notes** → [`mossferry-mind/`](./mossferry-mind/) (memory-atlas vault — **not** `docs/superpowers/`)

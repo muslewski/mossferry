@@ -336,6 +336,7 @@ ${S}Flags${Z}
   --claude, -c       run \`claude\` in newly-created sessions  (default: neofetch)
   --list, -l         list sessions and exit  (with <repo>: just that repo;
                      without <repo>: every tmux session on the host)
+  --list-servers     list remote listeners (TSV); add --json for agents
   --resume [N|name]  no arg -> session picker; N -> the Nth session;
                      name -> attach that exact session (e.g. --resume syndcast-2)
   --resume-closed    reattach one EXISTING session per caller, distinct (atomic).
@@ -645,6 +646,32 @@ cmd_doctor() {
     _doc_emit info "MagicDNS: HostName is $hostname"
   fi
 
+  # 10. Mac host + reserved ports + servers summary (info only — never changes exit code)
+  local mac_host reserved_list n_listen n_missing n_foreign srv_summary
+  mac_host=""
+  if command -v preview-host >/dev/null 2>&1; then
+    mac_host="$(preview-host 2>/dev/null | head -1 | tr -d '\r')" || mac_host=""
+  fi
+  if [[ -n "$mac_host" ]]; then
+    _doc_emit info "Mac-reachable host: $mac_host"
+  else
+    _doc_emit info "Mac-reachable host: (preview-host not on PATH)"
+  fi
+  reserved_list="${FERRY_SERVERS_RESERVED:-8791 3001 5432 6379 27017 8080 5173 3000}"
+  _doc_emit info "reserved ports: $reserved_list"
+  # Best-effort remote servers summary; never fail doctor on discovery errors
+  srv_summary="$(ssh "$host" "$FERRY_REMOTE_BIN" --servers 2>/dev/null | awk -F'\t' '
+    $2=="LISTEN"{l++}
+    $2=="declared-missing"{m++}
+    $2=="FOREIGN"{f++}
+    END{printf "%d LISTEN · %d declared-missing · %d foreign", l+0, m+0, f+0}
+  ' || true)"
+  if [[ -n "$srv_summary" ]]; then
+    _doc_emit info "servers: $srv_summary"
+  else
+    _doc_emit info "servers: (unavailable — remote --servers not present or empty)"
+  fi
+
   # TTY summary + fix hints
   if (( chrome )); then
     if (( failed )); then
@@ -733,6 +760,19 @@ launch_remote() {
       --list|-l)
         # Non-interactive listing — never wrap (no TUI / no OSC 52).
         ssh "$host" "$FERRY_REMOTE_BIN" --client-version "$ver" "$@"
+        return $?
+        ;;
+      --list-servers)
+        # Non-interactive servers view on remote (maps to repo-session --servers).
+        local remote_args=() a
+        for a in "$@"; do
+          if [[ "$a" == "--list-servers" ]]; then
+            remote_args+=(--servers)
+          else
+            remote_args+=("$a")
+          fi
+        done
+        ssh "$host" "$FERRY_REMOTE_BIN" --client-version "$ver" "${remote_args[@]}"
         return $?
         ;;
     esac

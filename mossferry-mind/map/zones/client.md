@@ -1,11 +1,11 @@
 ---
 type: zone
-summary: "Local ferry CLI (bin/mossferry): FERRY_* config, mosh/ssh launch of repo-session, optional grok wrap, pre-validate over ssh, doctor/update."
+summary: "Local ferry CLI (bin/mossferry): FERRY_* config, mosh/ssh launch of repo-session, optional grok wrap, pre-validate over ssh, doctor/update, --list-servers pass-through."
 tags: [cli, client, mosh, ssh, grok-wrap]
 status: active
 created: 2026-07-21
-updated: 2026-07-22
-verifiedAt: unverified
+updated: 2026-07-29
+verifiedAt: 07be064f
 owns:
   routes: []
   testids: []

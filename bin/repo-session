@@ -53,6 +53,22 @@ _ferry_repo_root() {
 
 REPO_ROOT="$(_ferry_repo_root)"
 
+# ---- servers view (lib/servers.sh) — missing lib degrades to empty ----------
+_ferry_load_servers() {
+  local s="${REPO_ROOT}/lib/servers.sh"
+  if [[ -r "$s" ]]; then
+    # shellcheck source=lib/servers.sh
+    source "$s" || true
+  fi
+  # Stubs if lib absent so picker still runs
+  if ! declare -F build_server_rows >/dev/null 2>&1; then
+    build_server_rows() { return 0; }
+    servers_mac_state() { printf 'unknown\n'; }
+    servers_fix_plan() { printf 'none\tn/a\n'; }
+  fi
+}
+_ferry_load_servers
+
 # ---- GREEN-UI-KIT (vendored) — missing lib must NEVER kill the tool --------
 _ferry_ui_fallbacks() {
   detect_color() { printf 'none\n'; }
@@ -192,7 +208,7 @@ parse_launchers() {
     cmd="${pair#*:}"
     [[ -z "$key" || -z "$cmd" ]] && continue
     # Reserved for kill/rename in the main picker.
-    [[ "$key" == "ctrl-x" || "$key" == "ctrl-r" ]] && continue
+    [[ "$key" == "ctrl-x" || "$key" == "ctrl-r" || "$key" == "ctrl-s" || "$key" == "ctrl-f" ]] && continue
     # Valid fzf-bindable keys only.
     if [[ "$key" =~ ^ctrl-[a-z]$ ]] \
        || [[ "$key" =~ ^alt-[a-z]$ ]] \
@@ -295,9 +311,9 @@ _pick_start_cmd() {
     pickfile="${TMPDIR:-/tmp}/repo-session-start.$$"
     printf '%s\n' "${opts[@]}" | fzf --layout=reverse --header-first --cycle \
       --header "start command · enter=pick · esc=cancel" \
-      --prompt='start> ' >"$pickfile" || { rm -f "$pickfile"; return 1; }
+      --prompt='start> ' >"$pickfile" || { rm -f "$pickfile"; [[ -n "${facefile:-}" ]] && rm -f "$facefile" "$facefile"; return 1; }
     choice=$(cat "$pickfile")
-    rm -f "$pickfile"
+    rm -f "$pickfile"; [[ -n "${facefile:-}" ]] && rm -f "$facefile"
   else
     # Numbered fallback — read stdin (same as other no-fzf menus; tests pipe here).
     i=1
@@ -875,7 +891,7 @@ _pick_repo_for_new() {
     if (( scoped )); then
       printf '%s\n' "${dirs[@]}" | fzf --layout=reverse --header-first --cycle \
         "${sub_hdr[@]}" "${sub_expect[@]}" --prompt='new session repo> ' \
-        >"$pickfile" || { rm -f "$pickfile"; return 1; }
+        >"$pickfile" || { rm -f "$pickfile"; [[ -n "${facefile:-}" ]] && rm -f "$facefile"; return 1; }
     else
       {
         printf '%s\n' "${dirs[@]}"
@@ -883,7 +899,7 @@ _pick_repo_for_new() {
         printf '%s\n' "$_HOME_SESSION_LABEL"
       } | fzf --layout=reverse --header-first --cycle \
         "${sub_hdr[@]}" "${sub_expect[@]}" --prompt='new session repo> ' \
-        >"$pickfile" || { rm -f "$pickfile"; return 1; }
+        >"$pickfile" || { rm -f "$pickfile"; [[ -n "${facefile:-}" ]] && rm -f "$facefile"; return 1; }
     fi
     if (( ${#LAUNCHER_KEYS[@]} > 0 )); then
       key=$(head -n 1 "$pickfile")
@@ -894,7 +910,7 @@ _pick_repo_for_new() {
     else
       choice=$(cat "$pickfile")
     fi
-    rm -f "$pickfile"
+    rm -f "$pickfile"; [[ -n "${facefile:-}" ]] && rm -f "$facefile"
     if [[ "$choice" == "$_NEW_REPO_LABEL" ]]; then
       printf '%s\n' "$_TOKEN_NEW_REPO"
     elif [[ "$choice" == "$_HOME_SESSION_LABEL" ]]; then
@@ -1099,6 +1115,175 @@ _do_new_session_flow() {
   _create_and_attach "$name"
 }
 
+
+
+# ctrl-f action: print fix plan; execute recipe only when FERRY_SERVERS_FIX=on.
+_picker_servers_fix() {
+  local port="${1:-}"
+  [[ -n "$port" ]] || return 0
+  local row state id class label bind pid comm repo owner mac_state mac_url health restart
+  local plan action detail cwd
+  row="$(print_servers_rows | awk -F'\t' -v p="$port" '$1==p{print; exit}')"
+  [[ -n "$row" ]] || { printf 'no row for port %s\n' "$port" >/dev/tty; return 0; }
+  IFS=$'\t' read -r port state id class label bind pid comm repo owner mac_state mac_url health restart <<<"$row"
+  cwd="-"
+  if [[ -n "$pid" && "$pid" != "-" && -r "/proc/$pid/cwd" ]]; then
+    cwd="$(readlink "/proc/$pid/cwd" 2>/dev/null || echo -)"
+  elif [[ -n "$repo" && "$repo" != "-" ]]; then
+    cwd="${FERRY_REPO_BASE:-$HOME/Repositories}/${repo}"
+  fi
+  # declared-missing uses declare action
+  if [[ "$state" == "declared-missing" ]]; then
+    plan="$(servers_fix_plan "declared-missing" "$class" "$port" "$cwd")"
+  else
+    plan="$(servers_fix_plan "$mac_state" "$class" "$port" "$cwd")"
+  fi
+  action="${plan%%$'\t'*}"
+  detail="${plan#*$'\t'}"
+  printf 'fix plan for :%s (%s / %s)\\n  action: %s\\n  %s\\n' "$port" "$mac_state" "$class" "$action" "$detail" >/dev/tty
+  if [[ "$action" == "recipe" && "${FERRY_SERVERS_FIX:-off}" == "on" ]]; then
+    printf 'FERRY_SERVERS_FIX=on — would run: %s\\n' "$detail" >/dev/tty
+    # Intentionally do not auto-exec here without an explicit second confirm in v1.
+    # Discovery remains observer-first.
+  elif [[ "$action" == "recipe" ]]; then
+    printf '(FERRY_SERVERS_FIX is off — recipe printed only, not executed)\\n' >/dev/tty
+  fi
+}
+
+# ---- servers face helpers ----------------------------------------------------
+
+# Formatted rows for the servers face / --servers one-shot (TSV, 14 cols).
+print_servers_rows() {
+  build_server_rows 2>/dev/null || true
+}
+
+# Human-ish one line for fzf list: port · state · label · mac_state · class
+print_servers_picker_rows() {
+  # field1=port (preview/fix key); field2=human summary. Full row re-fetched by port.
+  local port state id class label bind pid comm repo owner mac_state mac_url health restart
+  while IFS=$'\t' read -r port state id class label bind pid comm repo owner mac_state mac_url health restart; do
+    [[ -z "${port:-}" ]] && continue
+    printf '%s\t%s  %s  %s  [%s]  %s\n' \
+      "$port" "$state" "$label" "$mac_state" "$class" "$bind"
+  done < <(print_servers_rows)
+}
+
+# Preview pane for a server port (field 1).
+print_servers_preview() {
+  local port="${1:-}"
+  [[ -z "$port" || "$port" == "-" ]] && { printf '%s\n' 'no port selected'; return 0; }
+  local row port_r state id class label bind pid comm repo owner mac_state mac_url health restart
+  row="$(print_servers_rows | awk -F'\t' -v p="$port" '$1==p{print; exit}')"
+  if [[ -z "$row" ]]; then
+    printf 'port %s — not in current discovery\n' "$port"
+    return 0
+  fi
+  IFS=$'\t' read -r port_r state id class label bind pid comm repo owner mac_state mac_url health restart <<<"$row"
+  printf 'port:      %s\n' "$port_r"
+  printf 'state:     %s\n' "$state"
+  printf 'id:        %s\n' "$id"
+  printf 'class:     %s\n' "$class"
+  printf 'label:     %s\n' "$label"
+  printf 'bind:      %s\n' "$bind"
+  printf 'pid/comm:  %s / %s\n' "$pid" "$comm"
+  printf 'repo:      %s\n' "$repo"
+  printf 'owner:     %s\n' "$owner"
+  printf 'mac_state: %s\n' "$mac_state"
+  printf 'mac_url:   %s\n' "$mac_url"
+  printf 'health:    %s\n' "$health"
+  printf 'restart:   %s\n' "$restart"
+  if [[ "$state" == "FOREIGN" ]]; then
+    printf '\n⚠ FOREIGN — listener cwd does not match declared repo\n'
+  fi
+  if [[ "$port_r" == "8791" ]]; then
+    printf '\n⛔ RESERVED — FreeLLMAPI permanent listener. Never use for previews.\n'
+  fi
+  # Health check with short timeout when declared
+  if [[ -n "$health" && "$health" != "-" && "$health" == http* ]]; then
+    printf '\n── health ──\n'
+    if command -v timeout >/dev/null 2>&1; then
+      timeout 0.4 curl -fsS -m 0.4 "$health" 2>&1 | head -c 400 || printf '(health check failed or timed out)\n'
+      printf '\n'
+    else
+      curl -fsS -m 1 "$health" 2>&1 | head -c 400 || printf '(health check failed)\n'
+      printf '\n'
+    fi
+  fi
+  # Mapped log: <repo>/.ferry/server.log or declaration log path not yet standardized —
+  # show last lines of common log when repo is known.
+  if [[ -n "$repo" && "$repo" != "-" ]]; then
+    local base="${FERRY_REPO_BASE:-$HOME/Repositories}"
+    local logf="${base}/${repo}/.ferry/server.log"
+    if [[ -r "$logf" ]]; then
+      printf '\n── log (tail) ──\n'
+      tail -n 15 "$logf" 2>/dev/null || true
+    fi
+  fi
+  # Fix plan hint
+  if declare -F servers_fix_plan >/dev/null 2>&1; then
+    local plan action detail
+    plan="$(servers_fix_plan "$mac_state" "$class" "$port_r" "${repo:--}" 2>/dev/null || true)"
+    action="${plan%%$'\t'*}"
+    detail="${plan#*$'\t'}"
+    printf '\n── fix (ctrl-f) ──\n%s: %s\n' "$action" "$detail"
+  fi
+}
+
+# Escape a string for JSON (hand-rolled; jq absent).
+_servers_json_escape() {
+  local s="${1-}"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
+  printf '%s' "$s"
+}
+
+# Emit JSON array of row objects to stdout. Never requires a tty.
+print_servers_json() {
+  local port state id class label bind pid comm repo owner mac_state mac_url health restart
+  local first=1
+  printf '['
+  while IFS=$'\t' read -r port state id class label bind pid comm repo owner mac_state mac_url health restart; do
+    [[ -z "${port:-}" ]] && continue
+    if (( first )); then first=0; else printf ','; fi
+    printf '\n{"port":"%s","state":"%s","id":"%s","class":"%s","label":"%s","bind":"%s","pid":"%s","comm":"%s","repo":"%s","owner":"%s","mac_state":"%s","mac_url":"%s","health":"%s","restart":"%s"}' \
+      "$(_servers_json_escape "$port")" \
+      "$(_servers_json_escape "$state")" \
+      "$(_servers_json_escape "$id")" \
+      "$(_servers_json_escape "$class")" \
+      "$(_servers_json_escape "$label")" \
+      "$(_servers_json_escape "$bind")" \
+      "$(_servers_json_escape "$pid")" \
+      "$(_servers_json_escape "$comm")" \
+      "$(_servers_json_escape "$repo")" \
+      "$(_servers_json_escape "$owner")" \
+      "$(_servers_json_escape "$mac_state")" \
+      "$(_servers_json_escape "$mac_url")" \
+      "$(_servers_json_escape "$health")" \
+      "$(_servers_json_escape "$restart")"
+  done < <(print_servers_rows)
+  printf '\n]\n'
+}
+
+# OSC52 copy helper (best-effort; no-op if not a tty).
+_servers_osc52_copy() {
+  local text="$1"
+  local b64
+  if command -v base64 >/dev/null 2>&1; then
+    b64="$(printf '%s' "$text" | base64 -w0 2>/dev/null || printf '%s' "$text" | base64 | tr -d '\n')"
+  else
+    return 1
+  fi
+  # Write to /dev/tty when available so fzf execute can surface it
+  if [[ -w /dev/tty ]]; then
+    printf '\033]52;c;%s\a' "$b64" >/dev/tty 2>/dev/null || true
+  else
+    printf '\033]52;c;%s\a' "$b64"
+  fi
+}
+
 run_picker() {
   # Uses global $repo (may be empty = global).
   local -a rows=()
@@ -1151,22 +1336,36 @@ run_picker() {
   # fzf path: kill/rename stay *inside* one fzf instance (bind+reload).
   # Optimistic kill: one keystroke, no confirm, no picker teardown — spam-friendly.
   # Optional FERRY_KILL_CONFIRM=1 restores single-key y/N confirm.
+  # Servers face (ctrl-s): second view; face state in a temp file for reload.
   pickfile="${TMPDIR:-/tmp}/repo-session-pick.$$"
+  local facefile="${TMPDIR:-/tmp}/repo-session-face.$$"
+  printf 'sessions\n' >"$facefile"
   local banner hints header expect_keys lc self self_q rows_cmd bind_kill bind_rename
-  local launcher_expect fzf_status
+  local bind_face bind_fix rows_cmd_sessions rows_cmd_servers
+  local header_sessions header_servers
+  local launcher_expect fzf_status face
   new_label="$_NEW_SESSION_LABEL"
   self=$(_ferry_resolve_self) || self="${BASH_SOURCE[0]}"
   self_q=$(printf '%q' "$self")
+  facefile_q=$(printf '%q' "$facefile")
   if [[ -n "$repo" ]]; then
-    rows_cmd="bash ${self_q} --picker-rows $(printf '%q' "$repo")"
+    rows_cmd_sessions="bash ${self_q} --picker-rows $(printf '%q' "$repo")"
   else
-    rows_cmd="bash ${self_q} --picker-rows"
+    rows_cmd_sessions="bash ${self_q} --picker-rows"
+  fi
+  rows_cmd_servers="bash ${self_q} --picker-servers-rows"
+  # Unified rows_cmd reads facefile
+  rows_cmd="bash ${self_q} --picker-face-rows ${facefile_q}"
+  if [[ -n "$repo" ]]; then
+    rows_cmd="bash ${self_q} --picker-face-rows ${facefile_q} $(printf '%q' "$repo")"
   fi
   if (( ${#START_MENU_CMDS[@]} > 0 || ${#LAUNCHER_KEYS[@]} > 0 )); then
-    hints='enter=attach · ➕=start menu · ctrl-x=kill · ctrl-r=rename · esc=quit'
+    hints='[sessions] enter=attach · ➕=start menu · ctrl-x=kill · ctrl-r=rename · ctrl-s=servers · esc=quit'
   else
-    hints='enter=attach · ctrl-x=kill · ctrl-r=rename · esc=quit'
+    hints='[sessions] enter=attach · ctrl-x=kill · ctrl-r=rename · ctrl-s=servers · esc=quit'
   fi
+  header_servers='[servers] enter=copy Mac URL · ctrl-f=fix plan · ctrl-s=sessions · esc=quit'
+  header_sessions="$hints"
   # Kill: execute-silent then reload list in place (no exit, no y/Enter).
   #
   # fzf placeholder rules (0.36+; verified on 0.72):
@@ -1176,6 +1375,8 @@ run_picker() {
   #          names must come from the full line {} + bash tab-split.
   # Skip synthetic ➕/⚖ rows. Optional confirm via FERRY_KILL_CONFIRM.
   bind_kill="ctrl-x:execute-silent(
+    face=\$(cat ${facefile_q} 2>/dev/null || echo sessions)
+    [ \"\$face\" = servers ] && exit 0
     line={}
     n=\"\${line%%\$'\\t'*}\"
     case \"\$n\" in ''|➕*|⚖*) exit 0 ;; esac
@@ -1190,6 +1391,8 @@ run_picker() {
   # Rename: still needs a name; stays in-picker via execute+reload.
   # Same full-line extract as kill (fzf {1} would drop trailing spaces / double-quote).
   bind_rename="ctrl-r:execute(
+    face=\$(cat ${facefile_q} 2>/dev/null || echo sessions)
+    [ \"\$face\" = servers ] && exit 0
     line={}
     n=\"\${line%%\$'\\t'*}\"
     case \"\$n\" in ''|➕*|⚖*) exit 0 ;; esac
@@ -1198,6 +1401,23 @@ run_picker() {
     [ -n \"\$nn\" ] || exit 0
     bash ${self_q} --picker-rename \"\$n\" \"\$nn\"
   )+reload(${rows_cmd})"
+
+  # Face toggle: flip facefile, reload rows, transform header. fzf stays up.
+  bind_face="ctrl-s:execute-silent(
+    f=\$(cat ${facefile_q} 2>/dev/null || echo sessions)
+    if [ \"\$f\" = servers ]; then echo sessions; else echo servers; fi > ${facefile_q}
+  )+reload(${rows_cmd})+transform-header(bash ${self_q} --picker-face-header ${facefile_q})"
+  # Fix plan (servers face): print plan to tty; execute recipe only if FERRY_SERVERS_FIX=on
+  bind_fix="ctrl-f:execute(
+    face=\$(cat ${facefile_q} 2>/dev/null || echo sessions)
+    [ \"\$face\" = servers ] || exit 0
+    line={}
+    port=\"\${line%%\$'\\t'*}\"
+    [ -n \"\$port\" ] || exit 0
+    bash ${self_q} --picker-servers-fix \"\$port\"
+    printf '\\n[press enter]\\n' >/dev/tty
+    read -r _ </dev/tty || true
+  )"
 
   # Launchers still use --expect (they must exit fzf to arm create / attach).
   launcher_expect="$(_launcher_expect_suffix | sed 's/^,//')"
@@ -1220,22 +1440,34 @@ run_picker() {
     # Preview: sage chrome (optional) + pane capture via --picker-preview.
     # Empty field 6 on synthetic rows is handled inside print_picker_preview
     # (never bare capture-pane -t '' → self-mirror / duplicates).
+    # Header reflects current face
+    face="$(cat "$facefile" 2>/dev/null || echo sessions)"
+    if [[ "$face" == "servers" ]]; then
+      header="$header_servers"
+      header="$(_header_with_nudge "$header")"
+    fi
     local -a fzf_args=(
       --ansi --delimiter=$'\t'
       --layout=reverse --header-first --cycle
       --header "$header"
-      --preview "bash ${self_q} --picker-preview {1} {6}"
+      --preview "bash ${self_q} --picker-face-preview ${facefile_q} {1} {6}"
       --preview-window=right:60%
       --bind "$bind_kill"
       --bind "$bind_rename"
+      --bind "$bind_face"
+      --bind "$bind_fix"
     )
     if [[ -n "$expect_keys" ]]; then
       fzf_args+=(--expect="$expect_keys")
     fi
-    print_picker_rows "$repo" | fzf "${fzf_args[@]}" >"$pickfile"
+    if [[ "$face" == "servers" ]]; then
+      print_servers_picker_rows | fzf "${fzf_args[@]}" >"$pickfile"
+    else
+      print_picker_rows "$repo" | fzf "${fzf_args[@]}" >"$pickfile"
+    fi
     fzf_status=$?
     if (( fzf_status != 0 )); then
-      rm -f "$pickfile"
+      rm -f "$pickfile"; [[ -n "${facefile:-}" ]] && rm -f "$facefile"
       exit 130
     fi
 
@@ -1247,6 +1479,26 @@ run_picker() {
       choice=$(head -n 1 "$pickfile")
     fi
     rm -f "$pickfile"
+    # Keep facefile for the rest of this iteration (servers enter / continue).
+
+    # Servers face: enter copies Mac URL (OSC52) when reachable; never opens.
+    face="$(cat "$facefile" 2>/dev/null || echo sessions)"
+    if [[ "$face" == "servers" ]]; then
+      local sport smac smurl srow
+      sport="${choice%%$'\t'*}"
+      if [[ -n "$sport" ]]; then
+        srow="$(print_servers_rows | awk -F'\t' -v p="$sport" '$1==p{print; exit}')"
+        smac="$(printf '%s\n' "$srow" | cut -f11)"
+        smurl="$(printf '%s\n' "$srow" | cut -f12)"
+        if [[ "$smac" == "reachable" && -n "$smurl" && "$smurl" != "-" ]]; then
+          _servers_osc52_copy "$smurl" || true
+          printf 'copied: %s\n' "$smurl" >/dev/tty 2>/dev/null || printf 'copied: %s\n' "$smurl" >&2
+        else
+          printf 'no Mac URL (mac_state=%s)\n' "${smac:-unknown}" >/dev/tty 2>/dev/null ||             printf 'no Mac URL (mac_state=%s)\n' "${smac:-unknown}" >&2
+        fi
+      fi
+      continue
+    fi
 
     is_new=0
     if [[ "$choice" == "$new_label" || "$choice" == *$'\t'"$new_label" || "$choice" == "➕ new session…" ]]; then
@@ -1288,6 +1540,11 @@ main() {
   local client_version="" validate=0 validate_arg=""
   local picker_rows=0 picker_kill_name="" picker_rename_old="" picker_rename_new=""
   local picker_preview=0 picker_preview_name="" picker_preview_target=""
+  local servers_list=0 servers_json=0
+  local picker_servers_rows=0 picker_servers_preview=0 picker_servers_preview_port=""
+  local picker_servers_fix=0 picker_servers_fix_port=""
+  local picker_face_rows=0 picker_face_preview=0 picker_face_header=0
+  local picker_face_file="" picker_face_arg2="" picker_face_arg3=""
   local dir sessions
   sessions=()
 
@@ -1343,6 +1600,68 @@ main() {
         picker_rename_new="$3"
         shift 3
         ;;
+      --servers)
+        servers_list=1
+        shift
+        while (( $# )) && [[ "${1:-}" == --json ]]; do
+          servers_json=1
+          shift
+        done
+        # also allow --servers --json as separate tokens already handled; if next is --json:
+        ;;
+      --json)
+        # Allow `repo-session --servers --json` after --servers set the flag,
+        # or standalone after --servers in same argv (handled below).
+        if (( servers_list )); then
+          servers_json=1
+          shift
+        else
+          echo "repo-session: --json requires --servers" >&2
+          exit 1
+        fi
+        ;;
+      --picker-servers-rows)
+        picker_servers_rows=1
+        shift
+        ;;
+      --picker-servers-preview)
+        picker_servers_preview=1
+        picker_servers_preview_port="${2:-}"
+        shift
+        [[ $# -gt 0 && "${1:-}" != -* ]] && shift
+        ;;
+      --picker-servers-fix)
+        picker_servers_fix=1
+        picker_servers_fix_port="${2:-}"
+        shift
+        [[ $# -gt 0 && "${1:-}" != -* ]] && shift
+        ;;
+      --picker-face-rows)
+        picker_face_rows=1
+        picker_face_file="${2:-}"
+        shift
+        [[ $# -gt 0 && "${1:-}" != -* ]] && shift
+        if [[ -n "${1:-}" && "${1:-}" != -* ]]; then
+          repo="$1"
+          shift
+        fi
+        ;;
+      --picker-face-preview)
+        picker_face_preview=1
+        picker_face_file="${2:-}"
+        picker_face_arg2="${3:-}"
+        picker_face_arg3="${4:-}"
+        shift
+        [[ $# -gt 0 && "${1:-}" != -* ]] && shift
+        [[ $# -gt 0 && "${1:-}" != -* ]] && shift
+        [[ $# -gt 0 && "${1:-}" != -* ]] && shift
+        ;;
+      --picker-face-header)
+        picker_face_header=1
+        picker_face_file="${2:-}"
+        shift
+        [[ $# -gt 0 && "${1:-}" != -* ]] && shift
+        ;;
       --)                 shift; startcmd="$*"; break ;;
       -*)                 echo "repo-session: ignoring unknown flag '$1'" >&2; shift ;;
       *)                  if [[ -z "$repo" ]]; then repo="$1"; else startcmd="${startcmd:+$startcmd }$1"; fi; shift ;;
@@ -1376,6 +1695,54 @@ main() {
     picker_rename "$picker_rename_old" "$picker_rename_new"
     exit $?
   fi
+  if (( picker_servers_rows )); then
+    print_servers_picker_rows
+    exit 0
+  fi
+  if (( picker_servers_preview )); then
+    print_servers_preview "$picker_servers_preview_port"
+    exit 0
+  fi
+  if (( picker_servers_fix )); then
+    _picker_servers_fix "$picker_servers_fix_port"
+    exit 0
+  fi
+  if (( picker_face_rows )); then
+    face="$(cat "$picker_face_file" 2>/dev/null || echo sessions)"
+    if [[ "$face" == "servers" ]]; then
+      print_servers_picker_rows
+    else
+      print_picker_rows "$repo"
+    fi
+    exit 0
+  fi
+  if (( picker_face_preview )); then
+    face="$(cat "$picker_face_file" 2>/dev/null || echo sessions)"
+    if [[ "$face" == "servers" ]]; then
+      print_servers_preview "$picker_face_arg2"
+    else
+      print_picker_preview "$picker_face_arg2" "$picker_face_arg3"
+    fi
+    exit 0
+  fi
+  if (( picker_face_header )); then
+    face="$(cat "$picker_face_file" 2>/dev/null || echo sessions)"
+    if [[ "$face" == "servers" ]]; then
+      printf '%s\n' '[servers] enter=copy Mac URL · ctrl-f=fix plan · ctrl-s=sessions · esc=quit'
+    else
+      printf '%s\n' '[sessions] enter=attach · ctrl-x=kill · ctrl-r=rename · ctrl-s=servers · esc=quit'
+    fi
+    exit 0
+  fi
+  # --servers one-shot (non-interactive; agents use this)
+  if (( servers_list )); then
+    if (( servers_json )); then
+      print_servers_json
+    else
+      print_servers_rows
+    fi
+    exit 0
+  fi
 
   # Version handshake (warn only; never block). Surfaces in picker header too.
   if [[ -n "$client_version" ]]; then
@@ -1401,11 +1768,12 @@ ${S}Usage${Z}
 
 ${S}Picker keys${Z}
   enter=attach · ➕ new → nested start menu (default / AI CLIs)
-  ctrl-x=kill (instant, no confirm) · ctrl-r=rename · list wraps · esc=quit
+  ctrl-x=kill (instant, no confirm) · ctrl-r=rename · ctrl-s=servers face · esc=quit
+  Servers face: enter=copy Mac URL · ctrl-f=fix plan · ctrl-s=sessions
   Kill stays in the picker — spam ctrl-x to clear many sessions fast.
   Set FERRY_KILL_CONFIRM=1 for single-key y/N confirm before kill.
   Start menu: FERRY_START_MENU (default claude,grok — generic only).
-  Optional hotkeys: FERRY_LAUNCHERS (empty by default; ctrl-x/ctrl-r reserved).
+  Optional hotkeys: FERRY_LAUNCHERS (empty by default; ctrl-x/ctrl-r/ctrl-s/ctrl-f reserved).
 
 ${S}Flags${Z}
   (none)             open the session picker (scoped to <repo> when given)
@@ -1423,6 +1791,7 @@ ${S}Flags${Z}
                      sessions (honouring --claude / -- cmd) -- so the grid fills.
   --client-version V version handshake (set by mossferry client)
   --validate <repo>  check repo exists under FERRY_REPO_BASE (no tmux; used by client)
+  --servers          list live listeners (14-col TSV); add --json for agents
   --help, -h         print this help and exit
   -- cmd...          custom startup command for newly-created sessions
 

@@ -100,10 +100,11 @@ into `~/.local/bin/`, migrates legacy config when present, and seeds
 | `ferry` | uses `FERRY_DEFAULT_HOST` → global picker (error if key unset) |
 | `ferry <host>` | fzf picker, all sessions + `➕ new session…` row |
 | `ferry <host> <repo>` | fzf picker, that repo's sessions + `➕ new session…` row |
-| _(picker keys)_ | `enter=attach · ctrl-x=kill` (instant, no confirm — spam-friendly) `· ctrl-r=rename · ➕ → nested start menu · cycle · esc`; kill/rename stay in-picker. Optional `FERRY_KILL_CONFIRM=1`. Version skew shows a subtle `↑ update … ferry update` header line |
+| _(picker keys)_ | `enter=attach · ctrl-x=kill` (instant, no confirm — spam-friendly) `· ctrl-r=rename · ctrl-s=servers face · ➕ → nested start menu · cycle · esc`; kill/rename stay in-picker. Servers face: `enter=copy Mac URL · ctrl-f=fix plan · ctrl-s=sessions`. Optional `FERRY_KILL_CONFIRM=1`. Version skew shows a subtle `↑ update … ferry update` header line |
 | `ferry <host> <repo> --primary\|-p` | attach primary, create if missing (old default, now explicit) |
 | `ferry <host> <repo> --new` | force fresh session (unchanged) |
 | `ferry <host> [repo] --list\|-l` | list sessions via ssh (unchanged) |
+| `ferry <host> --list-servers` | list remote listeners (14-col TSV); add `--json` for agents |
 | `ferry <host> <repo> --resume-closed` | atomic claim, unchanged (grid driver) |
 | `ferry <host> <repo> --resume-or-new` | claim-or-create, unchanged (grid driver) |
 | `ferry <host> --resume [N\|name]` | bare → same fzf picker; N/name → direct attach (unchanged) |

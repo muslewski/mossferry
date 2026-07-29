@@ -2,10 +2,10 @@
 type: zone
 summary: "Install and packaging surface: install.sh (symlink ferry/mossferry/repo-session into ~/.local/bin, seed/migrate config), config.example FERRY_* keys (START_MENU + optional LAUNCHERS), package.json npm bins, VERSION."
 tags: [install, config, npm, packaging]
-status: seeded
+status: active
 created: 2026-07-21
-updated: 2026-07-23
-verifiedAt: unverified
+updated: 2026-07-29
+verifiedAt: 07be064f
 owns:
   routes: []
   testids: []
@@ -26,6 +26,9 @@ sources: []
 ---
 
 ## What this is
+
+Also ships `config.example.servers` (TSV declaration template for the
+servers view — not YAML; zero-dep bash parse).
 
 How mossferry gets onto a machine and how runtime knobs are documented.
 

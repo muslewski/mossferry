@@ -1017,9 +1017,7 @@ t43() {
   local src prev
   src=$(cat "$RS")
   prev=$(printf '%s\n' "$src" | grep -E -- '--preview' | head -1)
-  if printf '%s\n' "$prev" | grep -qF -- '--picker-preview' \
-    && grep -q 'print_picker_preview' <<<"$src" \
-    && grep -q '_ferry_sage_enabled' <<<"$src"; then
+  if { printf '%s\n' "$prev" | grep -qF -- '--picker-preview'       || printf '%s\n' "$prev" | grep -qF -- '--picker-face-preview'; }     && grep -q 'print_picker_preview' <<<"$src"     && grep -q '_ferry_sage_enabled' <<<"$src"; then
     ok t43
   else
     fail t43 "preview/sage adapter missing: [$prev]"

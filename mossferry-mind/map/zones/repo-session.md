@@ -1,16 +1,17 @@
 ---
 type: zone
-summary: "Remote brain (bin/repo-session): fzf/menu tmux session picker, create/attach, atomic grid claim, nested start menu, optional FERRY_LAUNCHERS, Grok wallet badge (GROK_HOME → delieta/muslewski), optional FERRY_SAGE wire, kill/rename, validate_repo."
+summary: "Remote brain (bin/repo-session): fzf/menu session picker + servers face (ctrl-s), create/attach, atomic claim, nested start menu, FERRY_LAUNCHERS, Grok wallet badge, FERRY_SAGE wire, kill/rename, --servers discovery, validate_repo."
 tags: [remote, tmux, picker, fzf, sage, grok]
 status: active
 created: 2026-07-21
 updated: 2026-07-29
-verifiedAt: ad397db8
+verifiedAt: 07be064f
 owns:
   routes: []
   testids: []
   globs:
     - "bin/repo-session"
+    - "lib/servers.sh"
   tools: []
 depends:
   - "[[green-ui]]"

@@ -2,15 +2,15 @@
 type: zone
 summary: "Vendored GREEN-UI-KIT (lib/green-ui.sh): source-able bash UI library — detect_color, ui_tty, banner/ok/warn/die/panel/checklist; stdout=data stderr=chrome; missing kit never kills ferry tools."
 tags: [ui, tty, green-ui-kit]
-status: seeded
+status: active
 created: 2026-07-21
-updated: 2026-07-21
-verifiedAt: unverified
+updated: 2026-07-29
+verifiedAt: 07be064f
 owns:
   routes: []
   testids: []
   globs:
-    - "lib/**"
+    - "lib/green-ui.sh"
   tools: []
 depends: []
 invariants: []
