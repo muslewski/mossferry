@@ -9,7 +9,19 @@ order: 25
 
 A second face in the ferry picker answers: **what is actually running on this
 box, and can my Mac browser reach it?** Discovery is read-only. The ferry
-reports; it does not supervise processes.
+reports; it does not supervise processes by default.
+
+## How to open it
+
+| Surface | How |
+|---------|-----|
+| Interactive picker | `ctrl-s` toggles sessions ↔ servers (header shows the face) |
+| One-shot (remote) | `repo-session --servers` · `--servers --json` |
+| One-shot (client) | `ferry <host> --list-servers` · `--list-servers --json` |
+
+**Chords (servers face):** `enter` = copy Mac URL when `mac_state=reachable`
+(OSC52; never opens a browser) · `ctrl-f` = print fix plan · `ctrl-s` =
+back to sessions · `esc` = quit.
 
 ## Declaration format (TSV)
 
@@ -44,8 +56,61 @@ A declaration contributes `label`, `class`, and `mac` policy only. Live
 becomes state `declared-missing` — the most useful row: the thing you think
 is running is not.
 
+## Row model (14 columns)
+
+```
+port  state  id  class  label  bind  pid  comm  repo  owner  mac_state  mac_url  health  restart
+```
+
+### `state` vocabulary
+
+| Value | Meaning |
+|-------|---------|
+| `LISTEN` | Live listener (or live agent child with `port=-`) |
+| `declared-missing` | Declared, no listener |
+| `FOREIGN` | Listener occupies a declared port but cwd/repo disagrees |
+
+### `mac_state` vocabulary
+
+| Value | Meaning |
+|-------|---------|
+| `reachable` | Bound on all-interfaces (or a non-loopback host IP); Mac URL available |
+| `loopback-only` | Bound to `127.0.0.1` / `::1` — up ≠ Mac-reachable |
+| `reserved` | Port on the denylist and/or `mac=never` (includes FreeLLMAPI **8791**) |
+| `unknown` | Not enough data |
+
+Primary `mac_url` is never a bare `http://127.0.0.1:…`. Prefer
+`preview-url` / Tailscale when present.
+
+Reserved ports (imported from `preview-serve`):  
+`8791 3001 5432 6379 27017 8080 5173 3000`.
+
+## Fix plan (`ctrl-f`) — state machine, not kill-all
+
+| Condition | Action |
+|-----------|--------|
+| `reachable` | `none` — show Mac URL |
+| `loopback-only` + `preview`/`dev` | `recipe` — print `preview-serve <cwd> <port>` |
+| `loopback-only` + `db`/`spine`/`agent` | `tunnel` — print `ssh -L` snippet; **never rebind** |
+| `reserved` | `refuse` — FreeLLMAPI badge for 8791 |
+| `declared-missing` | `declare` — show declaration; never auto-start |
+
+`FERRY_SERVERS_FIX` defaults **off**. A recipe is printed only; execution
+requires the switch explicitly on. Databases and spine services never receive
+a rebind recipe.
+
+## Detached agent children
+
+Armory children that write the Agent Status Provider directory appear as
+`class=agent` rows (`port=-`). Directory resolution (read-only):
+
+1. `$AGENT_STATUS_DIR`
+2. `$XDG_RUNTIME_DIR/agent-status`
+3. `$HOME/.local/state/agent-status`
+
+Missing directory ⇒ zero agent rows, exit 0. No armory dependency.
+
 ## Related
 
-- Example file: `config.example.servers`
-- Discovery library: `lib/servers.sh`
-- One-shot: `repo-session --servers` / `ferry --list-servers`
+- Library: `lib/servers.sh`
+- Example: `config.example.servers`

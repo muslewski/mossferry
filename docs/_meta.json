@@ -1,16 +1,35 @@
 {
   "title": "mossferry",
-  "description": "The green ferry between your machines — remote tmux over mosh/ssh with an fzf picker",
+  "description": "The green ferry between your machines \u2014 remote tmux over mosh/ssh with an fzf picker",
   "sidebar": [
-    { "title": "Home", "href": "index.md" },
-    { "title": "Getting started", "href": "getting-started.md" },
+    {
+      "title": "Home",
+      "href": "index.md"
+    },
+    {
+      "title": "Getting started",
+      "href": "getting-started.md"
+    },
     {
       "title": "Guides",
       "items": [
-        { "title": "Grok + ferry", "href": "guides/grok-and-ferry.md" },
-        { "title": "Safety roadmap", "href": "safety-roadmap.md" }
+        {
+          "title": "Grok + ferry",
+          "href": "guides/grok-and-ferry.md"
+        },
+        {
+          "title": "Safety roadmap",
+          "href": "safety-roadmap.md"
+        },
+        {
+          "title": "Servers view",
+          "href": "servers-view.md"
+        }
       ]
     },
-    { "title": "Works with", "href": "works-with.md" }
+    {
+      "title": "Works with",
+      "href": "works-with.md"
+    }
   ]
 }

@@ -2,10 +2,10 @@
 type: zone
 summary: "Bash test harness (tests/): run.sh drives test-mossferry, test-repo-session, test-install, test-ui-ops with fake-tmux and fake-bin mosh/ssh stubs — no framework beyond bash."
 tags: [tests, harness, fakes]
-status: seeded
+status: active
 created: 2026-07-21
-updated: 2026-07-21
-verifiedAt: unverified
+updated: 2026-07-29
+verifiedAt: 084738b8
 owns:
   routes: []
   testids: []
@@ -24,6 +24,9 @@ sources: []
 ---
 
 ## What this is
+
+`tests/test-servers.sh` covers `lib/servers.sh` fixture-driven discovery,
+mac_state, fix_plan, agent-status rows, and `--servers` helpers.
 
 Product-facing **test suite**: plain bash, fake `tmux` / `mosh` / `ssh`,
 covers client launch/doctor/update paths, remote picker/claim/validate, install
