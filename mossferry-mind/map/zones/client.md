@@ -1,16 +1,17 @@
 ---
 type: zone
-summary: "Local ferry CLI (bin/mossferry): FERRY_* config, mosh/ssh launch of repo-session, optional grok wrap, pre-validate over ssh, doctor/update, --list-servers pass-through."
+summary: "Local ferry CLI (bin/mossferry): FERRY_* config, mosh/ssh launch of repo-session, optional grok wrap, pre-validate over ssh, doctor/update, --list-servers pass-through, opt-in fleet-devlog."
 tags: [cli, client, mosh, ssh, grok-wrap]
 status: active
 created: 2026-07-21
 updated: 2026-07-29
-verifiedAt: 07be064f
+verifiedAt: f57de42d
 owns:
   routes: []
   testids: []
   globs:
     - "bin/mossferry"
+    - "lib/fleet-devlog.sh"
   tools: []
 depends:
   - "[[green-ui]]"
@@ -60,3 +61,12 @@ yank pipes (tmux → pbcopy).
 ## Lineage
 
 Seed 2026-07-21; wrap/transport added 2026-07-22 (2.7.0).
+
+## Fleet-devlog
+
+Opt-in local event stream (`lib/fleet-devlog.sh`), contract fleet-devlog v1.
+Wired at `main` dispatch for `doctor` / `update` / `help` / `session`. Off by
+default; enable with `FLEET_DEVLOG=1` or machine config under
+`~/.config/fleet-devlog/`. Shared install-id with the three JS fleet tools.
+Fail-open always — never affects the ferry exit code. Hand-rolled JSON writer
+(no `jq` on host). See [[0002-fleet-devlog-handrolled-json]].

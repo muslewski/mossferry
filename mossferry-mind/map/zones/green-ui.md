@@ -5,7 +5,7 @@ tags: [ui, tty, green-ui-kit]
 status: active
 created: 2026-07-21
 updated: 2026-07-29
-verifiedAt: 07be064f
+verifiedAt: f57de42d
 owns:
   routes: []
   testids: []
@@ -32,7 +32,7 @@ sparkline / table).
 
 ## Anchors
 
-- `lib/**` → currently `lib/green-ui.sh` only.
+- `lib/green-ui.sh` — sole owned surface (other `lib/*` files belong to their feature zones).
 - Consumers load it from repo root; each binary also defines
   `_ferry_ui_fallbacks` so a missing file degrades to monochrome tokens.
 

@@ -117,6 +117,40 @@ own_version() {
   fi
 }
 
+# ---- fleet-devlog v1 (opt-in, local-only; fail-open; never affects exit) ----
+_ferry_load_devlog() {
+  local f="${REPO_ROOT}/lib/fleet-devlog.sh"
+  if [[ -r "$f" ]]; then
+    # shellcheck source=lib/fleet-devlog.sh
+    # shellcheck disable=SC1091
+    . "$f" || true
+  fi
+  if ! declare -F devlog_emit >/dev/null 2>&1; then
+    devlog_emit() { :; }
+  fi
+}
+_ferry_load_devlog
+
+# Emit one event for a finished subcommand. Never changes the caller's exit code.
+_ferry_devlog_emit() {
+  local cmd=${1-} rc=${2:-0} t0=${3:-0}
+  local now ms=0 rclass=failed ver corr=""
+  now=$(date +%s%N 2>/dev/null || date +%s000000000)
+  if [[ "$now" =~ ^[0-9]+$ && "$t0" =~ ^[0-9]+$ ]]; then
+    ms=$(( (now - t0) / 1000000 ))
+    [[ $ms -lt 0 ]] && ms=0
+  fi
+  [[ "$rc" -eq 0 ]] 2>/dev/null && rclass=ok
+  ver="$(own_version 2>/dev/null | tr -d '[:space:]' || true)"
+  # FLEET_CORR is the only free-form-ish join key the contract allows
+  if [[ -n "${FLEET_CORR-}" ]]; then
+    corr="corr=${FLEET_CORR}"
+  fi
+  # Guarded: a devlog failure must never affect the tool
+  devlog_emit "$cmd" "$rc" "$ms"     "tool_version=${ver}"     "result_class=${rclass}"     ${corr:+"$corr"}     2>/dev/null || true
+  return 0
+}
+
 # env > config file > built-in default.
 # Snapshot pre-set FERRY_* vars, apply defaults, source file, restore snapshot.
 load_config() {
@@ -810,6 +844,11 @@ launch_remote() {
 main() {
   load_config
 
+  # Snapshot argv for fleet-devlog --no-devlog detection (array, not exported).
+  DEVLOG_ARGV=("$@")
+  local _dl_t0 _dl_rc=0 _dl_cmd=""
+  _dl_t0=$(date +%s%N 2>/dev/null || date +%s000000000)
+
   # Subcommand / zero-arg dispatch before host parsing.
   if [[ $# -eq 0 ]]; then
     local _def
@@ -817,30 +856,41 @@ main() {
       set -- "$_def"
     else
       usage >&2
-      return 1
+      _dl_rc=1
+      _ferry_devlog_emit help "$_dl_rc" "$_dl_t0" || true
+      return "$_dl_rc"
     fi
   fi
 
   case "$1" in
     -h|--help)
       usage
-      return 0
+      _dl_rc=0
+      _ferry_devlog_emit help "$_dl_rc" "$_dl_t0" || true
+      return "$_dl_rc"
       ;;
     update)
       shift
       cmd_update "$@"
-      return $?
+      _dl_rc=$?
+      _ferry_devlog_emit update "$_dl_rc" "$_dl_t0" || true
+      return "$_dl_rc"
       ;;
     doctor)
       shift
       cmd_doctor "$@"
-      return $?
+      _dl_rc=$?
+      _ferry_devlog_emit doctor "$_dl_rc" "$_dl_t0" || true
+      return "$_dl_rc"
       ;;
   esac
 
   local host="$1"
   shift
   launch_remote "$host" "$@"
+  _dl_rc=$?
+  _ferry_devlog_emit session "$_dl_rc" "$_dl_t0" || true
+  return "$_dl_rc"
 }
 
 if [[ "${FERRY_LIB:-}" == "1" ]]; then
