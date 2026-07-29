@@ -289,7 +289,41 @@ Errors are unified as `mossferry:` (client) or `repo-session:` (remote),
 with a red ✗ glyph when stderr is a TTY. Missing `lib/green-ui.sh` never
 kills the tool — plain fallbacks apply.
 
+## Developer logging
+
+Opt-in, **local-only** event log shared with the other fleet tools (memory-atlas,
+agentic-sage, llm-armory). **Off by default** — a cold clone writes nothing.
+
+**Enable** (first match wins):
+
+- `FLEET_DEVLOG=1` (also `true` / `on` / `yes`)
+- or machine config `~/.config/fleet-devlog/config.json` with `{"enabled": true}`
+
+Disable explicitly with `FLEET_DEVLOG=0` / `false` / `off` / `no`, or pass
+`--no-devlog`. **Repo config is never an enable source** (and cannot disable
+either) — only env, argv, and the machine-local config above.
+
+**Where:** `${XDG_STATE_HOME:-$HOME/.local/state}/fleet-devlog/events.jsonl`
+(shared install id in the same directory's `install-id` file).
+
+**What is recorded:** schema version, timestamps, install id, tool name/version,
+subcommand name, exit code, duration, result class, optional correlation id,
+numeric counts, allow-listed flags — enums, ids, hashes, and numbers only.
+
+**What is NEVER recorded:** prompts, file contents, commit messages, environment
+values, API keys, or free-form paths (absolute or relative).
+
+The log **never leaves the machine**. There is no network code, no uploader, and
+no publish path in the emitter.
+
+**Delete it:**
+
+```sh
+rm -rf ~/.local/state/fleet-devlog
+```
+
 ## Testing
+
 
 ```sh
 bash tests/run.sh
