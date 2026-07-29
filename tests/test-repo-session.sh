@@ -903,19 +903,42 @@ t37() {
   teardown
 }
 
-# ---- t38: kill/rename use fzf --bind (not --expect); fields quoted ----
+# ---- t38: kill/rename use fzf --bind; full-line extract (not n="{1}") ----
 t38() {
-  local src
+  local src binds
   src=$(cat "$RS")
-  # n="{1}" (quoted) so trailing/embedded spaces survive shell assignment
+  # Modern fzf already shell-quotes placeholders. A bind written n="{1}" becomes
+  # n="'name'" (literal quotes in the session name) and kill silently misses.
+  # Binds must use line={} + tab-split so trailing spaces survive.
+  # Inspect only bind assignment lines (comments may mention the anti-pattern).
+  binds=$(grep -E '^\s+(n=|line=|bind_kill=|bind_rename=|ctrl-x:|ctrl-r:)' <<<"$src" || true)
   if grep -q 'ctrl-x:execute-silent' <<<"$src" \
     && grep -q 'ctrl-r:execute(' <<<"$src" \
-    && grep -q 'n=\\"{1}\\"' <<<"$src" \
+    && grep -q 'line={}' <<<"$binds" \
+    && ! grep -qE 'n=\{1\}|n="\{1\}"|n=\\"\{1\}\\"' <<<"$binds" \
     && ! grep -qE -- '--expect=.*ctrl-x' <<<"$src"; then
     ok t38
   else
-    fail t38 "bind/expect/quote pattern missing"
+    fail t38 "bind must use line={} full-line extract, not n={1}"
   fi
+}
+
+# ---- t38b: picker_kill strips accidental wrapping quotes from fzf binds ----
+t38b() {
+  setup
+  local log rc
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  # Simulate modern-fzf double-quote bug: name arrives as 's1' (with quotes)
+  bash "$RS" --picker-kill "'s1'"
+  rc=$?
+  log=$(cat "$FAKE_TMUX_LOG")
+  if [[ $rc -eq 0 ]] && grep -qF 'kill-session -t =s1' <<<"$log" \
+    && ! grep -qF "kill-session -t ='s1'" <<<"$log"; then
+    ok t38b
+  else
+    fail t38b "rc=$rc log=[$log]"
+  fi
+  teardown
 }
 
 # ---- t40: --picker-kill preserves trailing space in session name ----
@@ -1058,7 +1081,7 @@ t21; t22; t23; t24; t25
 t26; t27; t28
 t29; t30; t31; t32
 t33; t34; t35
-t36; t37; t38
+t36; t37; t38; t38b
 t39
 t40; t41; t42
 t43; t44; t45
