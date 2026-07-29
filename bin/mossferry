@@ -222,8 +222,18 @@ load_config() {
 
   local cfg="${HOME}/.config/mossferry/config"
   if [[ -r "$cfg" ]]; then
-    # shellcheck source=/dev/null
-    source "$cfg"
+    # Strip UTF-8 BOM so "KEY=value" is not a non-assignment command name.
+    local _cfg_clean
+    _cfg_clean=$(mktemp "${TMPDIR:-/tmp}/mossferry-cfg.XXXXXX") || _cfg_clean=""
+    if [[ -n "$_cfg_clean" ]] && sed $'1s/^\xEF\xBB\xBF//' "$cfg" >"$_cfg_clean" 2>/dev/null; then
+      # shellcheck source=/dev/null
+      source "$_cfg_clean"
+      rm -f "$_cfg_clean"
+    else
+      rm -f "$_cfg_clean" 2>/dev/null || true
+      # shellcheck source=/dev/null
+      source "$cfg"
+    fi
   fi
 
   # Re-apply defaults for any keys the file left unset/empty only if still empty?
@@ -501,9 +511,8 @@ cmd_update() {
   local v_local v_remote
   v_local="$(own_version | tr -d '[:space:]')"
   v_remote="$(ssh "$host" cat "${FERRY_REMOTE_REPO}/VERSION")"
-  v_remote="${v_remote//$'\r'/}"
-  v_remote="${v_remote//$'\n'/}"
-  v_remote="${v_remote//[[:space:]]/}"
+  # Strip CR/LF/space and UTF-8 BOM so equal versions compare equal.
+  v_remote=$(printf '%s' "$v_remote" | sed $'s/^\xEF\xBB\xBF//' | tr -d '\r\n[:space:]')
 
   # Parse-token law: non-TTY (and always) print the slash form on stdout.
   printf 'local %s / remote %s\n' "$v_local" "$v_remote"
@@ -643,9 +652,7 @@ cmd_doctor() {
   local v_local v_remote
   v_local="$(own_version | tr -d '[:space:]')"
   v_remote="$(ssh "$host" cat "${FERRY_REMOTE_REPO}/VERSION" 2>/dev/null || true)"
-  v_remote="${v_remote//$'\r'/}"
-  v_remote="${v_remote//$'\n'/}"
-  v_remote="${v_remote//[[:space:]]/}"
+  v_remote=$(printf '%s' "$v_remote" | sed $'s/^\xEF\xBB\xBF//' | tr -d '\r\n[:space:]')
   if [[ -n "$v_remote" && "$v_local" == "$v_remote" ]]; then
     _doc_emit ok "versions match: $v_local"
   else
@@ -770,6 +777,25 @@ _ferry_run_transport() {
   return $?
 }
 
+# Build a single remote command string with shell-quoted tokens.
+# OpenSSH joins multiple post-host args with bare spaces (no quoting), so
+# repo names with spaces or quotes must be printf-%q'd into one remote string.
+_ferry_ssh_remote_cmd() {
+  local out="" a
+  for a in "$@"; do
+    out+="$(printf '%q' "$a") "
+  done
+  printf '%s' "${out% }"
+}
+
+# ssh host with fully quoted remote argv (fail-closed on empty host).
+_ferry_ssh_quoted() {
+  local host=$1
+  shift
+  [[ -n "$host" ]] || return 1
+  ssh "$host" "$(_ferry_ssh_remote_cmd "$@")"
+}
+
 # Launch remote: ssh for --list/-l; interactive mosh (default) or ssh (FERRY_TRANSPORT).
 # Prepends --client-version <v> before user args.
 # Repo-bearing interactive launches pre-validate over ssh so typos print locally.
@@ -777,7 +803,7 @@ _ferry_run_transport() {
 launch_remote() {
   local host="$1"
   shift
-  local ver a repo val_out val_rc=0 transport
+  local ver a repo val_out val_rc=0 transport remote_cmd
   ver="$(own_version)"
 
   for a in "$@"; do
@@ -793,7 +819,7 @@ launch_remote() {
     case "$a" in
       --list|-l)
         # Non-interactive listing — never wrap (no TUI / no OSC 52).
-        ssh "$host" "$FERRY_REMOTE_BIN" --client-version "$ver" "$@"
+        _ferry_ssh_quoted "$host" "$FERRY_REMOTE_BIN" --client-version "$ver" "$@"
         return $?
         ;;
       --list-servers)
@@ -806,7 +832,7 @@ launch_remote() {
             remote_args+=("$a")
           fi
         done
-        ssh "$host" "$FERRY_REMOTE_BIN" --client-version "$ver" "${remote_args[@]}"
+        _ferry_ssh_quoted "$host" "$FERRY_REMOTE_BIN" --client-version "$ver" "${remote_args[@]}"
         return $?
         ;;
     esac
@@ -814,24 +840,24 @@ launch_remote() {
 
   repo="$(repo_token_from_args "$@")"
   if [[ -n "$repo" ]]; then
-    val_out="$(ssh "$host" "$FERRY_REMOTE_BIN" --client-version "$ver" --validate "$repo" 2>&1)" || val_rc=$?
+    val_out="$(_ferry_ssh_quoted "$host" "$FERRY_REMOTE_BIN" --client-version "$ver" --validate "$repo" 2>&1)" || val_rc=$?
     if [[ $val_rc -ne 0 ]]; then
       [[ -n "$val_out" ]] && printf '%s\n' "$val_out" >&2
       return 1
     fi
   fi
 
+  remote_cmd=$(_ferry_ssh_remote_cmd "$FERRY_REMOTE_BIN" --client-version "$ver" "$@")
   transport="${FERRY_TRANSPORT:-mosh}"
   case "$transport" in
     ssh|SSH)
-      _ferry_run_transport ssh -t "$host" \
-        "$FERRY_REMOTE_BIN" --client-version "$ver" "$@"
+      _ferry_run_transport ssh -t "$host" "$remote_cmd"
       return $?
       ;;
     mosh|MOSH|"")
       _ferry_run_transport mosh \
         --server="MOSH_SERVER_NETWORK_TMOUT=${FERRY_SERVER_TIMEOUT} mosh-server" \
-        "$host" -- "$FERRY_REMOTE_BIN" --client-version "$ver" "$@"
+        "$host" -- bash -lc "$remote_cmd"
       return $?
       ;;
     *)

@@ -386,6 +386,59 @@ ferry_banner() {
   printf '⛴ \033[1;32mmossferry\033[0m\n'
 }
 
+# Repo token shape: single path segment, no traversal. Matches create_repo allow-list.
+_ferry_repo_token_ok() {
+  local r=${1-}
+  [[ -n "$r" ]] || return 1
+  # No slashes, no absolute paths, no .. traversal fragments.
+  case "$r" in
+    /*|*/*|*\\*|*..*) return 1 ;;
+  esac
+  [[ "$r" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  return 0
+}
+
+# Safe lock/claim filename fragment (no path separators).
+_ferry_claim_lockf() {
+  local repo=${1-}
+  local safe
+  safe=$(printf '%s' "$repo" | tr -c 'A-Za-z0-9._-' '_')
+  [[ -n "$safe" ]] || safe="unknown"
+  printf '%s\n' "${TMPDIR:-/tmp}/repo-session-${safe}.claim"
+}
+
+# Fixed-string session name match for a repo (no regex interpolation of $repo).
+# Matches: exact name (optional trailing space), name-N digits, ccops-name-*.
+_ferry_session_matches_repo() {
+  local s=${1-} filter=${2-}
+  local trimmed=$s
+  [[ -n "$filter" ]] || return 1
+  # Strip trailing whitespace without extglob.
+  while [[ "$trimmed" == *[[:space:]] ]]; do
+    trimmed=${trimmed%?}
+  done
+  if [[ "$trimmed" == "$filter" ]]; then
+    return 0
+  fi
+  if [[ "$trimmed" == "$filter"-* ]]; then
+    local suffix=${trimmed#"$filter"-}
+    [[ "$suffix" =~ ^[0-9]+$ ]] && return 0
+  fi
+  if [[ "$s" == ccops-"$filter"-* ]]; then
+    return 0
+  fi
+  return 1
+}
+
+# List session names for $filter via fixed-string match (never grep -E with repo).
+_ferry_list_sessions_for_repo() {
+  local filter=${1-} s
+  while IFS= read -r s; do
+    [[ -z "$s" ]] && continue
+    _ferry_session_matches_repo "$s" "$filter" && printf '%s\n' "$s"
+  done < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
+}
+
 # Closest repo name for did-you-mean (prefix / substring / common-prefix score).
 _ferry_closest_repo() {
   local want=$1
@@ -444,15 +497,42 @@ _ferry_closest_repo() {
 # PARSE-TOKEN: first error line is byte-stable. TTY adds dim capped list + did-you-mean.
 validate_repo() {
   local r="$1"
+  # Containment: reject path-shaped tokens before joining with FERRY_REPO_BASE.
+  if ! _ferry_repo_token_ok "$r"; then
+    echo "repo-session: invalid repo name '${r//\'/}'" >&2
+    return 1
+  fi
   local dir="${FERRY_REPO_BASE}/${r}"
+  # After join, require realpath under base when realpath exists.
+  if [[ -d "$dir" ]] && command -v realpath >/dev/null 2>&1; then
+    local base_real dir_real
+    base_real=$(realpath -- "$FERRY_REPO_BASE" 2>/dev/null) || true
+    dir_real=$(realpath -- "$dir" 2>/dev/null) || true
+    if [[ -n "$base_real" && -n "$dir_real" ]]; then
+      case "$dir_real" in
+        "$base_real"|"$base_real"/*) ;;
+        *)
+          echo "repo-session: no repo '${r//\'/}' under ${FERRY_REPO_BASE} — pick one below, or run 'ferry <host>' to browse all sessions" >&2
+          return 1
+          ;;
+      esac
+    fi
+  fi
   if [[ ! -d "$dir" ]]; then
     # Exact first-line token (tests + client pre-validate assert this).
-    echo "repo-session: no repo '${r}' under ${FERRY_REPO_BASE} — pick one below, or run 'ferry <host>' to browse all sessions" >&2
+    # Prefer 'name' form for the stable token; drop quotes when name has ' itself.
+    if [[ "$r" == *"'"* ]]; then
+      echo "repo-session: no repo ${r} under ${FERRY_REPO_BASE} — pick one below, or run 'ferry <host>' to browse all sessions" >&2
+    else
+      echo "repo-session: no repo '${r}' under ${FERRY_REPO_BASE} — pick one below, or run 'ferry <host>' to browse all sessions" >&2
+    fi
 
     local -a repos=()
     local line n=0 cap=20 closest
     while IFS= read -r line || [[ -n ${line-} ]]; do
       [[ -z ${line-} ]] && continue
+      # Only suggest directory basenames (skip non-dirs from ls).
+      [[ -d "${FERRY_REPO_BASE}/${line}" ]] || continue
       repos+=("$line")
     done < <(ls -1 "$FERRY_REPO_BASE" 2>/dev/null || true)
 
@@ -593,10 +673,9 @@ build_session_rows() {
   local badge
   glob="${FERRY_HIDDEN_WINDOW_GLOB:-_*}"
   if [[ -n "$filter" ]]; then
-    # Classic repo sessions + Hermes coding-ops for that repo.
-    # Allow trailing whitespace on the session name (corrupt/legacy names still show).
-    mapfile -t names < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null \
-      | grep -E "^(${filter}[[:space:]]*$|${filter}-[0-9]+[[:space:]]*$|ccops-${filter}-.+)$" | sort -V)
+    # Fixed-string match only — never interpolate $filter into grep -E
+    # (dots in o'neil-file.txt must not match o'neil-fileXtxt).
+    mapfile -t names < <(_ferry_list_sessions_for_repo "$filter")
   else
     mapfile -t names < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
   fi
@@ -754,7 +833,11 @@ create_repo() {
   local name="$1"
   local dir
   if [[ -z "$name" || ! "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
-    echo "repo-session: invalid repo name '${name}'" >&2
+    echo "repo-session: invalid repo name ${name}" >&2
+    return 1
+  fi
+  if ! _ferry_repo_token_ok "$name"; then
+    echo "repo-session: invalid repo name ${name}" >&2
     return 1
   fi
   dir="${FERRY_REPO_BASE}/${name}"
@@ -763,10 +846,14 @@ create_repo() {
     return 1
   fi
   mkdir -p "$dir" || return 1
-  git -C "$dir" init -q -b main || {
-    echo "repo-session: git init failed for '${name}'" >&2
+  if ! git -C "$dir" init -q -b main; then
+    echo "repo-session: git init failed for ${name}" >&2
+    # Self-heal: remove empty non-git orphan so recreate is not blocked.
+    if [[ ! -e "$dir/.git" ]]; then
+      rmdir "$dir" 2>/dev/null || true
+    fi
     return 1
-  }
+  fi
   return 0
 }
 
@@ -788,9 +875,8 @@ create_home_session() {
 # ---- session helpers ---------------------------------------------------------
 
 _list_repo_sessions() {
-  # populate global `sessions` array for $repo
-  mapfile -t sessions < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null \
-    | grep -E "^${repo}(-[0-9]+)?$" | sort -V)
+  # populate global `sessions` array for $repo (fixed-string; no grep -E)
+  mapfile -t sessions < <(_ferry_list_sessions_for_repo "$repo")
 }
 
 # Numbered list for --list. Window column uses build_session_rows (hidden-window rule).
@@ -809,7 +895,8 @@ _create_session_locked() {
   # args: session_name
   local session_name="$1"
   local dir="${FERRY_REPO_BASE}/${repo}"
-  local lockf="${TMPDIR:-/tmp}/repo-session-${repo}.claim"
+  local lockf
+  lockf=$(_ferry_claim_lockf "$repo")
   exec 9>"$lockf"
   flock 9
   if ! "$TMUXBIN" has-session -t "$session_name" 2>/dev/null; then
@@ -1561,13 +1648,24 @@ main() {
       --primary|-p)       primary=1; shift ;;
       --client-version)   client_version="${2:-}"; shift 2 ;;
       --validate)
-        if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
+        # Allow leading-dash basenames via: --validate -- -foo
+        if [[ "${2:-}" == "--" && -n "${3:-}" ]]; then
+          validate=1
+          validate_arg="$3"
+          shift 3
+        elif [[ -z "${2:-}" ]]; then
           echo "repo-session: --validate requires a <repo>" >&2
           exit 1
+        elif [[ "${2:-}" == -* ]]; then
+          # Bare leading-dash without -- separator: accept as name (not a flag).
+          validate=1
+          validate_arg="$2"
+          shift 2
+        else
+          validate=1
+          validate_arg="$2"
+          shift 2
         fi
-        validate=1
-        validate_arg="$2"
-        shift 2
         ;;
       # Internal: fzf --bind reload / execute (not user-facing).
       --picker-rows)
@@ -1817,14 +1915,13 @@ EOF
   if (( wantpick )) && [[ -n "$pick" ]]; then
     if [[ "$pick" =~ ^[0-9]+$ ]]; then
       if [[ -n "$repo" ]]; then
-        mapfile -t sessions < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null \
-          | grep -E "^${repo}(-[0-9]+)?$" | sort -V)
+        mapfile -t sessions < <(_ferry_list_sessions_for_repo "$repo")
       else
         mapfile -t sessions < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
       fi
       local target="${sessions[$((pick-1))]:-}"
       if [[ -z "$target" ]]; then
-        echo "no session #$pick${repo:+ for '$repo'}. available:" >&2
+        echo "no session #$pick${repo:+ for ${repo}}. available:" >&2
         local i=1 s
         for s in "${sessions[@]}"; do echo "  $i) $s" >&2; ((i++)) || true; done
         exit 1
@@ -1834,7 +1931,7 @@ EOF
       if "$TMUXBIN" has-session -t "=$pick" 2>/dev/null; then
         exec "$TMUXBIN" attach -t "=$pick"
       fi
-      echo "no session named '$pick'. available:" >&2
+      echo "no session named ${pick}. available:" >&2
       "$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V | sed 's/^/  /' >&2
       exit 1
     fi
@@ -1843,13 +1940,16 @@ EOF
   # --list
   if (( list )); then
     if [[ -n "$repo" ]]; then
-      mapfile -t sessions < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null \
-        | grep -E "^${repo}(-[0-9]+)?$" | sort -V)
+      # Scoped list still validates so vanished/corrupt trees are not silent empty.
+      if ! validate_repo "$repo"; then
+        exit 1
+      fi
+      mapfile -t sessions < <(_ferry_list_sessions_for_repo "$repo")
     else
       mapfile -t sessions < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
     fi
     if (( ${#sessions[@]} == 0 )); then
-      if [[ -n "$repo" ]]; then echo "no '$repo' sessions yet"; else echo "no tmux sessions running"; fi
+      if [[ -n "$repo" ]]; then echo "no ${repo} sessions yet"; else echo "no tmux sessions running"; fi
       exit 0
     fi
     print_list
@@ -1858,10 +1958,10 @@ EOF
 
   # Typo guard: repo given but not a directory under base → error + list, never attach main.
   if [[ -n "$repo" ]]; then
-    dir="${FERRY_REPO_BASE}/${repo}"
     if ! validate_repo "$repo"; then
       exit 1
     fi
+    dir="${FERRY_REPO_BASE}/${repo}"
   fi
 
   # --resume-closed / --resume-or-new: claim block (baseline, one blank-fallback change)
@@ -1870,9 +1970,13 @@ EOF
       echo "repo-session: --resume-closed/--resume-or-new require a <repo>" >&2
       exit 1
     fi
+    if ! _ferry_repo_token_ok "$repo"; then
+      echo "repo-session: invalid repo name ${repo}" >&2
+      exit 1
+    fi
     _list_repo_sessions
     local lockf now ttl target s n c
-    lockf="${TMPDIR:-/tmp}/repo-session-$repo.claim"
+    lockf=$(_ferry_claim_lockf "$repo")
     exec 9>"$lockf"; flock 9
     now=$(date +%s); ttl=25; target=""
     claimable() {   # not reserved by another pane in the last ttl seconds
@@ -1901,7 +2005,7 @@ EOF
     fi
     flock -u 9
     if [[ -n "$target" ]]; then exec "$TMUXBIN" attach -d -t "$target"; fi
-    echo "no '$repo' sessions left to resume — blank shell" >&2
+    echo "no ${repo} sessions left to resume — blank shell" >&2
     # Blank fallback: plain login shell (no env -u SSH_CONNECTION; .bashrc auto-attach removed in Phase 2).
     exec "${SHELL:-/bin/bash}" -l
   fi
@@ -1912,8 +2016,13 @@ EOF
       echo "repo-session: --primary requires a <repo>" >&2
       exit 1
     fi
+    if ! _ferry_repo_token_ok "$repo"; then
+      echo "repo-session: invalid repo name ${repo}" >&2
+      exit 1
+    fi
     local session="$repo"
-    local lockf="${TMPDIR:-/tmp}/repo-session-$repo.claim"
+    local lockf
+    lockf=$(_ferry_claim_lockf "$repo")
     exec 9>"$lockf"; flock 9
     if ! "$TMUXBIN" has-session -t "$session" 2>/dev/null; then
       "$TMUXBIN" new-session -d -s "$session" -c "$dir"
@@ -1929,8 +2038,13 @@ EOF
       echo "repo-session: --new requires a <repo>" >&2
       exit 1
     fi
+    if ! _ferry_repo_token_ok "$repo"; then
+      echo "repo-session: invalid repo name ${repo}" >&2
+      exit 1
+    fi
     local session="$repo" n=2
-    local lockf="${TMPDIR:-/tmp}/repo-session-$repo.claim"
+    local lockf
+    lockf=$(_ferry_claim_lockf "$repo")
     exec 9>"$lockf"; flock 9
     while "$TMUXBIN" has-session -t "$session" 2>/dev/null; do
       session="$repo-$n"
@@ -1947,9 +2061,10 @@ EOF
   if [[ -n "$repo" ]]; then
     _list_repo_sessions
     if (( ${#sessions[@]} == 0 )); then
-      echo "no live sessions for '${repo}' — created primary"
+      echo "no live sessions for ${repo} — created primary"
       local session="$repo"
-      local lockf="${TMPDIR:-/tmp}/repo-session-$repo.claim"
+      local lockf
+      lockf=$(_ferry_claim_lockf "$repo")
       exec 9>"$lockf"; flock 9
       if ! "$TMUXBIN" has-session -t "$session" 2>/dev/null; then
         "$TMUXBIN" new-session -d -s "$session" -c "$dir"

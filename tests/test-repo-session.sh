@@ -1071,6 +1071,75 @@ t45() {
   teardown
 }
 
+# ---- t46: session filter is fixed-string (dots in name are not regex) ----
+t46() {
+  setup
+  local rows
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  # Real session for o'neil-file.txt plus a decoy that a regex dot would match.
+  export FAKE_TMUX_SESSIONS=$'o\'neil-file.txt\no\'neil-fileXtxt'
+  export FAKE_TMUX_META=$'o\'neil-file.txt|bash|1w detached bash\no\'neil-fileXtxt|bash|1w detached bash'
+  rows=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    build_session_rows "o'neil-file.txt"
+  )
+  if printf '%s\n' "$rows" | awk -F'\t' '$1=="o'\''neil-file.txt"{found=1} END{exit !found}' \
+    && ! printf '%s\n' "$rows" | awk -F'\t' '$1=="o'\''neil-fileXtxt"{found=1} END{exit !found}'; then
+    ok t46
+  else
+    fail t46 "rows=[$rows]"
+  fi
+  teardown
+}
+
+# ---- t47: path-shaped repo tokens rejected (no traversal under FERRY_REPO_BASE) ----
+t47() {
+  setup
+  local out rc
+  out=$(bash "$RS" --validate '../evil' 2>&1)
+  rc=$?
+  if [[ $rc -ne 0 ]] && [[ "$out" == *"invalid repo name"* ]]; then
+    ok t47
+  else
+    fail t47 "rc=$rc out=[$out]"
+  fi
+  out=$(bash "$RS" --validate 'mono/packages/pkg-a' 2>&1)
+  rc=$?
+  if [[ $rc -ne 0 ]] && [[ "$out" == *"invalid repo name"* ]]; then
+    ok t47b
+  else
+    fail t47b "rc=$rc out=[$out]"
+  fi
+  teardown
+}
+
+# ---- t48: claim lock path never embeds raw slashes from a bad repo token ----
+t48() {
+  setup
+  local lock base parent
+  lock=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    _ferry_claim_lockf 'outer/../../PWN'
+  )
+  base=$(basename "$lock")
+  parent=$(dirname "$lock")
+  # Flat basename under TMPDIR only — no extra path segments from the token.
+  if [[ "$base" == repo-session-* ]] \
+    && [[ "$base" != *"/"* ]] \
+    && [[ "$parent" == "$TMPDIR" ]] \
+    && [[ "$lock" != *'/outer/'* ]] \
+    && [[ "$lock" != *'/PWN'* ]]; then
+    ok t48
+  else
+    fail t48 "lock=[$lock] base=[$base] parent=[$parent] TMPDIR=[$TMPDIR]"
+  fi
+  teardown
+}
+
 export TEST_TMPDIR_ROOT="${TMPDIR:-/tmp}"
 set +e
 t1; t2; t3; t4; t5; t6; t7; t8; t9; t10; t11; t12
@@ -1083,4 +1152,5 @@ t36; t37; t38; t38b
 t39
 t40; t41; t42
 t43; t44; t45
+t46; t47; t48
 exit $FAIL

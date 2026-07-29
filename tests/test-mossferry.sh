@@ -72,7 +72,8 @@ trap 'rm -rf "$tmpdir"' EXIT
       break
     fi
   done <"$logf"
-  expected_tail="mosh --server=MOSH_SERVER_NETWORK_TMOUT=86400 mosh-server h -- .local/bin/repo-session --client-version ${VERSION} repo --primary"
+  # Remote argv is shell-quoted into one bash -lc string (spaces/quotes-safe).
+  expected_tail="mosh --server=MOSH_SERVER_NETWORK_TMOUT=86400 mosh-server h -- bash -lc .local/bin/repo-session --client-version ${VERSION} repo --primary"
   if [[ "$line" == *"$expected_tail" ]]; then
     ok "$name"
   else
@@ -304,7 +305,7 @@ trap 'rm -rf "$tmpdir"' EXIT
       [[ $saw_validate -eq 1 ]] && validate_before_mosh=1
     fi
   done <"$logf"
-  expected_tail="mosh --server=MOSH_SERVER_NETWORK_TMOUT=86400 mosh-server h -- .local/bin/repo-session --client-version ${VERSION} goodrepo --primary"
+  expected_tail="mosh --server=MOSH_SERVER_NETWORK_TMOUT=86400 mosh-server h -- bash -lc .local/bin/repo-session --client-version ${VERSION} goodrepo --primary"
   if [[ $has_validate -eq 1 ]] && [[ $validate_before_mosh -eq 1 ]] && [[ "$mosh_line" == *"$expected_tail" ]]; then
     ok "$name"
   else
@@ -312,6 +313,45 @@ trap 'rm -rf "$tmpdir"' EXIT
     printf '  has_validate=%s order=%s mosh_line=%s log=%s\n' \
       "$has_validate" "$validate_before_mosh" "$mosh_line" "$log_content" >&2
   fi
+}
+
+# --- m23: repo token with spaces is shell-quoted on the remote command ---
+{
+  name=m23
+  outf="$tmpdir/m23.out" errf="$tmpdir/m23.err" logf="$tmpdir/m23.log"
+  unset FAKE_SSH_VALIDATE_EXIT || true
+  run_ferry "$outf" "$errf" "$logf" -- h "name with spaces" --primary
+  log_content="$(cat "$logf" 2>/dev/null || true)"
+  # printf %q turns spaces into backslash-escapes in the remote string.
+  if [[ "$log_content" == *"--validate"* ]] \
+    && [[ "$log_content" == *'name\ with\ spaces'* ]] \
+    && [[ "$log_content" == *'bash -lc'* ]]; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  log=%s\n' "$log_content" >&2
+  fi
+}
+
+# --- m24: UTF-8 BOM on config does not break FERRY_DEFAULT_HOST assignment ---
+{
+  name=m24
+  home="$(mktemp -d)"
+  mkdir -p "$home/.config/mossferry"
+  # BOM + KEY=value — without strip, source treats KEY as a command name.
+  printf '\xEF\xBB\xBFFERRY_DEFAULT_HOST=bom-host\n' >"$home/.config/mossferry/config"
+  outf="$tmpdir/m24.out" errf="$tmpdir/m24.err" logf="$tmpdir/m24.log"
+  unset FERRY_DEFAULT_HOST || true
+  # Bare ferry (same as m4): default host must resolve after BOM strip.
+  run_ferry_home "$home" "$outf" "$errf" "$logf" --
+  line="$(cat "$logf" 2>/dev/null || true)"
+  if [[ "$line" == *" bom-host "* || "$line" == *" bom-host" ]]; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  expected bom-host in log; got: %s err=%s\n' "$line" "$(cat "$errf" 2>/dev/null || true)" >&2
+  fi
+  rm -rf "$home"
 }
 
 # --- m12: ferry h --list → no --validate in log ---

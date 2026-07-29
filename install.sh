@@ -90,19 +90,31 @@ if ui_tty 2>/dev/null; then
   banner "install" "mossferry"
 fi
 
-mkdir -p "$BIN_DIR" "$CFG_DIR"
+if ! mkdir -p "$BIN_DIR" "$CFG_DIR"; then
+  printf 'install: mkdir failed for %s or %s\n' "$BIN_DIR" "$CFG_DIR" >&2
+  exit 1
+fi
 printf 'mkdir -p %s %s\n' "$BIN_DIR" "$CFG_DIR"
 (( chrome )) && ok "mkdir ${BIN_DIR}"
 
-ln -sf "${ROOT}/bin/mossferry" "${BIN_DIR}/mossferry"
+if ! ln -sf "${ROOT}/bin/mossferry" "${BIN_DIR}/mossferry"; then
+  printf 'install: ln failed: %s -> %s\n' "${BIN_DIR}/mossferry" "${ROOT}/bin/mossferry" >&2
+  exit 1
+fi
 printf 'symlink %s -> %s\n' "${BIN_DIR}/mossferry" "${ROOT}/bin/mossferry"
 (( chrome )) && ok "symlink mossferry"
 
-ln -sf "${ROOT}/bin/mossferry" "${BIN_DIR}/ferry"
+if ! ln -sf "${ROOT}/bin/mossferry" "${BIN_DIR}/ferry"; then
+  printf 'install: ln failed: %s -> %s\n' "${BIN_DIR}/ferry" "${ROOT}/bin/mossferry" >&2
+  exit 1
+fi
 printf 'symlink %s -> %s\n' "${BIN_DIR}/ferry" "${ROOT}/bin/mossferry"
 (( chrome )) && ok "symlink ferry"
 
-ln -sf "${ROOT}/bin/repo-session" "${BIN_DIR}/repo-session"
+if ! ln -sf "${ROOT}/bin/repo-session" "${BIN_DIR}/repo-session"; then
+  printf 'install: ln failed: %s -> %s\n' "${BIN_DIR}/repo-session" "${ROOT}/bin/repo-session" >&2
+  exit 1
+fi
 printf 'symlink %s -> %s\n' "${BIN_DIR}/repo-session" "${ROOT}/bin/repo-session"
 (( chrome )) && ok "symlink repo-session"
 
@@ -145,7 +157,10 @@ if [[ -e "$CFG_FILE" ]]; then
   printf 'config already present: %s (left unchanged)\n' "$CFG_FILE"
   (( chrome )) && ok "config present"
 else
-  cp "${ROOT}/config.example" "$CFG_FILE"
+  if ! cp "${ROOT}/config.example" "$CFG_FILE"; then
+    printf 'install: failed to seed config from config.example -> %s\n' "$CFG_FILE" >&2
+    exit 1
+  fi
   printf 'seeded config from config.example -> %s\n' "$CFG_FILE"
   (( chrome )) && ok "seeded config"
 fi
