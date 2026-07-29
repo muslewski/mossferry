@@ -400,7 +400,10 @@ EOS
   else
     FAIL "${name}-bash-n"
   fi
-  pkg_ver=$(node -pe "require('$ROOT/package.json').version" 2>/dev/null || true)
+  # Pure awk: earlier blocks export HOME to hermetic temps (sometimes already
+  # rm -rf'd). Desk node-from-nvm24 looks under $HOME/.nvm and fails, so
+  # want= was empty even though package.json has the version.
+  pkg_ver=$(awk -F'"' '/"version"[[:space:]]*:/ { print $4; exit }' "$ROOT/package.json")
   if [[ -n "$pkg_ver" && "$VERSION" == "$pkg_ver" ]]; then
     ok "${name}-version"
   else

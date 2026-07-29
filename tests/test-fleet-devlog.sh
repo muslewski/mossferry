@@ -222,12 +222,16 @@ fi
   set -e
   f="$(events_file)"
   if [[ -f "$f" ]]; then
-    tool=$(head -1 "$f" | node -e 'const e=JSON.parse(require("fs").readFileSync(0,"utf8")); process.stdout.write(String(e.tool||""))' 2>/dev/null || true)
-    cmd=$(head -1 "$f" | node -e 'const e=JSON.parse(require("fs").readFileSync(0,"utf8")); process.stdout.write(String(e.cmd||""))' 2>/dev/null || true)
+    # Pure awk: do not use node here. This block sets HOME to a hermetic temp
+    # dir; the desk node wrapper (node-from-nvm24) resolves nvm under $HOME/.nvm
+    # and exits 127, leaving tool/cmd empty while the JSON line is valid.
+    line=$(head -1 "$f")
+    tool=$(printf '%s\n' "$line" | awk -F'"' '{for (i = 1; i <= NF; i++) if ($i == "tool") { print $(i + 2); exit }}')
+    cmd=$(printf '%s\n' "$line" | awk -F'"' '{for (i = 1; i <= NF; i++) if ($i == "cmd") { print $(i + 2); exit }}')
     if [[ "$tool" == "mossferry" && "$cmd" == "doctor" ]]; then
       ok "wired-doctor-emits"
     else
-      FAIL "wired-doctor-emits (tool=$tool cmd=$cmd line=$(head -1 "$f"))"
+      FAIL "wired-doctor-emits (tool=$tool cmd=$cmd line=$line)"
     fi
   else
     FAIL "wired-doctor-emits (no events file)"
