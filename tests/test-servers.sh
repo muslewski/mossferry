@@ -41,6 +41,18 @@ eq "postgres is loopback-only" "loopback-only" "$(printf '%s\n' "$rows" | awk -F
 eq "no row is missing columns" "0" "$(printf '%s\n' "$rows" | awk -F'\t' 'NF!=14' | wc -l | tr -d '[:space:]')"
 
 
+
+echo "== servers_scan_agents =="
+_as_dir="$(mktemp -d)"
+mkdir -p "$_as_dir/sessions"
+printf '%s\n' '{"schema":1,"pid":'"$$"',"cwd":"/tmp","model":"m","preset":"fix"}' > "$_as_dir/sessions/live.json"
+printf '%s\n' '{"schema":1,"pid":999999999,"cwd":"/tmp","model":"m","preset":"dead"}' > "$_as_dir/sessions/dead.json"
+_agents="$(AGENT_STATUS_DIR="$_as_dir" servers_scan_agents | awk -F'\t' '$4=="agent"' | wc -l | tr -d '[:space:]')"
+eq "one live agent row" "1" "$_agents"
+_agents0="$(AGENT_STATUS_DIR="/no/such/agent-status-$$" servers_scan_agents | awk -F'\t' '$4=="agent"' | wc -l | tr -d '[:space:]')"
+eq "missing dir yields zero" "0" "$_agents0"
+rm -rf "$_as_dir"
+
 echo "== servers_fix_plan =="
 eq "reachable → none"          "none"   "$(servers_fix_plan reachable dev 4000 /tmp | cut -f1)"
 eq "loopback dev → recipe"     "recipe" "$(servers_fix_plan loopback-only dev 4000 /tmp | cut -f1)"

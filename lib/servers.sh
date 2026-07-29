@@ -326,6 +326,96 @@ _servers_decl_files() {
 }
 
 
+
+# Resolve agent-status directory (armory contract; read-only).
+# 1) $AGENT_STATUS_DIR  2) $XDG_RUNTIME_DIR/agent-status  3) $HOME/.local/state/agent-status
+servers_agent_status_dir() {
+  # Explicit override: if set, never fall through — missing dir ⇒ zero rows.
+  if [[ -n "${AGENT_STATUS_DIR:-}" ]]; then
+    if [[ -d "$AGENT_STATUS_DIR" ]]; then
+      printf '%s\n' "$AGENT_STATUS_DIR"
+      return 0
+    fi
+    return 1
+  fi
+  if [[ -n "${XDG_RUNTIME_DIR:-}" && -d "$XDG_RUNTIME_DIR/agent-status" ]]; then
+    printf '%s\n' "$XDG_RUNTIME_DIR/agent-status"
+    return 0
+  fi
+  if [[ -d "$HOME/.local/state/agent-status" ]]; then
+    printf '%s\n' "$HOME/.local/state/agent-status"
+    return 0
+  fi
+  return 1
+}
+
+# Emit agent rows for live pids in agent-status sessions/*.json.
+# port=- class=agent state=LISTEN. Prefer node for JSON; silent no-op if missing.
+servers_scan_agents() {
+  local dir
+  dir="$(servers_agent_status_dir 2>/dev/null)" || return 0
+  [[ -d "$dir/sessions" ]] || return 0
+
+  if command -v node >/dev/null 2>&1; then
+    # Single node process over the directory — never spawn per-file.
+    node -e '
+const fs = require("fs");
+const path = require("path");
+const dir = process.argv[1];
+const base = process.env.FERRY_REPO_BASE || path.join(process.env.HOME || "", "Repositories");
+let files;
+try { files = fs.readdirSync(dir).filter(f => f.endsWith(".json")); } catch { process.exit(0); }
+for (const f of files) {
+  let j;
+  try { j = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")); } catch { continue; }
+  const pid = j.pid;
+  if (!pid || !/^[0-9]+$/.test(String(pid))) continue;
+  try { fs.accessSync("/proc/" + pid); } catch { continue; }
+  const preset = j.preset || "agent";
+  const model = j.model || "";
+  let label = preset;
+  if (model) label = preset + "/" + model;
+  let repo = "-";
+  try {
+    const cwd = fs.readlinkSync("/proc/" + pid + "/cwd");
+    if (cwd.startsWith(base + "/")) {
+      repo = cwd.slice(base.length + 1).split("/")[0] || "-";
+    }
+  } catch {}
+  const dash = (v) => (v === undefined || v === null || v === "" ? "-" : String(v).replace(/\t|\n|\r/g, " "));
+  // port state id class label bind pid comm repo owner mac_state mac_url health restart
+  process.stdout.write([
+    "-", "LISTEN", "agent-" + pid, "agent", dash(label),
+    "-", String(pid), "agent", dash(repo), "-",
+    "unknown", "-", "-", "-"
+  ].join("\t") + "\n");
+}
+' "$dir/sessions" 2>/dev/null || true
+    return 0
+  fi
+
+  # sed fallback when node is absent
+  local f pid cwd preset model label repo
+  shopt -s nullglob
+  for f in "$dir/sessions"/*.json; do
+    [[ -r "$f" ]] || continue
+    pid="$(sed -n 's/.*"pid"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$f" | head -1)"
+    [[ -n "$pid" && "$pid" =~ ^[0-9]+$ ]] || continue
+    [[ -d "/proc/$pid" ]] || continue
+    preset="$(sed -n 's/.*"preset"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$f" | head -1)"
+    model="$(sed -n 's/.*"model"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$f" | head -1)"
+    label="${preset:-agent}"
+    [[ -n "$model" ]] && label="${label}/${model}"
+    repo="$(servers_proc_repo "$pid" 2>/dev/null || true)"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "-" "LISTEN" "agent-$pid" "agent" "$label" \
+      "-" "$pid" "agent" "${repo:--}" "-" \
+      "unknown" "-" "-" "-"
+  done
+  shopt -u nullglob
+}
+
+
 # --- Bulk caches (filled once per build_server_rows) ---------------------------
 # Avoid O(listeners × units) systemctl/docker/tmux calls on a busy desk.
 
@@ -564,6 +654,9 @@ build_server_rows() {
       "$(_servers_dash "$health")" \
       "-"
   done | sort -t$'\t' -k1,1n
+
+  # Detached armory / agent children (class=agent, port=-). Read-only; missing dir = zero rows.
+  servers_scan_agents 2>/dev/null || true
 }
 
 # Fix plan pure function (Task 4): action \t detail
