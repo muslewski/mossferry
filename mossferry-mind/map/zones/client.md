@@ -5,7 +5,7 @@ tags: [cli, client, mosh, ssh, grok-wrap]
 status: active
 created: 2026-07-21
 updated: 2026-07-29
-verifiedAt: f57de42d
+verifiedAt: 6bfb4a64
 owns:
   routes: []
   testids: []
@@ -70,3 +70,11 @@ default; enable with `FLEET_DEVLOG=1` or machine config under
 `~/.config/fleet-devlog/`. Shared install-id with the three JS fleet tools.
 Fail-open always — never affects the ferry exit code. Hand-rolled JSON writer
 (no `jq` on host). See [[0002-fleet-devlog-handrolled-json]].
+
+Each event may include `repo_id` = `<basename>-<sha256 first 8 hex>` of the
+**main** repository root (same scheme as `agentic-sage/lib/repo-id.mjs`).
+Worktrees fold via `git rev-parse --path-format=absolute --git-common-dir`
+then `realpath` of the parent of that dir — not path string-munging. Hash via
+`sha256sum` (openssl dgst fallback). Outside a git repo, or if hashing tools
+are missing, the field is **omitted** (never empty/null). Basename is the only
+human-readable fragment; absolute paths never appear in the event.

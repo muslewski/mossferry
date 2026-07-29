@@ -5,7 +5,7 @@ tags: [tests, harness, fakes]
 status: active
 created: 2026-07-21
 updated: 2026-07-29
-verifiedAt: f57de42d
+verifiedAt: 6bfb4a64
 owns:
   routes: []
   testids: []
@@ -30,12 +30,15 @@ mac_state, fix_plan, agent-status rows, and `--servers` helpers.
 
 Product-facing **test suite**: plain bash, fake `tmux` / `mosh` / `ssh`,
 covers client launch/doctor/update paths, remote picker/claim/validate, install
-idempotency, and TTY vs non-TTY UI ops tokens. Entry: `bash tests/run.sh` or
-`npm test`.
+idempotency, TTY vs non-TTY UI ops tokens, and fleet-devlog hermetic cases
+(including `repo_id` main/worktree/outside-git/JS-match/fail-open). Entry:
+`bash tests/run.sh` or `npm test`.
 
 ## Anchors
 
-- `tests/**` — harness, four test modules, `fake-bin/`, `fake-tmux`.
+- `tests/**` — harness, test modules (`test-mossferry`, `test-repo-session`,
+  `test-install`, `test-ui-ops`, `test-fleet-devlog`, `test-servers`), `fake-bin/`,
+  `fake-tmux`.
 - Boundary: tests only; not demo VHS fixtures (see [[demo]]).
 
 ## Invariants

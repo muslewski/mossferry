@@ -148,6 +148,45 @@ _devlog_ts() {
   date -u +%Y-%m-%dT%H:%M:%S.000Z 2>/dev/null || printf '%s\n' "1970-01-01T00:00:00.000Z"
 }
 
+# First 8 hex of sha256 over the UTF-8 path string. Prefer sha256sum (host
+# default); openssl dgst as soft fallback. Fail → return 1 (caller omits field).
+_devlog_sha256_8() {
+  local s=${1-} out
+  if command -v sha256sum >/dev/null 2>&1; then
+    out=$(printf '%s' "$s" | sha256sum 2>/dev/null) || return 1
+    out=${out%% *}
+  elif command -v openssl >/dev/null 2>&1; then
+    out=$(printf '%s' "$s" | openssl dgst -sha256 2>/dev/null) || return 1
+    out=${out##* }
+  else
+    return 1
+  fi
+  out=$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')
+  [[ "$out" =~ ^[0-9a-f]{8,} ]] || return 1
+  printf '%s' "${out:0:8}"
+}
+
+# <basename>-<sha256-8> of the MAIN repo root (worktrees fold via
+# --git-common-dir). Matches agentic-sage/lib/repo-id.mjs byte-for-byte.
+# Empty stdout when not in a git repo or on any failure (omit field).
+_devlog_resolve_repo_id() {
+  local cwd=${1:-${PWD}} common root base hash
+  command -v git >/dev/null 2>&1 || return 0
+  common=$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
+  [[ -n "$common" ]] || return 0
+  root=$(dirname -- "$common")
+  if command -v realpath >/dev/null 2>&1; then
+    root=$(realpath -- "$root" 2>/dev/null) || return 0
+  else
+    root=$(cd -- "$root" 2>/dev/null && pwd -P) || return 0
+  fi
+  [[ -n "$root" ]] || return 0
+  base=$(basename -- "$root")
+  [[ -n "$base" && "$base" != / && "$base" != . ]] || return 0
+  hash=$(_devlog_sha256_8 "$root") || return 0
+  printf '%s\n' "${base}-${hash}"
+}
+
 _devlog_rotate_if_needed() {
   local file=$1 root size
   [[ -f "$file" ]] || return 0
@@ -162,6 +201,7 @@ _devlog_rotate_if_needed() {
 # devlog_emit <cmd> <exit> <ms> [key=value…]
 # Optional keys (allow-list): tool_version, result_class, repo_id, corr,
 #   counts.<name>=<number>, argv_shape=<comma-flags> (flags only, no values)
+# When repo_id is not passed, auto-resolve via _devlog_resolve_repo_id (omit if none).
 devlog_emit() {
   # Fail-open wrapper: swallow everything, always return 0 from this function.
   _devlog_emit_inner "$@" 2>/dev/null || true
@@ -183,6 +223,7 @@ _devlog_emit_inner() {
   local tool_version="" result_class="" repo_id="" corr=""
   local counts_json="" argv_json=""
   local kv k v ck first part flag
+  local repo_id_explicit=0
 
   for kv in "$@"; do
     [[ "$kv" == *=* ]] || continue
@@ -195,7 +236,10 @@ _devlog_emit_inner() {
           ok|failed|timeout|auth|ratelimit|killed|missing_output) result_class=$v ;;
         esac
         ;;
-      repo_id) repo_id=$v ;;
+      repo_id)
+        repo_id=$v
+        repo_id_explicit=1
+        ;;
       corr) corr=$v ;;
       argv_shape)
         first=1
@@ -231,6 +275,11 @@ _devlog_emit_inner() {
   exit_code=${exit_code%%.*}
   if ! _devlog_is_num "$ms"; then ms=0; fi
   ms=${ms%%.*}
+
+  # Auto-resolve unless the caller set repo_id= (including empty → omit).
+  if [[ $repo_id_explicit -eq 0 ]]; then
+    repo_id=$(_devlog_resolve_repo_id 2>/dev/null || true)
+  fi
 
   root=$(_devlog_root)
   _devlog_ensure_dir "$root" || return 0
