@@ -1,11 +1,11 @@
 ---
 type: zone
-summary: "Bash test harness (tests/): run.sh drives test-mossferry, test-repo-session, test-install, test-ui-ops with fake-tmux and fake-bin mosh/ssh stubs — no framework beyond bash."
+summary: "Bash test harness (tests/): run.sh drives test-mossferry, test-repo-session, test-install, test-ui-ops, test-fleet-devlog with fake-tmux and fake-bin stubs — no framework beyond bash."
 tags: [tests, harness, fakes]
-status: seeded
+status: active
 created: 2026-07-21
-updated: 2026-07-21
-verifiedAt: unverified
+updated: 2026-07-29
+verifiedAt: c796a3cb
 owns:
   routes: []
   testids: []
