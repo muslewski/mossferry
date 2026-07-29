@@ -2,15 +2,15 @@
 type: zone
 summary: "Vendored GREEN-UI-KIT (lib/green-ui.sh): source-able bash UI library — detect_color, ui_tty, banner/ok/warn/die/panel/checklist; stdout=data stderr=chrome; missing kit never kills ferry tools."
 tags: [ui, tty, green-ui-kit]
-status: seeded
+status: active
 created: 2026-07-21
-updated: 2026-07-21
-verifiedAt: unverified
+updated: 2026-07-29
+verifiedAt: 48c94f71
 owns:
   routes: []
   testids: []
   globs:
-    - "lib/**"
+    - "lib/green-ui.sh"
   tools: []
 depends: []
 invariants: []
@@ -32,7 +32,7 @@ sparkline / table).
 
 ## Anchors
 
-- `lib/**` → currently `lib/green-ui.sh` only.
+- `lib/green-ui.sh` — sole owned surface (other `lib/*` files belong to their feature zones).
 - Consumers load it from repo root; each binary also defines
   `_ferry_ui_fallbacks` so a missing file degrades to monochrome tokens.
 

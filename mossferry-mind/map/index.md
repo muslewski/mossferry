@@ -6,7 +6,7 @@
 |------|--------|-----------|---------|
 | client | active | ok | Local ferry CLI (bin/mossferry): FERRY_* config, mosh/ssh launch of repo-session, optional grok wrap, pre-validate over ssh, doctor/update, opt-in fleet-devlog. |
 | demo | seeded | seeded | Demo recording pipeline (demo/) and published GIF assets (assets/): VHS tapes for picker/help/doctor, green-demo.sh, fixtures with stub ferry/mosh/ssh/tmux-greenui for offline capture. |
-| green-ui | seeded | seeded | Vendored GREEN-UI-KIT (lib/green-ui.sh): source-able bash UI library — detect_color, ui_tty, banner/ok/warn/die/panel/checklist; stdout=data stderr=chrome; missing kit never kills ferry tools. |
+| green-ui | active | ok | Vendored GREEN-UI-KIT (lib/green-ui.sh): source-able bash UI library — detect_color, ui_tty, banner/ok/warn/die/panel/checklist; stdout=data stderr=chrome; missing kit never kills ferry tools. |
 | install-config | seeded | seeded | Install and packaging surface: install.sh (symlink ferry/mossferry/repo-session into ~/.local/bin, seed/migrate config), config.example FERRY_* keys (START_MENU + optional LAUNCHERS), package.json npm bins, VERSION. |
 | repo-session | active | ok | Remote brain (bin/repo-session): fzf/menu tmux session picker, create/attach, atomic grid claim, nested start menu, optional FERRY_LAUNCHERS, Grok wallet badge (GROK_HOME → delieta/muslewski), optional FERRY_SAGE wire, kill/rename, validate_repo. |
 | tests | active | ok | Bash test harness (tests/): run.sh drives test-mossferry, test-repo-session, test-install, test-ui-ops, test-fleet-devlog with fake-tmux and fake-bin stubs — no framework beyond bash. |
@@ -14,7 +14,6 @@
 ## ⚠ Verification gaps
 
 - zone demo: seeded — not yet verified (verifiedAt: unverified)
-- zone green-ui: seeded — not yet verified (verifiedAt: unverified)
 - zone install-config: seeded — not yet verified (verifiedAt: unverified)
 - zone client: invariant missing rule field (flow-style YAML maps are not supported — use block style)
 - zone client: invariant missing rule field (flow-style YAML maps are not supported — use block style)
