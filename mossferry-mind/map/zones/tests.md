@@ -4,8 +4,8 @@ summary: "Bash test harness (tests/): run.sh drives test-mossferry, test-repo-se
 tags: [tests, harness, fakes]
 status: active
 created: 2026-07-21
-updated: 2026-07-29
-verifiedAt: 6bfb4a64
+updated: 2026-07-30
+verifiedAt: 572e95f6
 owns:
   routes: []
   testids: []
@@ -43,8 +43,15 @@ idempotency, TTY vs non-TTY UI ops tokens, and fleet-devlog hermetic cases
 
 ## Invariants
 
-None claimed on seed. Suite is the future `enforcedBy` home for client and
-repo-session parse-stable tokens.
+- **Hermetic HOME blocks must not invoke the desk `node` shim** to parse
+  fleet-devlog JSON. The shim (`~/.local/bin/node` → nvm under `$HOME/.nvm`)
+  exits 127 when HOME is a temp dir; `2>/dev/null || echo parse-fail` then
+  reports empty fields as if the emitter were broken. Use pure `awk` field
+  extraction (pattern already in `wired-doctor-emits`). When a test must
+  call a real JS tool, capture `DOGFOOD_NODE_BIN` / nvm v24 path **before**
+  hermeticizing and fail with a `harness:` message if it is missing — never
+  mask extraction failure as an assertion failure. See
+  [[2026-07-30-hermetic-home-no-node-shim]].
 
 ## Lineage
 

@@ -16,6 +16,7 @@
 - zone demo: seeded — not yet verified (verifiedAt: unverified)
 - zone client: invariant missing rule field (flow-style YAML maps are not supported — use block style)
 - zone client: invariant missing rule field (flow-style YAML maps are not supported — use block style)
+- decision number 2026 reused: 2026-07-29-servers-view, 2026-07-30-hermetic-home-no-node-shim
 
 ## ⚠ Graph coherence
 
@@ -30,7 +31,7 @@ _none_
 - specs: 9 (? 8 · approved 1)
 - plans: 8 (? 8)
 - reports: 1 (snapshot 1)
-- decisions: 3 (active 3)
+- decisions: 4 (active 4)
 
 ### Recent
 

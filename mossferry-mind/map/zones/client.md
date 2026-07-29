@@ -4,8 +4,8 @@ summary: "Local ferry CLI (bin/mossferry): FERRY_* config, mosh/ssh launch of re
 tags: [cli, client, mosh, ssh, grok-wrap]
 status: active
 created: 2026-07-21
-updated: 2026-07-29
-verifiedAt: 6bfb4a64
+updated: 2026-07-30
+verifiedAt: 572e95f6
 owns:
   routes: []
   testids: []
@@ -78,3 +78,8 @@ then `realpath` of the parent of that dir — not path string-munging. Hash via
 `sha256sum` (openssl dgst fallback). Outside a git repo, or if hashing tools
 are missing, the field is **omitted** (never empty/null). Basename is the only
 human-readable fragment; absolute paths never appear in the event.
+
+Hermetic tests for this emitter must **not** call the desk `node` shim to
+parse event lines — under a temp `$HOME` the nvm24 wrapper exits 127 and
+`|| echo parse-fail` masks harness failure as product failure. Extract with
+`awk` (see [[tests]], [[2026-07-30-hermetic-home-no-node-shim]]).
