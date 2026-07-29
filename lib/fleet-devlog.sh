@@ -33,19 +33,24 @@ _devlog_is_num() {
   [[ ${1-} =~ ^-?[0-9]+([.][0-9]+)?$ ]]
 }
 
+# Fail-closed parse of top-level JSON boolean "enabled".
+# Never grep for the substring — corrupt/adversarial configs must not enable.
+# Without jq/node we only accept a minimal single-key object after whitespace strip
+# (the documented machine config shape). Anything else → absent (return 2 → off).
 _devlog_machine_enabled() {
-  # return 0 = enabled true, 1 = enabled false, 2 = absent/unreadable/no key
-  local f conf
+  # return 0 = enabled true, 1 = enabled false, 2 = absent/unreadable/unparseable
+  local f conf s
   f="${XDG_CONFIG_HOME:-${HOME}/.config}/fleet-devlog/config.json"
   [[ -r "$f" ]] || return 2
   conf=$(cat "$f" 2>/dev/null) || return 2
-  if printf '%s' "$conf" | grep -qE '"enabled"[[:space:]]*:[[:space:]]*true\b'; then
-    return 0
-  fi
-  if printf '%s' "$conf" | grep -qE '"enabled"[[:space:]]*:[[:space:]]*false\b'; then
-    return 1
-  fi
-  return 2
+  # Reject empty / non-object-looking input early.
+  s=$(printf '%s' "$conf" | tr -d ' \t\n\r\f\v')
+  [[ -n "$s" ]] || return 2
+  case "$s" in
+    '{"enabled":true}')  return 0 ;;
+    '{"enabled":false}') return 1 ;;
+    *)                   return 2 ;;
+  esac
 }
 
 devlog_enabled() {
@@ -87,7 +92,11 @@ _devlog_ensure_dir() {
   [[ -w "$p" ]] || return 1
   local m
   for m in "${missing[@]+"${missing[@]}"}"; do
-    mkdir "$m" 2>/dev/null || return 1
+    # Concurrent first-emit: another process may create $m between our check
+    # and mkdir. EEXIST with a directory is success; anything else fails open.
+    if ! mkdir "$m" 2>/dev/null; then
+      [[ -d "$m" ]] || return 1
+    fi
   done
   return 0
 }
@@ -166,6 +175,14 @@ _devlog_sha256_8() {
   printf '%s' "${out:0:8}"
 }
 
+# Contract shape for repo_id: <basename>-<8 lowercase hex>. Basename is the
+# only human-readable fragment; absolute paths and free-form text are rejected.
+_DEVLOG_REPO_ID_RE='^[A-Za-z0-9._-]+-[0-9a-f]{8}$'
+
+_devlog_repo_id_ok() {
+  [[ -n "${1-}" && "${1-}" =~ ${_DEVLOG_REPO_ID_RE} ]]
+}
+
 # <basename>-<sha256-8> of the MAIN repo root (worktrees fold via
 # --git-common-dir). Matches agentic-sage/lib/repo-id.mjs byte-for-byte.
 # Empty stdout when not in a git repo or on any failure (omit field).
@@ -237,8 +254,15 @@ _devlog_emit_inner() {
         esac
         ;;
       repo_id)
-        repo_id=$v
+        # Explicit empty → omit. Non-contract shapes (paths, free text) → drop.
         repo_id_explicit=1
+        if [[ -z "$v" ]]; then
+          repo_id=""
+        elif _devlog_repo_id_ok "$v"; then
+          repo_id=$v
+        else
+          repo_id=""
+        fi
         ;;
       corr) corr=$v ;;
       argv_shape)
@@ -279,14 +303,50 @@ _devlog_emit_inner() {
   # Auto-resolve unless the caller set repo_id= (including empty → omit).
   if [[ $repo_id_explicit -eq 0 ]]; then
     repo_id=$(_devlog_resolve_repo_id 2>/dev/null || true)
+    # Auto-resolved ids must also match contract shape (drop if not).
+    if [[ -n "$repo_id" ]] && ! _devlog_repo_id_ok "$repo_id"; then
+      repo_id=""
+    fi
   fi
 
   root=$(_devlog_root)
   _devlog_ensure_dir "$root" || return 0
+
+  # Containment: resolve intended root; refuse symlink targets outside it.
+  # bash `>>` follows symlinks — a pre-planted events.jsonl → /tmp/pwn would
+  # write outside the state dir and still exit 0. Fail-open: skip the write.
+  local root_real
+  if command -v realpath >/dev/null 2>&1; then
+    root_real=$(realpath -- "$root" 2>/dev/null) || return 0
+  else
+    root_real=$(cd -- "$root" 2>/dev/null && pwd -P) || return 0
+  fi
+  [[ -n "$root_real" && -d "$root_real" ]] || return 0
+
   install_id=$(devlog_install_id)
   ts=$(_devlog_ts)
-  file="${root}/events.jsonl"
+  file="${root_real}/events.jsonl"
+  # Refuse if events.jsonl is a symlink (anywhere) — do not follow out of root.
+  if [[ -L "$file" ]]; then
+    return 0
+  fi
+  if [[ -e "$file" ]]; then
+    local file_real
+    if command -v realpath >/dev/null 2>&1; then
+      file_real=$(realpath -- "$file" 2>/dev/null) || return 0
+    else
+      file_real=$(cd -- "$(dirname -- "$file")" 2>/dev/null && printf '%s/%s\n' "$(pwd -P)" "$(basename -- "$file")") || return 0
+    fi
+    case "$file_real" in
+      "$root_real"|"$root_real"/*) ;;
+      *) return 0 ;;
+    esac
+  fi
   _devlog_rotate_if_needed "$file"
+  # Re-check after rotate (mv of a symlink should not create a follow-out write).
+  if [[ -L "$file" ]]; then
+    return 0
+  fi
 
   local json
   json="{"

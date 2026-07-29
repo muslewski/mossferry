@@ -1,20 +1,28 @@
 #!/usr/bin/env bash
-# tests/test-fleet-devlog.sh — fleet-devlog v1 bash emitter (hermetic XDG roots)
+# tests/test-fleet-devlog.sh — fleet-devlog v1 bash emitter (isolated XDG roots)
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LIB="${ROOT}/lib/fleet-devlog.sh"
 FERRY="${ROOT}/bin/mossferry"
 fail=0
+skip=0
 
 ok()   { printf 'ok %s\n' "$1"; }
 FAIL() { printf 'FAIL %s\n' "$1"; fail=$((fail + 1)); }
+# Visible skip: suite continues; named in output. Never silent.
+SKIP() { printf 'SKIP %s\n' "$1"; skip=$((skip + 1)); }
+# Harness failure (tooling/env), textually distinct from product assertions.
+HARNESS_FAIL() { FAIL "harness: $1"; }
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-hermetic_home() {
-  # Sets XDG_STATE_HOME / XDG_CONFIG_HOME under a temp dir. Unsets FLEET_DEVLOG.
+# Isolate fleet-devlog XDG roots only. Does NOT claim full HOME isolation —
+# call sites that need a private HOME must save/restore it themselves.
+# Name is deliberate: previous "hermetic_home" overstated the guarantee and
+# left HOME pointing at a deleted temp dir for later blocks.
+devlog_xdg_tmp() {
   _H="$(mktemp -d)"
   export XDG_STATE_HOME="${_H}/state"
   export XDG_CONFIG_HOME="${_H}/config"
@@ -22,6 +30,9 @@ hermetic_home() {
   unset FLEET_DEVLOG 2>/dev/null || true
   DEVLOG_ARGV=()
 }
+
+# Back-compat alias used nowhere new — kept so any external copy still works.
+hermetic_home() { devlog_xdg_tmp; }
 
 events_file() {
   printf '%s\n' "${XDG_STATE_HOME}/fleet-devlog/events.jsonl"
@@ -145,7 +156,7 @@ fi
 # 1. off by default (no env, no machine config) → no file written
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   devlog_emit doctor 0 5
   if [[ ! -f "$(events_file)" ]]; then
     ok "off-by-default"
@@ -159,7 +170,7 @@ fi
 # 2. FLEET_DEVLOG=1 appends exactly ONE line per call
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   export FLEET_DEVLOG=1
   devlog_emit doctor 0 5
   devlog_emit update 0 10
@@ -178,19 +189,17 @@ fi
 }
 
 # ---------------------------------------------------------------------------
-# 3. the line is well-formed hand-rolled JSON (no node/jq — both unavailable
-#    under hermetic HOME / on this host respectively)
+# 3. the line is well-formed hand-rolled JSON (no node/jq)
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   export FLEET_DEVLOG=1
   devlog_emit doctor 0 12 result_class=ok
   f="$(events_file)"
   line=$(head -1 "$f" 2>/dev/null || true)
   if [[ -z "$line" ]]; then
-    FAIL "json-parse (empty line)"
+    HARNESS_FAIL "json-parse (empty events line)"
   else
-    # Structural check without node/jq: required string keys present, tool=mossferry.
     tool=$(json_str "$line" tool)
     cmd=$(json_str "$line" cmd)
     if [[ "$tool" == "mossferry" && "$cmd" == "doctor" && "$line" == \{*\} ]]; then
@@ -206,7 +215,7 @@ fi
 # 4. FLEET_DEVLOG=0 beats an enabling machine config
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   mkdir -p "${XDG_CONFIG_HOME}/fleet-devlog"
   printf '%s\n' '{"enabled":true}' >"${XDG_CONFIG_HOME}/fleet-devlog/config.json"
   export FLEET_DEVLOG=0
@@ -223,7 +232,7 @@ fi
 # 5. --no-devlog in argv beats an enabling config
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   mkdir -p "${XDG_CONFIG_HOME}/fleet-devlog"
   printf '%s\n' '{"enabled":true}' >"${XDG_CONFIG_HOME}/fleet-devlog/config.json"
   unset FLEET_DEVLOG 2>/dev/null || true
@@ -241,13 +250,11 @@ fi
 # 6. unwritable root does not fail the caller (exit code unchanged)
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   export FLEET_DEVLOG=1
-  # Point state at a non-writable path. /proc/… is never creatable.
   export XDG_STATE_HOME="/proc/definitely/not/writable-$$"
   set +e
   (
-    # simulate a successful command then emit; exit should stay 42
     rc=42
     devlog_emit doctor "$rc" 3
     exit "$rc"
@@ -259,7 +266,6 @@ fi
   else
     FAIL "unwritable-root-fail-open (got exit=$got want=42)"
   fi
-  # restore hermetic cleanup target (state home was fake)
   rm -rf "$_H" 2>/dev/null || true
 }
 
@@ -267,20 +273,17 @@ fi
 # 7. a string sneaking into counts is dropped, not written
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   export FLEET_DEVLOG=1
   DEVLOG_ARGV=()
   devlog_emit doctor 0 5 "counts.zones=4" "counts.name=syndcast"
   f="$(events_file)"
   line=$(head -1 "$f" 2>/dev/null || true)
   if [[ -z "$line" ]]; then
-    FAIL "counts-drop-string (no line)"
+    HARNESS_FAIL "counts-drop-string (empty events line)"
   else
-    # zones must be present as number 4; name must not appear as a counts key
     zones=$(json_counts_num "$line" zones)
     name_status=$(json_str_status "$line" name)
-    # "name" as a top-level string key should be absent; also no "name" inside counts.
-    # Emitter drops non-numeric counts.name — ensure the token "name" is not a key.
     if [[ "$zones" == "4" && "$name_status" == "absent" && "$line" != *'"name"'* ]]; then
       ok "counts-drop-string"
     else
@@ -294,7 +297,7 @@ fi
 # 8. machine config alone enables (sanity; supports precedence step 4)
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   mkdir -p "${XDG_CONFIG_HOME}/fleet-devlog"
   printf '%s\n' '{"enabled":true}' >"${XDG_CONFIG_HOME}/fleet-devlog/config.json"
   unset FLEET_DEVLOG 2>/dev/null || true
@@ -309,26 +312,53 @@ fi
 }
 
 # ---------------------------------------------------------------------------
+# 8b. corrupt / adversarial machine config must NOT enable (fail-closed)
+# ---------------------------------------------------------------------------
+{
+  devlog_xdg_tmp
+  mkdir -p "${XDG_CONFIG_HOME}/fleet-devlog"
+  # Substring true without being the top-level boolean — old grep would enable.
+  printf '%s\n' '{"note":"set \"enabled\":true to turn on","enabled":false}' \
+    >"${XDG_CONFIG_HOME}/fleet-devlog/config.json"
+  unset FLEET_DEVLOG 2>/dev/null || true
+  DEVLOG_ARGV=()
+  devlog_emit doctor 0 1
+  if [[ ! -f "$(events_file)" ]]; then
+    ok "corrupt-config-fail-closed"
+  else
+    FAIL "corrupt-config-fail-closed (enabled from non-contract config)"
+  fi
+  # Completely invalid JSON with the greppable substring
+  printf '%s\n' 'not-json "enabled":true garbage' \
+    >"${XDG_CONFIG_HOME}/fleet-devlog/config.json"
+  devlog_emit doctor 0 1
+  if [[ ! -f "$(events_file)" ]]; then
+    ok "invalid-json-config-fail-closed"
+  else
+    FAIL "invalid-json-config-fail-closed (enabled from garbage)"
+  fi
+  rm -rf "$_H"
+}
+
+# ---------------------------------------------------------------------------
 # 9. wired bin/mossferry doctor emits with FLEET_DEVLOG=1 (integration)
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   export FLEET_DEVLOG=1
+  _save_HOME=${HOME-}
   export HOME="$_H/home"
   mkdir -p "$HOME"
   export PATH="${ROOT}/tests/fake-bin:${PATH}"
-  # doctor needs a host or default; with empty default it may fail — still should emit
   set +e
   "$FERRY" doctor >/dev/null 2>&1
   set -e
   f="$(events_file)"
   if [[ -f "$f" ]]; then
-    # Pure awk: do not use node here. This block sets HOME to a hermetic temp
-    # dir; the desk node wrapper (node-from-nvm24) resolves nvm under $HOME/.nvm
-    # and exits 127, leaving tool/cmd empty while the JSON line is valid.
+    # Pure awk only — never node under a temp HOME (desk shim → 127).
     line=$(head -1 "$f")
-    tool=$(printf '%s\n' "$line" | awk -F'"' '{for (i = 1; i <= NF; i++) if ($i == "tool") { print $(i + 2); exit }}')
-    cmd=$(printf '%s\n' "$line" | awk -F'"' '{for (i = 1; i <= NF; i++) if ($i == "cmd") { print $(i + 2); exit }}')
+    tool=$(json_str "$line" tool)
+    cmd=$(json_str "$line" cmd)
     if [[ "$tool" == "mossferry" && "$cmd" == "doctor" ]]; then
       ok "wired-doctor-emits"
     else
@@ -337,6 +367,7 @@ fi
   else
     FAIL "wired-doctor-emits (no events file)"
   fi
+  export HOME="$_save_HOME"
   rm -rf "$_H"
 }
 
@@ -344,17 +375,16 @@ fi
 # 10. wired bin: unwritable root leaves doctor exit code alone
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   export FLEET_DEVLOG=1
+  _save_HOME=${HOME-}
   export HOME="$_H/home"
   mkdir -p "$HOME"
   export PATH="${ROOT}/tests/fake-bin:${PATH}"
-  # Capture baseline exit without broken state (still hermetic)
   set +e
   "$FERRY" doctor >/dev/null 2>&1
   base_rc=$?
   set -e
-  # Now break the state root and re-run
   export XDG_STATE_HOME="/proc/definitely/not/writable-$$"
   set +e
   "$FERRY" doctor >/dev/null 2>&1
@@ -365,6 +395,7 @@ fi
   else
     FAIL "wired-unwritable-exit-stable (base=$base_rc bad=$bad_rc)"
   fi
+  export HOME="$_save_HOME"
   rm -rf "$_H" 2>/dev/null || true
 }
 
@@ -372,7 +403,7 @@ fi
 # 11. main checkout event carries expected repo_id (<basename>-<sha256-8>)
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   export FLEET_DEVLOG=1
   DEVLOG_ARGV=()
   _base=$(mktemp -d)
@@ -394,7 +425,7 @@ fi
   f="$(events_file)"
   line=$(head -1 "$f" 2>/dev/null || true)
   if [[ -z "$line" ]]; then
-    FAIL "repo-id-main-checkout (harness: empty events line)"
+    HARNESS_FAIL "repo-id-main-checkout (empty events line)"
   else
     got=$(json_str "$line" repo_id)
     if [[ "$got" == "$expect_id" ]]; then
@@ -410,7 +441,7 @@ fi
 # 12. worktree event carries the SAME repo_id as the main checkout
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   export FLEET_DEVLOG=1
   DEVLOG_ARGV=()
   _base=$(mktemp -d)
@@ -438,19 +469,19 @@ fi
   )
   f="$(events_file)"
   if [[ ! -f "$f" ]]; then
-    FAIL "repo-id-worktree-folds (harness: no events file)"
+    HARNESS_FAIL "repo-id-worktree-folds (no events file)"
   else
     line1=$(sed -n '1p' "$f")
     line2=$(sed -n '2p' "$f")
     if [[ -z "$line1" || -z "$line2" ]]; then
-      FAIL "repo-id-worktree-folds (harness: need 2 event lines)"
+      HARNESS_FAIL "repo-id-worktree-folds (need 2 event lines)"
     else
       id_main=$(json_str "$line1" repo_id)
       id_wt=$(json_str "$line2" repo_id)
       if [[ -n "$id_main" && "$id_main" == "$id_wt" ]]; then
         ok "repo-id-worktree-folds"
       else
-        FAIL "repo-id-worktree-folds (main=$id_main wt=$id_wt same=$([[ "$id_main" == "$id_wt" ]] && echo same || echo diff))"
+        FAIL "repo-id-worktree-folds (main=$id_main wt=$id_wt)"
       fi
     fi
   fi
@@ -462,7 +493,7 @@ fi
 # 13. outside a git repo → repo_id field absent (not empty, not null)
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   export FLEET_DEVLOG=1
   DEVLOG_ARGV=()
   _norepo=$(mktemp -d)
@@ -475,7 +506,7 @@ fi
   f="$(events_file)"
   line=$(head -1 "$f" 2>/dev/null || true)
   if [[ -z "$line" ]]; then
-    FAIL "repo-id-absent-outside-git (harness: empty events line)"
+    HARNESS_FAIL "repo-id-absent-outside-git (empty events line)"
   else
     status=$(json_str_status "$line" repo_id)
     if [[ "$status" == "absent" ]]; then
@@ -488,10 +519,12 @@ fi
 }
 
 # ---------------------------------------------------------------------------
-# 14. repo_id matches agentic-sage resolveRepoId for the same repo
+# 14. repo_id matches independent in-tree oracle (sha256 formula)
+#     Optional JS cross-tool check when FLEET_REPO_ID_JS points at a module
+#     and SUITE_NODE_BIN is usable — never a hardcoded /home/kento path.
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   export FLEET_DEVLOG=1
   DEVLOG_ARGV=()
   _base=$(mktemp -d)
@@ -502,52 +535,63 @@ fi
   git -C "$main" config user.name "t"
   git -C "$main" commit --allow-empty -q -m init
   main_real=$(cd "$main" && pwd -P)
-  # Cross-tool compare requires Node. Use the pre-hermetic absolute binary
-  # (DOGFOOD_NODE_BIN / nvm v24.*) — never the $HOME-sensitive PATH shim alone.
-  if [[ -z "$SUITE_NODE_BIN" || ! -x "$SUITE_NODE_BIN" ]]; then
-    FAIL "repo-id-matches-js-tool (harness: no usable Node ≥24; set DOGFOOD_NODE_BIN or NVM_DIR)"
-    rm -rf "$_H" "$_base"
+  oracle_hash=$(printf '%s' "$main_real" | sha256sum | awk '{print substr($1,1,8)}')
+  oracle_id="acme-${oracle_hash}"
+  (
+    cd "$main_real" || exit 1
+    # shellcheck disable=SC1090
+    . "$LIB"
+    devlog_emit doctor 0 5
+  )
+  f="$(events_file)"
+  line=$(head -1 "$f" 2>/dev/null || true)
+  if [[ -z "$line" ]]; then
+    HARNESS_FAIL "repo-id-matches-oracle (empty events line)"
+  else
+    got=$(json_str "$line" repo_id)
+    if [[ "$got" == "$oracle_id" ]]; then
+      ok "repo-id-matches-oracle"
+    else
+      FAIL "repo-id-matches-oracle (got=$got want=$oracle_id line=$line)"
+    fi
+  fi
+
+  # Optional JS dual-source — skip visibly when module or node absent.
+  _js_mod=${FLEET_REPO_ID_JS-}
+  if [[ -z "$_js_mod" ]]; then
+    SKIP "repo-id-matches-js-tool (FLEET_REPO_ID_JS unset; set to a resolveRepoId module to enable)"
+  elif [[ ! -r "$_js_mod" ]]; then
+    SKIP "repo-id-matches-js-tool (FLEET_REPO_ID_JS not readable: $_js_mod)"
+  elif [[ -z "$SUITE_NODE_BIN" || ! -x "$SUITE_NODE_BIN" ]]; then
+    SKIP "repo-id-matches-js-tool (no usable Node ≥24; set DOGFOOD_NODE_BIN or NVM_DIR)"
   else
     set +e
     js_id=$("$SUITE_NODE_BIN" --input-type=module -e '
-      import { resolveRepoId } from "/home/kento/Repositories/agentic-sage/lib/repo-id.mjs";
-      const id = resolveRepoId(process.argv[1]);
+      import { pathToFileURL } from "node:url";
+      const modPath = process.argv[1];
+      const repoPath = process.argv[2];
+      const mod = await import(pathToFileURL(modPath).href);
+      const id = mod.resolveRepoId(repoPath);
       process.stdout.write(id == null ? "" : id);
-    ' "$main_real" 2>/dev/null)
+    ' "$_js_mod" "$main_real" 2>/dev/null)
     js_rc=$?
     set -e
     if [[ "$js_rc" -ne 0 ]]; then
-      FAIL "repo-id-matches-js-tool (harness: JS resolveRepoId exit=$js_rc via $SUITE_NODE_BIN)"
-      rm -rf "$_H" "$_base"
+      HARNESS_FAIL "repo-id-matches-js-tool (JS resolveRepoId exit=$js_rc via $SUITE_NODE_BIN)"
+    elif [[ -n "$js_id" && "$got" == "$js_id" ]]; then
+      ok "repo-id-matches-js-tool"
     else
-      (
-        cd "$main_real" || exit 1
-        # shellcheck disable=SC1090
-        . "$LIB"
-        devlog_emit doctor 0 5
-      )
-      f="$(events_file)"
-      line=$(head -1 "$f" 2>/dev/null || true)
-      if [[ -z "$line" ]]; then
-        FAIL "repo-id-matches-js-tool (harness: empty events line)"
-      else
-        got=$(json_str "$line" repo_id)
-        if [[ -n "$js_id" && "$got" == "$js_id" ]]; then
-          ok "repo-id-matches-js-tool"
-        else
-          FAIL "repo-id-matches-js-tool (js=$js_id bash=$got line=$line)"
-        fi
-      fi
-      rm -rf "$_H" "$_base"
+      FAIL "repo-id-matches-js-tool (js=$js_id bash=$got)"
     fi
   fi
+  rm -rf "$_H" "$_base"
 }
 
 # ---------------------------------------------------------------------------
 # 15. hashing tool unavailable → event still written, repo_id absent, exit unchanged
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   export FLEET_DEVLOG=1
   DEVLOG_ARGV=()
   _base=$(mktemp -d)
@@ -558,15 +602,12 @@ fi
   git -C "$main" config user.name "t"
   git -C "$main" commit --allow-empty -q -m init
   main_real=$(cd "$main" && pwd -P)
-  # Restricted PATH: keep git/coreutils, omit sha256sum and openssl
   _rbin=$(mktemp -d)
   for c in bash sh git printf tr date mkdir cat head wc od dirname basename \
-           realpath awk sed node touch mv rm ls uname env; do
+           realpath awk sed touch mv rm ls uname env; do
     p=$(command -v "$c" 2>/dev/null) || continue
     ln -s "$p" "$_rbin/$c" 2>/dev/null || true
   done
-  # Ensure the hashers are not reachable via leftover PATH.
-  # set -e is on after earlier wired tests; capture non-zero without aborting.
   set +e
   (
     export PATH="$_rbin"
@@ -581,11 +622,8 @@ fi
   set -e
   f="$(events_file)"
   line=$(head -1 "$f" 2>/dev/null || true)
-  # Emitter must still write the event (without repo_id) and preserve rc=77.
-  # Do not use node here — restricted PATH / hermetic HOME make the desk shim
-  # exit 127 and the old `|| echo no-event` hid a harness failure as no-event.
   if [[ -z "$line" ]]; then
-    FAIL "repo-id-hash-missing-fail-open (rc=$got_rc status=no-event line=)"
+    HARNESS_FAIL "repo-id-hash-missing-fail-open (empty events line; rc=$got_rc)"
   else
     status=$(json_str_status "$line" repo_id)
     if [[ "$got_rc" -eq 77 && "$status" == "absent" ]]; then
@@ -599,11 +637,11 @@ fi
 
 # ---------------------------------------------------------------------------
 # 16. log root unwritable → command exit code unchanged (wired doctor)
-#     (duplicates invariant of test 10; required acceptance proof)
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   export FLEET_DEVLOG=1
+  _save_HOME=${HOME-}
   export HOME="$_H/home"
   mkdir -p "$HOME"
   export PATH="${ROOT}/tests/fake-bin:${PATH}"
@@ -621,6 +659,7 @@ fi
   else
     FAIL "repo-id-unwritable-exit-stable (base=$base_rc bad=$bad_rc)"
   fi
+  export HOME="$_save_HOME"
   rm -rf "$_H" 2>/dev/null || true
 }
 
@@ -628,8 +667,9 @@ fi
 # 17. silent by default: no config, no env → zero new lines (wired doctor)
 # ---------------------------------------------------------------------------
 {
-  hermetic_home
+  devlog_xdg_tmp
   unset FLEET_DEVLOG 2>/dev/null || true
+  _save_HOME=${HOME-}
   export HOME="$_H/home"
   mkdir -p "$HOME"
   export PATH="${ROOT}/tests/fake-bin:${PATH}"
@@ -648,12 +688,84 @@ fi
   else
     FAIL "silent-by-default-zero-lines (before=$before after=$after)"
   fi
+  export HOME="$_save_HOME"
+  rm -rf "$_H"
+}
+
+# ---------------------------------------------------------------------------
+# 18. path-shaped explicit repo_id must NEVER reach the log (privacy contract)
+# ---------------------------------------------------------------------------
+{
+  devlog_xdg_tmp
+  export FLEET_DEVLOG=1
+  DEVLOG_ARGV=()
+  bad_path='/home/kento/Repositories/secret-repo'
+  devlog_emit doctor 0 5 "repo_id=${bad_path}"
+  f="$(events_file)"
+  line=$(head -1 "$f" 2>/dev/null || true)
+  if [[ -z "$line" ]]; then
+    HARNESS_FAIL "repo-id-path-rejected (empty events line)"
+  else
+    status=$(json_str_status "$line" repo_id)
+    if [[ "$status" == "absent" && "$line" != *"$bad_path"* && "$line" != *'/home/'* ]]; then
+      ok "repo-id-path-rejected"
+    else
+      FAIL "repo-id-path-rejected (status=$status line=$line)"
+    fi
+  fi
+  # Also reject free-form text that is not <basename>-<8hex>
+  devlog_emit doctor 0 5 "repo_id=not-a-valid-id"
+  line2=$(tail -1 "$f" 2>/dev/null || true)
+  status2=$(json_str_status "$line2" repo_id)
+  if [[ "$status2" == "absent" ]]; then
+    ok "repo-id-freeform-rejected"
+  else
+    FAIL "repo-id-freeform-rejected (status=$status2 line=$line2)"
+  fi
+  # Valid shape is kept
+  devlog_emit doctor 0 5 "repo_id=acme-deadbeef"
+  line3=$(tail -1 "$f" 2>/dev/null || true)
+  got3=$(json_str "$line3" repo_id)
+  if [[ "$got3" == "acme-deadbeef" ]]; then
+    ok "repo-id-valid-shape-kept"
+  else
+    FAIL "repo-id-valid-shape-kept (got=$got3)"
+  fi
+  rm -rf "$_H"
+}
+
+# ---------------------------------------------------------------------------
+# 19. events.jsonl as symlink → do not write outside the state root
+# ---------------------------------------------------------------------------
+{
+  devlog_xdg_tmp
+  export FLEET_DEVLOG=1
+  DEVLOG_ARGV=()
+  _outside=$(mktemp)
+  : >"$_outside"
+  _before=$(wc -c <"$_outside" | tr -d '[:space:]')
+  mkdir -p "${XDG_STATE_HOME}/fleet-devlog"
+  ln -s "$_outside" "${XDG_STATE_HOME}/fleet-devlog/events.jsonl"
+  devlog_emit doctor 0 5
+  _after=$(wc -c <"$_outside" | tr -d '[:space:]')
+  if [[ "$_before" == "$_after" ]]; then
+    ok "events-symlink-no-write-outside"
+  else
+    FAIL "events-symlink-no-write-outside (outside grew from $_before to $_after)"
+  fi
+  rm -f "$_outside"
   rm -rf "$_H"
 }
 
 if [[ $fail -ne 0 ]]; then
-  printf 'tests/test-fleet-devlog.sh: %s failure(s)\n' "$fail"
+  printf 'tests/test-fleet-devlog.sh: %s failure(s)' "$fail"
+  [[ $skip -gt 0 ]] && printf ', %s skip(s)' "$skip"
+  printf '\n'
   exit 1
 fi
-printf 'tests/test-fleet-devlog.sh: all ok\n'
+if [[ $skip -gt 0 ]]; then
+  printf 'tests/test-fleet-devlog.sh: all ok (%s skip(s))\n' "$skip"
+else
+  printf 'tests/test-fleet-devlog.sh: all ok\n'
+fi
 exit 0
