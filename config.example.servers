@@ -1,0 +1,27 @@
+# mossferry servers declaration — TSV, not YAML.
+# Locations (later wins per port):
+#   1. ~/.config/mossferry/servers.tsv
+#   2. <repo>/.ferry/servers.tsv  (under FERRY_REPO_BASE)
+#
+# Columns (tab-separated):
+#   port	id	class	label	mac	health
+#
+# class: spine|docker|dev|preview|db|agent|infra
+# mac:   ok|prefer-ts|never
+# health: URL or -
+#
+# Declarations never assert liveness — they contribute label, class, and mac
+# policy only. A live ss reading always wins on bind and pid. A declared port
+# with no listener becomes state declared-missing.
+#
+# Blank lines and # lines are skipped. Unknown extra columns are ignored.
+# "-" means "not set".
+#
+# Why TSV, not YAML/JSON: mossferry is zero-dependency bash. yq and jq are not
+# required; parse with: while IFS=$'\t' read -r port id class label mac health
+
+# port	id	class	label	mac	health
+8791	freellmapi	infra	FreeLLMAPI	never	http://127.0.0.1:8791/health
+3000	syndcast-next	dev	Syndcast app	ok	-
+3100	syndcast-render	dev	Syndcast render	ok	http://127.0.0.1:3100/health
+5432	postgres	db	Postgres	never	-
