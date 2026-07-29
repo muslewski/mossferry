@@ -2,10 +2,10 @@
 type: zone
 summary: "Remote brain (bin/repo-session): fzf/menu tmux session picker, create/attach, atomic grid claim, nested start menu, optional FERRY_LAUNCHERS, Grok wallet badge (GROK_HOME → delieta/muslewski), optional FERRY_SAGE wire, kill/rename, validate_repo."
 tags: [remote, tmux, picker, fzf, sage, grok]
-status: seeded
+status: active
 created: 2026-07-21
-updated: 2026-07-28
-verifiedAt: unverified
+updated: 2026-07-29
+verifiedAt: ad397db8
 owns:
   routes: []
   testids: []
@@ -45,8 +45,11 @@ None claimed yet on seed. Candidates for later verification:
 - Zero live sessions for `ferry <host> <repo>` fast-path creates + attaches
   primary without showing the empty picker.
 - `ctrl-x` / `ctrl-r` reserved (kill/rename); not valid launcher keys.
-- fzf kill/rename binds quote `"{1}"` so session names with trailing/embedded
-  spaces match `kill-session -t =name` exactly.
+- fzf kill/rename binds use full-line `{}` + tab-split for the session name
+  (not `n="{1}"`). Modern fzf already shell-quotes placeholders; wrapping
+  `{1}` in extra quotes made kill target `'name'` and fail silently. Full-line
+  extract also keeps trailing-space names that field `{1}` would strip.
+  `picker_kill` strips one layer of wrapping quotes as defense-in-depth.
 - Main picker preview uses `--picker-preview` (sage chrome optional + capture);
   synthetic rows never call bare `capture-pane -t ''` (cycle-to-➕ no self-mirror).
 - Optional **FERRY_SAGE** hybrid wire: when `sage` on PATH and not `off`, preview

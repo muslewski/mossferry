@@ -642,7 +642,18 @@ build_session_rows() {
 picker_kill() {
   # Exact session name (may contain trailing spaces — must match byte-for-byte).
   # Fast path for picker spam — no confirm here.
-  "$TMUXBIN" kill-session -t "=$1" 2>/dev/null || true
+  # Defense: strip one layer of wrapping quotes. Modern fzf already
+  # shell-quotes placeholders; a bind written as n="{1}" becomes n="'name'"
+  # and kill would target a non-existent session named 'name' (with quotes).
+  local name="$1"
+  if (( ${#name} >= 2 )); then
+    case "$name" in
+      \'*\') name="${name:1:$((${#name} - 2))}" ;;
+      \"*\") name="${name:1:$((${#name} - 2))}" ;;
+    esac
+  fi
+  [[ -z "$name" ]] && return 0
+  "$TMUXBIN" kill-session -t "=$name" 2>/dev/null || true
 }
 
 picker_rename() {
@@ -1157,11 +1168,16 @@ run_picker() {
     hints='enter=attach · ctrl-x=kill · ctrl-r=rename · esc=quit'
   fi
   # Kill: execute-silent then reload list in place (no exit, no y/Enter).
-  # Quote "{1}" so trailing spaces / embedded spaces survive shell assignment
-  # (unquoted n={1} drops them → kill-session -t =name fails silently).
-  # Skip the synthetic "new session" row. Optional confirm via FERRY_KILL_CONFIRM.
+  #
+  # fzf placeholder rules (0.36+; verified on 0.72):
+  #   {1}  → already shell-quoted field 1  (do NOT wrap as "{1}" — that yields
+  #          n="'name'" and kill targets a session literally named 'name')
+  #   {1}  also strips trailing field whitespace, so trailing-space session
+  #          names must come from the full line {} + bash tab-split.
+  # Skip synthetic ➕/⚖ rows. Optional confirm via FERRY_KILL_CONFIRM.
   bind_kill="ctrl-x:execute-silent(
-    n=\"{1}\"
+    line={}
+    n=\"\${line%%\$'\\t'*}\"
     case \"\$n\" in ''|➕*|⚖*) exit 0 ;; esac
     if [ \"\${FERRY_KILL_CONFIRM:-0}\" = 1 ]; then
       printf 'kill %s? [y/N] ' \"\$n\" >/dev/tty
@@ -1172,8 +1188,10 @@ run_picker() {
     bash ${self_q} --picker-kill \"\$n\"
   )+reload(${rows_cmd})"
   # Rename: still needs a name; stays in-picker via execute+reload.
+  # Same full-line extract as kill (fzf {1} would drop trailing spaces / double-quote).
   bind_rename="ctrl-r:execute(
-    n=\"{1}\"
+    line={}
+    n=\"\${line%%\$'\\t'*}\"
     case \"\$n\" in ''|➕*|⚖*) exit 0 ;; esac
     printf 'new name: ' >/dev/tty
     read -r nn </dev/tty || exit 0

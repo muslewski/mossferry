@@ -22,15 +22,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Frozen picker sessions that could not be killed**: modern fzf (0.36+) already
+  shell-quotes placeholders. The kill/rename binds used `n="{1}"`, which
+  expanded to `n="'name'"` — `kill-session` then targeted a session literally
+  named `'name'` (with quotes), failed silently (`|| true`), and the row stayed
+  after reload. Binds now take the full line `{}` and tab-split field 1 (also
+  preserves trailing-space names that `{1}` would strip). `picker_kill` strips
+  one layer of wrapping quotes as defense-in-depth.
 - **Picker cycle wrap duplicated the list**: pressing up onto `➕ new session…`
   ran `capture-pane -t` with an empty field-6 target, so the preview mirrored
   the picker itself (looked like duplicate sessions). Preview now guards
   `[ -n {6} ]` and shows a create hint on that row.
-- **Picker kill of oddly-named sessions**: fzf bind used unquoted `n={1}`, so a
-  session name with trailing/embedded spaces was truncated before
-  `kill-session -t =…` and failed silently. Fields are now quoted; rename
-  rejects invalid names; scoped repo filter tolerates trailing whitespace so
-  those sessions still appear under `ferry … <repo>`.
+- **Picker kill of oddly-named sessions**: earlier fix quoted `n="{1}"` for
+  trailing spaces; that interacted badly with fzf’s auto-quoting (see above).
+  Rename still rejects invalid names; scoped repo filter tolerates trailing
+  whitespace so those sessions still appear under `ferry … <repo>`.
 
 ### Changed
 

@@ -8,7 +8,7 @@
 | demo | seeded | seeded | Demo recording pipeline (demo/) and published GIF assets (assets/): VHS tapes for picker/help/doctor, green-demo.sh, fixtures with stub ferry/mosh/ssh/tmux-greenui for offline capture. |
 | green-ui | seeded | seeded | Vendored GREEN-UI-KIT (lib/green-ui.sh): source-able bash UI library — detect_color, ui_tty, banner/ok/warn/die/panel/checklist; stdout=data stderr=chrome; missing kit never kills ferry tools. |
 | install-config | seeded | seeded | Install and packaging surface: install.sh (symlink ferry/mossferry/repo-session into ~/.local/bin, seed/migrate config), config.example FERRY_* keys (START_MENU + optional LAUNCHERS), package.json npm bins, VERSION. |
-| repo-session | seeded | seeded | Remote brain (bin/repo-session): fzf/menu tmux session picker, create/attach, atomic grid claim, nested start menu (FERRY_START_MENU) + optional FERRY_LAUNCHERS hotkeys, in-place kill/rename, validate_repo. |
+| repo-session | active | ok | Remote brain (bin/repo-session): fzf/menu tmux session picker, create/attach, atomic grid claim, nested start menu, optional FERRY_LAUNCHERS, Grok wallet badge (GROK_HOME → delieta/muslewski), optional FERRY_SAGE wire, kill/rename, validate_repo. |
 | tests | seeded | seeded | Bash test harness (tests/): run.sh drives test-mossferry, test-repo-session, test-install, test-ui-ops with fake-tmux and fake-bin mosh/ssh stubs — no framework beyond bash. |
 
 ## ⚠ Verification gaps
@@ -17,7 +17,6 @@
 - zone demo: seeded — not yet verified (verifiedAt: unverified)
 - zone green-ui: seeded — not yet verified (verifiedAt: unverified)
 - zone install-config: seeded — not yet verified (verifiedAt: unverified)
-- zone repo-session: seeded — not yet verified (verifiedAt: unverified)
 - zone tests: seeded — not yet verified (verifiedAt: unverified)
 - zone client: invariant missing rule field (flow-style YAML maps are not supported — use block style)
 - zone client: invariant missing rule field (flow-style YAML maps are not supported — use block style)
@@ -32,13 +31,15 @@ _none_
 
 ## Ledger
 
-- specs: 8 (? 8)
-- plans: 7 (? 7)
+- specs: 9 (? 8 · approved 1)
+- plans: 8 (? 8)
 - reports: 1 (snapshot 1)
 - decisions: 1 (active 1)
 
 ### Recent
 
+- [[2026-07-24-ferry-sage-wire-plan]]
+- [[2026-07-24-ferry-sage-wire-design]]
 - [[2026-07-17-picker-launchers-plan]]
 - [[2026-07-17-picker-launchers-design]]
 - [[2026-07-17-picker-banner-plan]]
@@ -47,5 +48,3 @@ _none_
 - [[2026-07-17-banner-v2-cycle-plan]]
 - [[2026-07-17-banner-v2-cycle-design]]
 - [[2026-07-16-picker-create-plan]]
-- [[2026-07-16-picker-create-design]]
-- [[2026-07-16-mossferry-rename-plan]]
