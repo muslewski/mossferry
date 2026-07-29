@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.7.4] — 2026-07-29
+
 ### Added
 
 - **Grok dual-wallet badge** in the picker: when a pane runs Grok, display
@@ -45,7 +47,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   an AI CLI. Optional `FERRY_LAUNCHERS` hotkeys are **empty by default** (prefer
   the menu). Personal profile names stay in user config only — not in shipped
   defaults.
-
 
 ## [2.7.3] — 2026-07-23
 
