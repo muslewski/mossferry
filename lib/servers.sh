@@ -375,7 +375,11 @@ for (const f of files) {
   try { j = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")); } catch { continue; }
   const pid = j.pid;
   if (!pid || !/^[0-9]+$/.test(String(pid))) continue;
-  try { fs.accessSync("/proc/" + pid); } catch { continue; }
+  // PID liveness via signal 0 — POSIX, so this works on macOS too. The old
+  // fs.accessSync("/proc/" + pid) always threw on a Mac, so every agent row was
+  // dropped and `one live agent row` failed there. EPERM means the process exists
+  // but is owned by someone else, which still counts as alive.
+  try { process.kill(pid, 0); } catch (e) { if (e.code !== "EPERM") continue; }
   const preset = j.preset || "agent";
   const model = j.model || "";
   let label = preset;

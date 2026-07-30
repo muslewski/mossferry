@@ -151,7 +151,14 @@ EOS
   : >"$logf"
 
   set +e
-  FAKE_SSH_UNREACHABLE=h timeout 8 "$FERRY" doctor h >"$outf" 2>"$errf"
+  # No GNU `timeout` on stock macOS (and no gtimeout without coreutils), so calling
+  # it unconditionally made this assertion fail with rc=127 on every Mac. The
+  # guard is only a watchdog; doctor short-circuits on its own here.
+  if command -v timeout >/dev/null 2>&1; then
+    FAKE_SSH_UNREACHABLE=h timeout 8 "$FERRY" doctor h >"$outf" 2>"$errf"
+  else
+    FAKE_SSH_UNREACHABLE=h "$FERRY" doctor h >"$outf" 2>"$errf"
+  fi
   rc=$?
   set -e
   out="$(cat "$outf")"
