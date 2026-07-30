@@ -1,82 +1,152 @@
 ---
 title: "Getting started"
-description: "Install mossferry on laptop and host, set config, and verify with ferry doctor."
+description: "Install mossferry on laptop and host, set host aliases, and verify with ferry doctor."
 section: guide
 order: 10
 ---
 
 # Getting started
 
-Two sides: the **laptop** (where you type `ferry`) and the **remote host** (where tmux sessions live). Both need the package on PATH.
+**mossferry** is a laptop command that attaches you to a repository’s tmux session on another machine. Everyday binary: **`ferry`**. This page gets both ends installed and checks them.
 
-## 1. Install (local machine)
+## 1. Install on the laptop
 
 ```sh
 npm install -g mossferry    # or: npx mossferry …
 # bins: ferry | mossferry | repo-session
-ferry doctor
+ferry --help                # local only; no network
 ```
 
-Seeds config on first run if needed. Or copy `config.example` → `~/.config/mossferry/config`.
-
-## 2. Install (remote host)
-
-Same tools must be on PATH on the host — npm or clone + `install.sh`:
+Or clone and symlink:
 
 ```sh
-# option A — npm
-npm install -g mossferry
-
-# option B — git checkout (symlinks into ~/.local/bin)
 git clone https://github.com/muslewski/mossferry.git ~/Repositories/mossferry
 cd ~/Repositories/mossferry
 ./install.sh
 ```
 
-`install.sh` is idempotent: creates `~/.local/bin` and `~/.config/mossferry`, symlinks bins, migrates legacy config when present, and seeds config **only if absent**.
+`install.sh` is idempotent: creates `~/.local/bin` and `~/.config/mossferry`, symlinks `bin/mossferry` as both `mossferry` and `ferry`, plus `repo-session`, migrates legacy config when present, and seeds `~/.config/mossferry/config` from `config.example` **only if absent**.
 
-## 3. Minimal config
+Observed `--help` footer:
+
+```text
+mossferry 2.7.4 · the green ferry between your machines
+```
+
+## 2. Install on the host
+
+The machine that holds the repos needs the same tools on `PATH` (especially `repo-session` and `tmux`):
+
+```sh
+# option A — npm
+npm install -g mossferry
+
+# option B — git checkout
+git clone https://github.com/muslewski/mossferry.git ~/Repositories/mossferry
+cd ~/Repositories/mossferry
+./install.sh
+```
+
+Default remote layout:
+
+| What | Default |
+|------|---------|
+| `repo-session` path | `~/.local/bin/repo-session` (`FERRY_REMOTE_BIN=.local/bin/repo-session`) |
+| Repos directory | `~/Repositories` (`FERRY_REPO_BASE`) |
+| mossferry checkout (for `ferry update`) | `~/Repositories/mossferry` (`FERRY_REMOTE_REPO`) |
+
+## 3. Configure host aliases (laptop)
 
 `~/.config/mossferry/config` — plain `KEY=value`. Environment overrides the file.
 
-Typical laptop:
-
 ```sh
 # ~/.config/mossferry/config
-FERRY_DEFAULT_HOST=manjaro-remote   # or your ssh host alias
-# FERRY_WRAP=auto                   # default: grok wrap when local grok exists
-# FERRY_TRANSPORT=mosh              # use ssh for more reliable Grok clipboard
+FERRY_DEFAULT_HOST=workstation          # placeholder Host name — replace with yours
+# FERRY_HOST_CANDIDATES=workstation-lan,workstation
+# FERRY_TRANSPORT=mosh                  # or ssh
+# FERRY_WRAP=auto                       # grok wrap when local grok exists
 ```
 
-See the README configuration table for every key. AI launchers and wrap are covered in [Grok + ferry](./guides/grok-and-ferry.md).
+`workstation` is a **placeholder**. Define a matching `Host` in `~/.ssh/config` (LAN IP, Tailscale name, etc. stay in ssh config — not in ferry).
 
-## 4. First hop
+Bare `ferry`, `ferry doctor`, and `ferry update` resolve a host in this order:
+
+1. Explicit CLI host (always wins)
+2. `FERRY_HOST_CANDIDATES` — first name that answers `ssh -o BatchMode=yes -o ConnectTimeout=2 … true`
+3. `FERRY_DEFAULT_HOST`
+
+If nothing is set:
+
+```text
+mossferry: doctor: no host (pass one, or set FERRY_HOST_CANDIDATES / FERRY_DEFAULT_HOST)
+```
+
+Full key list: [Usage](./usage.md) and `config.example`.
+
+## 4. Verify (needs a reachable host)
 
 ```sh
-ferry                          # uses FERRY_DEFAULT_HOST → global picker
-ferry <host>                   # all sessions + ➕ new session…
-ferry <host> <repo>            # that repo's sessions (zero-session → create primary)
-ferry doctor                   # local health
-ferry doctor <host>            # local + remote checks
+ferry doctor workstation
 ```
 
-Picker keys (remote): `enter` attach · `ctrl-x` kill (instant, no confirm — spam to clear many sessions) · `ctrl-r` rename · `ctrl-a`/`ctrl-g` AI launchers · cycle · esc. Kill stays in the picker (no teardown). Set `FERRY_KILL_CONFIRM=1` for single-key y/N confirm.
+Read-only checks: config readable, ssh resolution, BatchMode connect, local mosh, wrap/transport info, remote `repo-session` executable, version match, fzf, mosh-server count, and a short servers summary. Exit **1** if any line is `FAIL`.
 
-If local and remote mossferry versions differ, the picker header shows a subtle
-`↑ update  client X · remote Y  →  ferry update` line (stderr still gets a one-line
-warn). Run `ferry update` (or `ferry update <host>`) to sync.
+Non-TTY tokens stay parse-stable: `ok` / `FAIL` / `info`. On a TTY you get glyphs and a short summary.
 
-## 5. Update both sides
+Example lines when the host is **not** reachable (host name is a placeholder):
+
+```text
+ok config readable: ~/.config/mossferry/config
+ok ssh config resolves host not-a-real-host.example
+FAIL ssh BatchMode connect to not-a-real-host.example
+ok local mosh binary
+…
+FAIL remote .local/bin/repo-session not executable
+FAIL versions: local 2.7.4 / remote unknown
+```
+
+**Note:** doctor always looks for a **local mosh** binary, even if you set `FERRY_TRANSPORT=ssh`.
+
+## 5. First hop
 
 ```sh
-ferry update                   # FERRY_DEFAULT_HOST
-ferry update <host>
+ferry workstation                 # global picker
+ferry workstation my-app          # scoped to one repo
+ferry workstation my-app -p       # attach/create primary (no picker)
+ferry workstation --list          # list only (ssh)
+ferry workstation --list-servers  # listeners TSV (ssh)
 ```
 
-Pulls local clone, then remote clone over ssh, and prints `local <v> / remote <v>`.
+Picker keys (on the host): `enter` attach · `ctrl-x` kill · `ctrl-r` rename · `ctrl-s` servers face · `esc` quit. See [Usage](./usage.md) and [Servers view](./servers-view.md).
+
+If client and remote versions differ, the picker header can show an update hint. Sync both sides:
+
+```sh
+ferry update                      # uses default host
+ferry update workstation
+```
+
+Pulls the local clone (`git pull --ff-only`), then the remote clone over ssh, and prints `local <v> / remote <v>`.
+
+## 6. Detach and come back
+
+Inside the session you are in host tmux. Detach with your tmux binding (stock: `Ctrl-b` `d`). Reattach with the same `ferry` command later. Mosh reconnects through short link loss; ssh does not — but the remote session survives either way.
+
+## Migration (old install names)
+
+If you still have a pre-rename client or a `.bashrc` auto-attach on `SSH_CONNECTION`:
+
+1. Run `./install.sh` on both machines (back up a hand-written `~/.local/bin/repo-session` first if it is not a symlink).
+2. On the laptop: remove old helper function blocks from your shell rc (keep a timestamped backup).
+3. On the host: remove `.bashrc` auto-attach so plain `ssh` lands in a normal shell.
+4. Confirm `type ferry` → `~/.local/bin/ferry` and `ssh <host> 'echo $TMUX'` prints empty.
+
+`install.sh` warns on stderr when it still sees those legacy blocks.
 
 ## Next
 
-- [Grok + ferry](./guides/grok-and-ferry.md) — wrap, launchers, mosh vs ssh
-- [Works with](./works-with.md) — fleet tools on the host you land on
-- [README](../README.md) — full usage table, picker details, ghostty-grid composition
+- [Usage](./usage.md) — full flags, errors, grid drivers
+- [Grok + ferry](./guides/grok-and-ferry.md) — wrap, start menu, clipboard
+- [Servers view](./servers-view.md) — listeners and Mac reachability
+- [Works with](./works-with.md) — fleet tools on the host
+- [README](../README.md) — short on-ramp

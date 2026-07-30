@@ -1,26 +1,17 @@
 # mossferry
 
-
 <p align="center">
   <a href="https://mossferry.muslewski.com"><img src="https://img.shields.io/badge/website-mossferry.muslewski.com-3dff9a?style=flat-square&labelColor=02060c" alt="Website"></a>
-</p>
-
-
-<p align="center">
   <a href="https://www.npmjs.com/package/mossferry"><img src="https://img.shields.io/npm/v/mossferry?style=flat-square" alt="npm"></a>
   <a href="https://github.com/muslewski/mossferry/discussions"><img src="https://img.shields.io/badge/discussions-join-3dff9a?style=flat-square&labelColor=02060c" alt="Discussions"></a>
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT">
 </p>
 
-<p align="center">
-  <a href="https://mossferry.muslewski.com"><img src="https://raw.githubusercontent.com/muslewski/mossferry-website/main/public/mossferry4.webp" alt="mossferry spore" width="360"></a>
-</p>
+**mossferry** opens a remote repository’s tmux session from your laptop in one command, over mosh or ssh, with an fzf picker.
 
-<p align="center"><b>Site:</b> <a href="https://mossferry.muslewski.com">mossferry.muslewski.com</a></p>
+You sit at one machine; the repo and its long-running panes live on another. You want to be inside that session in tmux, leave and come back, and survive a dropped network link without losing the work. Everyday command: **`ferry`**.
 
-The green ferry between your machines. *Moss* carries the green identity and the
-mosh phonetics; *ferry* is the job — carrying you across to your remote tmux
-sessions. Short daily command: **`ferry`**.
+Site: [mossferry.muslewski.com](https://mossferry.muslewski.com)
 
 ```
            |>
@@ -35,336 +26,234 @@ sessions. Short daily command: **`ferry`**.
 
 ---
 
-A two-part tool for opening remote tmux sessions over mosh. Host-agnostic:
-written for a laptop ↔ workstation pair, but nothing is hard-coded to those
-machines.
+## Happy path
+
+Two sides: **laptop** (where you type `ferry`) and **host** (where tmux and the repos live). Both need the package on `PATH`.
+
+### 1. Install (runnable anywhere)
+
+```sh
+npm install -g mossferry    # bins: ferry | mossferry | repo-session
+# or clone the repo and run ./install.sh on that machine
+ferry --help                # printed locally; no network
+```
+
+`ferry --help` ends with a version line like:
+
+```text
+mossferry 2.7.4 · the green ferry between your machines
+```
+
+### 2. Configure hosts (laptop)
+
+`~/.config/mossferry/config` is plain `KEY=value` (seeded from `config.example` on first install if missing). Put **ssh config aliases** here — not hard-coded IPs:
+
+```sh
+# ~/.config/mossferry/config
+FERRY_DEFAULT_HOST=workstation          # placeholder — your Host alias in ~/.ssh/config
+# optional: try LAN first, then a remote alias
+# FERRY_HOST_CANDIDATES=workstation-lan,workstation
+```
+
+`workstation` is a **placeholder**. Point it at a real `Host` entry in `~/.ssh/config`. mossferry only tries the names you list.
+
+### 3. Install on the host (needs a real machine)
+
+Same package on the machine that owns the repos:
+
+```sh
+npm install -g mossferry
+# or: clone + ./install.sh  → symlinks ferry/mossferry/repo-session into ~/.local/bin
+```
+
+Remote defaults expect `repo-session` at `~/.local/bin/repo-session` and repos under `~/Repositories` (`FERRY_REPO_BASE`).
+
+### 4. Check, list, attach (needs a reachable host)
+
+```sh
+ferry doctor workstation          # read-only health; exit 1 if any FAIL
+ferry workstation --list          # every tmux session on the host (ssh, no mosh)
+ferry workstation                 # global session picker → enter attaches
+ferry workstation my-app          # picker scoped to that repo (basename under FERRY_REPO_BASE)
+```
+
+Without a configured host, doctor fails locally (no connection attempted):
+
+```text
+mossferry: doctor: no host (pass one, or set FERRY_HOST_CANDIDATES / FERRY_DEFAULT_HOST)
+```
+
+Bare `ferry` uses `FERRY_HOST_CANDIDATES` (first BatchMode-reachable) or `FERRY_DEFAULT_HOST`. If neither is set, it prints usage on stderr and exits 1.
+
+### 5. Detach and reattach
+
+Inside a session you are in **tmux on the host**. Detach with your normal tmux binding (stock is `Ctrl-b` then `d`). The panes keep running.
+
+Come back later:
+
+```sh
+ferry workstation                 # pick the session again
+ferry workstation my-app -p       # attach/create the primary session for my-app
+```
+
+---
+
+## What you meet, in order
+
+| Step | What runs | Where |
+|------|-----------|--------|
+| Config | `~/.config/mossferry/config` + `~/.ssh/config` | laptop |
+| Hop | `ferry` → mosh (default) or ssh → `repo-session` | laptop → host |
+| Pick | fzf (or numbered menu if fzf missing) | host, inside the hop |
+| Attach | `tmux attach` to the chosen session | host |
+| Detach | tmux detach; mosh/ssh client ends | host → laptop |
+| Reattach | `ferry` again | laptop |
 
 ```
-┌──────────── local ────────────┐         ┌──────────── remote ───────────┐
-│  bin/mossferry                │  mosh   │  bin/repo-session             │
-│  - parse args / config        │ ──ssh──▶│  - fzf (or menu) session picker│
-│  - launch mosh or ssh         │         │  - create / attach / claim     │
-│  - update, doctor             │         │  - all tmux logic              │
+┌──────────── laptop ───────────┐         ┌──────────── host ─────────────┐
+│  bin/mossferry (ferry)        │  mosh   │  bin/repo-session             │
+│  - args / config / doctor     │ ──ssh──▶│  - picker, create, attach     │
+│  - launch mosh or ssh         │         │  - all tmux logic             │
 └───────────────────────────────┘         └───────────────────────────────┘
 ```
 
-Installed paths are **symlinks into this repo**, so `git pull` is deploy.
+Installed paths from `./install.sh` are **symlinks into the clone**, so `git pull` (or `ferry update`) is deploy.
 
-## Safety (door, not building)
+---
 
-mossferry is the **hop** into remote tmux — not an agent sandbox or secrets manager. Host AI-session safety (trust tiers, YOLO sandboxes, env hygiene) stays on the machine you land on.
+## List and pick sessions
 
-**Coming soon:** optional share/preview modes and clearer doctor guidance. See **[docs/safety-roadmap.md](./docs/safety-roadmap.md)** for the boundary and planned nits. Vulnerability reporting: [SECURITY.md](./SECURITY.md).
-
-## Name origin
-
-**mossferry** was chosen after the previous short name collided hard with a
-popular speech model (owning PyPI/crates) and a mobile SSH/mosh terminal in the
-same space. The name is clean on npm, crates.io, PyPI, Homebrew, AUR, and
-GitHub. Identity color: green.
-
-## Install
-
-**Local machine** (where you type `ferry`):
+Non-interactive list (remote, via ssh from the laptop):
 
 ```sh
-npm install -g mossferry    # or: npx mossferry …
-# bins: ferry | mossferry | repo-session
-ferry doctor
+ferry workstation --list
+ferry workstation my-app --list
 ```
 
-Seeds config on first run if needed; or copy `config.example` → `~/.config/mossferry/config`.
+On the host itself, the same shape comes from `repo-session --list`. Rows look like:
 
-**Remote host** (where tmux sessions live) still needs the same tools on PATH —
-install the package there too, or clone + `./install.sh`:
+```text
+1) my-app           bash                   2w attached bash
+2) my-app-2         bash                   1w detached bash
+3) other-repo       claude                 2w attached claude
+```
+
+Columns: index, session name, active window, window count, attached/detached, current command.
+
+**Interactive picker** (default when you omit list flags): runs on the host inside mosh/ssh.
+
+| Key | Action |
+|-----|--------|
+| `enter` | attach |
+| `➕ new session…` | nested create flow (destination → start menu) |
+| `ctrl-x` | kill session (instant; stays in picker). `FERRY_KILL_CONFIRM=1` for y/N |
+| `ctrl-r` | rename (stays in picker) |
+| `ctrl-s` | toggle **servers** face (see below) |
+| `esc` | quit picker (exit 130 → hop ends) |
+
+Start menu defaults to `claude,grok` (`FERRY_START_MENU`). Optional hotkeys: `FERRY_LAUNCHERS` (empty by default). `ctrl-x` / `ctrl-r` / `ctrl-s` / `ctrl-f` are reserved.
+
+**Zero sessions for a repo:** `ferry workstation my-app` creates and attaches the primary session (named like the repo) instead of showing an empty list.
+
+**Repo typos** are checked over ssh with `repo-session --validate` **before** mosh starts, so the error stays on your laptop terminal:
+
+```text
+repo-session: no repo 'typoo' under ~/Repositories — pick one below, or run 'ferry <host>' to browse all sessions
+```
+
+---
+
+## Servers / status view
+
+Second face of the picker: **what is listening on the host, and can a Mac browser reach it?** Discovery is read-only.
+
+| Surface | Command / key |
+|---------|----------------|
+| In picker | `ctrl-s` sessions ↔ servers |
+| One-shot on host | `repo-session --servers` · `--servers --json` |
+| One-shot from laptop | `ferry workstation --list-servers` · `--list-servers --json` |
+
+Each TSV row has **14 fields** (tab-separated), in this order:
+
+```text
+port  state  id  class  label  bind  pid  comm  repo  owner  mac_state  mac_url  health  restart
+```
+
+Example shape (values illustrative; live output depends on the host):
+
+```text
+8787	LISTEN	-	dev	python3	0.0.0.0	12345	python3	my-app	-	reachable	http://workstation.example:8787/	-	-
+5432	LISTEN	-	db	postgres	127.0.0.1	1652	postgres	-	-	loopback-only	-	-	-
+8791	LISTEN	-	docker	-	0.0.0.0	-	-	-	-	reserved	-	-	unless-stopped
+```
+
+Servers-face chords: `enter` = copy Mac URL when `mac_state=reachable` (OSC 52; does not open a browser) · `ctrl-f` = print fix plan · `ctrl-s` = back to sessions.
+
+Full row model, declarations, and fix-plan rules: [docs/servers-view.md](./docs/servers-view.md).
+
+---
+
+## Why mosh (and when only ssh is available)
+
+Default interactive transport is **mosh** (`FERRY_TRANSPORT=mosh`).
+
+| Transport | What you get | Tradeoff |
+|-----------|--------------|----------|
+| **mosh** (default) | Roaming reconnect after Wi‑Fi blips / sleep; remote `mosh-server` can self-exit after `FERRY_SERVER_TIMEOUT` seconds clientless (default **86400**) | Many mosh builds strip OSC 52, so clipboard bridge via `grok wrap` is unreliable |
+| **ssh** (`FERRY_TRANSPORT=ssh`) | Ordinary `ssh -t` hop; better OSC 52 with local `grok wrap` | Drop the link and the client dies; **tmux on the host keeps running** — re-run `ferry` to attach again |
+
+The long-running work is always in **remote tmux**. Mosh protects the *hop*; ssh does not. Either way, detach/reattach is safe for the session itself.
+
+`--list` and `--list-servers` always use **ssh**, never mosh, and never `grok wrap`.
+
+---
+
+## Limitations
+
+- **External binaries.** Ferry launches `ssh`, `mosh`, `tmux`, and optionally `fzf` / `grok`. It does not vendor them. Behaviour is whatever those tools do on each end.
+- **Both ends must be installed.** Laptop needs `ferry`; host needs `repo-session` on the path configured by `FERRY_REMOTE_BIN` (default `.local/bin/repo-session` under remote `$HOME`), plus tmux.
+- **Repo name charset.** CLI repo tokens must match `^[A-Za-z0-9._-]+$`: no spaces, no quotes, no `/`, no `..`, no absolute paths. Invalid tokens print `repo-session: invalid repo name '…'` and never start mosh. Remote argv is still `printf %q`-quoted so unusual characters in *other* arguments cannot break the ssh command line.
+- **Doctor always checks for a local `mosh` binary**, even when `FERRY_TRANSPORT=ssh`. An ssh-only laptop can still see `FAIL local mosh binary missing` until mosh is installed or you accept that check as noise.
+- **Client `--help` omits the servers-face chords** (`ctrl-s` / `ctrl-f`); `repo-session --help` lists them. The picker runs on the host, so the remote help is the accurate chord list.
+- **Not a sandbox.** Same OS user on the host can reach other sessions’ files. See [docs/safety-roadmap.md](./docs/safety-roadmap.md).
+- **No hosted CI** for this project. Verify locally with `bash tests/run.sh` and the docs commands below.
+
+---
+
+## Docs
+
+| Page | For |
+|------|-----|
+| [Getting started](./docs/getting-started.md) | Install both sides, config keys, doctor, update |
+| [Usage](./docs/usage.md) | Full flags, picker details, errors, grid drivers |
+| [Servers view](./docs/servers-view.md) | Listeners, Mac reachability, fix plans |
+| [Grok + ferry](./docs/guides/grok-and-ferry.md) | `FERRY_WRAP`, start menu, mosh vs clipboard |
+| [Works with](./docs/works-with.md) | Fleet tools on the host you land on |
+
+Architecture notes live in [`mossferry-mind/`](./mossferry-mind/) (Atlas vault), not under `docs/`.
+
+Local docs gate (from a clone next to `docs-kit`):
 
 ```sh
-# option A — npm (same as local)
-npm install -g mossferry
-
-# option B — git checkout (symlinks into ~/.local/bin)
-git clone <url-or-path> ~/Repositories/mossferry
-cd ~/Repositories/mossferry
-./install.sh
+node ../docs-kit/bin/docs-kit.mjs check docs/
+node ../docs-kit/bin/docs-kit.mjs health docs/
 ```
 
-`install.sh` is idempotent: it creates `~/.local/bin` and `~/.config/mossferry`,
-symlinks `bin/mossferry` as both `mossferry` and `ferry`, plus `repo-session`,
-into `~/.local/bin/`, migrates legacy config when present, and seeds
-`~/.config/mossferry/config` from `config.example` **only if absent**.
-
-## Usage
-
-| Command | Behavior |
-|---|---|
-| `ferry` | uses `FERRY_DEFAULT_HOST` → global picker (error if key unset) |
-| `ferry <host>` | fzf picker, all sessions + `➕ new session…` row |
-| `ferry <host> <repo>` | fzf picker, that repo's sessions + `➕ new session…` row |
-| _(picker keys)_ | `enter=attach · ctrl-x=kill` (instant, no confirm — spam-friendly) `· ctrl-r=rename · ctrl-s=servers face · ➕ → nested start menu · cycle · esc`; kill/rename stay in-picker. Servers face: `enter=copy Mac URL · ctrl-f=fix plan · ctrl-s=sessions`. Optional `FERRY_KILL_CONFIRM=1`. Version skew shows a subtle `↑ update … ferry update` header line |
-| `ferry <host> <repo> --primary\|-p` | attach primary, create if missing (old default, now explicit) |
-| `ferry <host> <repo> --new` | force fresh session (unchanged) |
-| `ferry <host> [repo] --list\|-l` | list sessions via ssh (unchanged) |
-| `ferry <host> --list-servers` | list remote listeners (14-col TSV); add `--json` for agents |
-| `ferry <host> <repo> --resume-closed` | atomic claim, unchanged (grid driver) |
-| `ferry <host> <repo> --resume-or-new` | claim-or-create, unchanged (grid driver) |
-| `ferry <host> --resume [N\|name]` | bare → same fzf picker; N/name → direct attach (unchanged) |
-| `ferry <host> <repo> --claude\|-c` | fresh sessions run `claude` (unchanged) |
-| `ferry <host> <repo> -- cmd…` | custom startup command (unchanged) |
-| `ferry update [host]` | `git pull` local clone + `ssh <host> git -C ~/Repositories/mossferry pull`; prints both versions |
-| `ferry doctor [host]` | health checks (see § Health) |
-| `ferry --help\|-h` | usage printed locally, no connection (unchanged behavior) |
-| `ferry <host> typoo` | `no repo 'typoo' under <base> — pick one below, or run 'ferry <host>' to browse all sessions` + repo list, exit 1 |
-
-<details><summary>▶ demo</summary>
-<p><img src="./assets/demo-help.gif" width="600" alt="ferry --help demo"></p>
-</details>
-
-`mossferry` is the long form of the same binary; everyday use is **`ferry`**.
-
-Default action is the **picker**. Direct attach-primary is behind `--primary`.
-Grid flags (`--resume-closed`, `--resume-or-new`) are unchanged.
-
-**Errors are local.** Before launching mosh, repo-bearing invocations run
-`repo-session --validate` over ssh. Unknown repos print the typo error + repo
-list on your local terminal and never start mosh (so alternate-screen restore
-cannot wipe the message).
-
-## The picker
-
-Runs on the remote, inside the mosh session:
-
-- **Banner:** green ferry ASCII art sits in the fzf header (top-left), width-
-  tiered: wide panes get the boat+figlet lockup (≥52 cols), medium panes get
-  the liner with the name on the hull (≥24 cols), and short or narrow panes
-  get a one-line `⛴ mossferry`. The main picker's banner uses 40% of terminal
-  width (header left of the `right:60%` preview). Set `FERRY_BANNER=off` (or
-  `0`) to hide it. Layout is reverse with the header first; list navigation
-  wraps (`--cycle`).
-- One fzf list; each row: session name, active-window name, window count,
-  attached/detached, current command.
-- **Preview panel:** `tmux capture-pane -ep -t <session>` — the session's
-  live screen, in color.
-- `➕ new session…` → second fzf over directories in `FERRY_REPO_BASE`
-  (pre-filtered to `<repo>` when one was given) → create + attach.
-- Global new-session chain also offers `➕ new repo…` (prompt name, `mkdir` +
-  `git init -b main` under `FERRY_REPO_BASE`, then create + attach) and
-  `🏠 home session…` (prompt name, empty → `home`; session cwd `$HOME`).
-- **AI launchers:** on destination rows (repo / `➕ new repo…` / `🏠 home
-  session…`) and on the main picker's `➕ new session…` row, press a configured
-  key (default `ctrl-a` → `claude`, `ctrl-g` → `grok`) instead of enter to
-  create that session with that start command. Overrides `FERRY_DEFAULT_CMD`,
-  `--claude`, and `-- cmd…` for that one creation. Enter keeps today's default.
-  On an existing-session row, launcher keys are ignored (list reloads). Configure
-  via `FERRY_LAUNCHERS` (`key:command` pairs, comma-separated; empty disables).
-  Sub-picker header shows a dynamic hints line from the parsed config. No-fzf
-  menu is unaffected (always uses the default command).
-- **Grok wrap (local, not remote):** AI launchers only set the *remote* start
-  command. Clipboard OSC 52 and dirty-disconnect restore need `grok wrap` on the
-  **laptop** around the whole mosh/ssh hop. With default `FERRY_WRAP=auto`, ferry
-  runs `grok wrap mosh …` / `grok wrap ssh …` whenever local `grok` is on PATH —
-  so you keep typing `ferry`, press `ctrl-g` for a grok session, and wrap is
-  already under you. Install the Grok CLI on the client machine (`curl -fsSL
-  https://x.ai/cli/install.sh | bash`). Set `FERRY_WRAP=off` to disable.
-  **mosh note:** many mosh builds strip OSC 52, so wrap cannot invent clipboard
-  bytes that never arrive; use `FERRY_TRANSPORT=ssh` when you need reliable Grok
-  → local clipboard, or keep host-side yank pipes (e.g. tmux → `pbcopy`).
-  **voice / mic:** `ctrl-g` starts Grok **on the remote host** — laptop microphone
-  and Ctrl+Space PTT do not cross mosh/ssh. Use local Mac `grok` for voice; ferry
-  for remote coding. See [docs/guides/grok-and-ferry.md](docs/guides/grok-and-ferry.md).
-- Repo-scoped picker's new-session chain stays pre-filtered — no special rows.
-- **Zero-session fast path:** `ferry <host> <repo>` with no live sessions
-  skips the picker and creates + attaches the primary.
-- Esc / Ctrl-C: exit 130; mosh ends; you land back at the local prompt.
-- fzf missing on host → plain numbered menu (sessions + `n) new` + `q) quit`;
-  global new-session menu adds `r) new repo` and `h) home session`).
-  Never falls through to a shared session.
-
-## Configuration
-
-`~/.config/mossferry/config` — plain `KEY=value`, shell-sourced. Every key has a
-built-in default; environment variables override the file; the file overrides
-defaults.
-
-| Key | Default | Where |
-|---|---|---|
-| `FERRY_REMOTE_BIN` | `.local/bin/repo-session` | remote path of repo-session, relative to remote `$HOME` |
-| `FERRY_REPO_BASE` | `$HOME/Repositories` | remote: where repos live |
-| `FERRY_DEFAULT_CMD` | `neofetch` | remote: startup command in fresh sessions |
-| `FERRY_DEFAULT_HOST` | _(unset)_ | local: host used by bare `ferry` |
-| `FERRY_SERVER_TIMEOUT` | `86400` | local: mosh-server self-exit after N seconds clientless |
-| `FERRY_REMOTE_REPO` | `Repositories/mossferry` | remote: repo checkout, relative to remote `$HOME` |
-| `FERRY_HIDDEN_WINDOW_GLOB` | `_*` | remote: window-name glob skipped for picker labels/previews |
-| `FERRY_BANNER` | `on` | green ferry art in picker header and `--help` (`off`/`0` hides) |
-| `FERRY_START_MENU` | `claude,grok` | remote: nested create menu (comma-separated start commands; empty disables). Personal profile names stay in *your* config only. |
-| `FERRY_LAUNCHERS` | _(empty)_ | remote: optional picker hotkeys (`key:command` pairs; empty = menu-only; `ctrl-x`/`ctrl-r` reserved) |
-| `FERRY_WRAP` | `auto` | local: prefix interactive transport with `grok wrap` when local `grok` exists (`auto`/`on`/`off`); not used for `--list` |
-| `FERRY_TRANSPORT` | `mosh` | local interactive hop: `mosh` (roam) or `ssh` (better OSC 52 with wrap) |
-
-See `config.example` for a ready-to-edit template.
-
-### Grok + ferry (Mac client → headless host)
-
-Keep **`ferry`** as the entrypoint. Do not replace it with raw `grok wrap ssh`.
-
-| Layer | Who | What |
-|---|---|---|
-| `ferry` on Mac | local | mosh/ssh (+ optional `grok wrap`) into remote `repo-session` |
-| picker `➕` + start menu | remote | nested pick: default (no AI) or a CLI from `FERRY_START_MENU` |
-| optional hotkeys | remote | `FERRY_LAUNCHERS` chords (off by default) |
-| enter on existing | remote | attach |
-
-```sh
-# on the Mac (once)
-curl -fsSL https://x.ai/cli/install.sh | bash   # provides `grok wrap`
-# optional, only if you want SSH clipboard over mosh roam:
-# echo 'FERRY_WRAP=auto' >> ~/.config/mossferry/config
-# echo 'FERRY_TRANSPORT=ssh' >> ~/.config/mossferry/config
-
-# remote ~/.config/mossferry/config — your CLIs / profiles (not shipped):
-# FERRY_START_MENU="claude,grok,grok --profile work"
-# FERRY_LAUNCHERS="ctrl-a:claude"   # optional hotkeys
-
-ferry                          # same as always
-# in picker: ➕ new → pick destination → start menu (default / claude / grok / …)
-ferry doctor                   # reports local grok wrap + transport
-```
-
-## Composition with ghostty-grid
-
-`ghostty-grid` knows nothing about mossferry; it just runs a command per pane:
-
-```sh
-ghostty-grid -8 -- ferry manjaro-remote syndcast --resume-or-new --claude
-# everyday driver: 8 panes, reattach existing syndcast sessions, fill the
-# rest with new ones running claude
-
-ghostty-grid -8 -- ferry manjaro-remote syndcast --resume-closed
-# reattach existing sessions only; leftover panes stay blank
-```
-
-## Updating
-
-```sh
-ferry update          # uses FERRY_DEFAULT_HOST
-ferry update <host>   # explicit host
-```
-
-Pulls the local clone (`git pull --ff-only`), then pulls the remote clone
-over ssh, and prints `local <v> / remote <v>`. On a TTY the crossing is
-shown as step lines (local pull → remote pull) plus a wave strip
-`local <v> ~~~⛴~~~ remote <v>` (green on match, red on divergence). Raw
-git output is dimmed, not removed. `FERRY_UPDATE_VERBOSE=1` keeps git loud.
-
-## Health
-
-```sh
-ferry doctor
-ferry doctor <host>
-```
-
-Read-only checks (config, ssh resolution, auth, mosh, remote bin, version
-match, fzf, lingering mosh-servers, MagicDNS notes). Exit 1 if any check
-fails. On a TTY: small ferry banner, green ✓ / red ✗ / dim info glyphs,
-end summary, and a dim fix hint (e.g. `ferry update`) when versions
-mismatch. Non-TTY keeps the plain `ok` / `FAIL` / `info` tokens for
-scripts and tests.
-
-<details><summary>▶ demo</summary>
-<p><img src="./assets/demo-doctor.gif" width="600" alt="ferry doctor demo"></p>
-</details>
-
-## Ops screens (v2.5.0)
-
-Chrome is TTY-gated via the vendored GREEN-UI-KIT (`lib/green-ui.sh`).
-Pipes and CI stay monochrome and parse-stable.
-
-| Surface | Non-TTY (stable tokens) | TTY chrome |
-|---|---|---|
-| `ferry doctor` | `ok` / `FAIL` / `info` lines | ⛴ banner · glyphs · summary · fix hints |
-| `ferry update` | `local <v> / remote <v>` | step checklist · wave strip |
-| `--help` | sectioned body + version footer | green section labels |
-| validate typo | exact `repo-session: no repo…` + list, exit 1 | dim capped list + `did you mean …?` |
-| `install.sh` | `symlink` / `seeded` action lines | MEDIUM hull · ✓ steps · ready panel · PATH check |
-
-Errors are unified as `mossferry:` (client) or `repo-session:` (remote),
-with a red ✗ glyph when stderr is a TTY. Missing `lib/green-ui.sh` never
-kills the tool — plain fallbacks apply.
-
-## Developer logging
-
-Opt-in, **local-only** event log shared with the other fleet tools (memory-atlas,
-agentic-sage, llm-armory). **Off by default** — a cold clone writes nothing.
-
-**Enable** (first match wins):
-
-- `FLEET_DEVLOG=1` (also `true` / `on` / `yes`)
-- or machine config `~/.config/fleet-devlog/config.json` with `{"enabled": true}`
-
-Disable explicitly with `FLEET_DEVLOG=0` / `false` / `off` / `no`, or pass
-`--no-devlog`. **Repo config is never an enable source** (and cannot disable
-either) — only env, argv, and the machine-local config above.
-
-**Where:** `${XDG_STATE_HOME:-$HOME/.local/state}/fleet-devlog/events.jsonl`
-(shared install id in the same directory's `install-id` file).
-
-**What is recorded:** schema version, timestamps, install id, tool name/version,
-subcommand name, exit code, duration, result class, optional correlation id,
-numeric counts, allow-listed flags — enums, ids, hashes, and numbers only.
-
-**What is NEVER recorded:** prompts, file contents, commit messages, environment
-values, API keys, or free-form paths (absolute or relative).
-
-The log **never leaves the machine**. There is no network code, no uploader, and
-no publish path in the emitter.
-
-**Delete it:**
-
-```sh
-rm -rf ~/.local/state/fleet-devlog
-```
+---
 
 ## Testing
-
 
 ```sh
 bash tests/run.sh
 ```
 
-Plain bash harness (fake `tmux` / `mosh` / `ssh` stubs). No framework
-dependency beyond bash. Nonzero exit on any failure.
+Plain bash harness with fake `tmux` / `mosh` / `ssh` stubs. No `jq`, `bats`, or `shellcheck` required. Nonzero exit on any failure.
 
-## Migration
-
-If you are upgrading from the v1 command name (or the pre-repo zsh shell
-functions, or a `.bashrc` block that auto-attaches tmux on `SSH_CONNECTION`):
-
-1. Run `./install.sh` on both machines (back up existing
-   `~/.local/bin/repo-session` first if it is a plain file). It installs
-   `ferry`/`mossferry`, drops a repo-owned v1-name symlink, and migrates
-   the old config dir into `~/.config/mossferry/config` (`MOSHI_` → `FERRY_`;
-   old file becomes `config.migrated`).
-2. On the laptop: remove the old `mosh()` / helper function blocks from
-   `~/.zshrc` (keep a timestamped backup).
-3. On the remote: remove the `.bashrc` auto-attach block so plain `ssh`
-   lands in a normal shell (not a shared `main` session).
-4. Confirm `type ferry` resolves to `~/.local/bin/ferry` and
-   `ssh <host> 'echo $TMUX'` prints empty. The old v1 command name should
-   no longer resolve on `PATH`.
-
-`install.sh` warns on stderr when it still sees those legacy blocks.
-
-## Open-sourcing
-
-mossferry is built with no personal paths or hardcoded hosts. When you want to open-source it, just add a GitHub remote and push: `git remote add origin <url> && git push -u origin main`.
+---
 
 ## Community
 
 - **Website:** [mossferry.muslewski.com](https://mossferry.muslewski.com)
-- **Questions & ideas:** [Discussions](https://github.com/muslewski/mossferry/discussions)
-- **Bugs & features:** [Issues](https://github.com/muslewski/mossferry/issues/new/choose)
-- **Contributing:** [CONTRIBUTING.md](./CONTRIBUTING.md)
-- **Code of Conduct:** [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
-- **Security:** [SECURITY.md](./SECURITY.md) (private reports only)
-- **Support matrix:** [SUPPORT.md](./SUPPORT.md)
-
-If you're not sure whether something is a bug, **start a Discussion** — maintainers can promote it to an issue when it is.
+- **Questions:** [Discussions](https://github.com/muslewski/mossferry/discussions)
+- **Bugs:** [Issues](https://github.com/muslewski/mossferry/issues/new/choose)
+- **Contributing:** [CONTRIBUTING.md](./CONTRIBUTING.md) · [Code of Conduct](./CODE_OF_CONDUCT.md) · [Security](./SECURITY.md) · [Support](./SUPPORT.md)

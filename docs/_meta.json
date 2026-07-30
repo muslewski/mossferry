@@ -1,6 +1,6 @@
 {
   "title": "mossferry",
-  "description": "The green ferry between your machines \u2014 remote tmux over mosh/ssh with an fzf picker",
+  "description": "Attach to a remote repo's tmux session in one command — mosh/ssh hop with an fzf picker",
   "sidebar": [
     {
       "title": "Home",
@@ -9,6 +9,10 @@
     {
       "title": "Getting started",
       "href": "getting-started.md"
+    },
+    {
+      "title": "Usage",
+      "href": "usage.md"
     },
     {
       "title": "Guides",
