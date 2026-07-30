@@ -1899,15 +1899,15 @@ ${S}Happy path${Z}
   repo-session my-app -p            # attach/create primary tmux session
   repo-session --list               # numbered list, then exit
 
-${S}Picker keys${Z}
+${S}Picker${Z}
   enter=attach · ➕ new → nested start menu · ctrl-x=kill · ctrl-r=rename
-  ctrl-s=servers face · esc=quit
+  ctrl-s=servers face · esc=quit · list wraps (fzf --cycle)
   Servers face: enter=copy Mac URL · ctrl-f=fix plan · ctrl-s=sessions
   Kill stays in the picker (spam ctrl-x). FERRY_KILL_CONFIRM=1 → single-key y/N.
   Start menu: FERRY_START_MENU (default claude,grok). FERRY_LAUNCHERS optional
   (reserved: ctrl-x, ctrl-r, ctrl-s, ctrl-f).
 
-${S}More flags${Z}
+${S}Flags${Z}
   --primary, -p      attach primary, create if missing (needs <repo>)
   --new              fresh session (repo, repo-2, …) (needs <repo>)
   --claude, -c       new sessions start \`claude\` (default: neofetch)

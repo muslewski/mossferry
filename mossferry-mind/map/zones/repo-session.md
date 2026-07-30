@@ -5,7 +5,7 @@ tags: [remote, tmux, picker, fzf, sage, grok]
 status: active
 created: 2026-07-21
 updated: 2026-07-30
-verifiedAt: 9cea64cf796c14fea10f4528465cd1eda781c438
+verifiedAt: 6320e84a
 owns:
   routes: []
   testids: []
@@ -15,7 +15,8 @@ owns:
   tools: []
 depends:
   - "[[green-ui]]"
-invariants: []
+invariants:
+  - "Curated --help keeps a Flags section heading (exact case) for test-ui-ops f3-repo-session-help; body stays an index not a full flag wall."
 skills: []
 related:
   - "[[client]]"
