@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # lib/servers.sh — layered server discovery for mossferry servers view.
-# Zero runtime deps beyond bash, ss, /proc. Sourceable pure functions.
+# Full servers view needs bash + ss + /proc (Linux host). Sourceable pure
+# functions. On hosts lacking ss or /proc, build_server_rows degrades with
+# one stderr notice (non-fatal) unless FERRY_SERVERS_SS_FIXTURE is set.
 # Row model (14 columns, tab-separated):
 #   port state id class label bind pid comm repo owner mac_state mac_url health restart
 #
 # shellcheck disable=SC2034
+
+# Once-per-shell capability warning (empty servers view without ss//proc).
+_FERRY_SERVERS_CAPABILITY_WARNED=0
 
 # Reserved ports (from preview-serve denylist). Never primary Mac URL.
 FERRY_SERVERS_RESERVED="${FERRY_SERVERS_RESERVED:-8791 3001 5432 6379 27017 8080 5173 3000}"
@@ -458,14 +463,88 @@ _servers_cache_tmux_panes() {
   tmux list-panes -a -F '#{pane_pid} #{session_name}' 2>/dev/null || true
 }
 
+# --- bash-3.2-safe maps (no associative arrays) -------------------------------
+# Indexed arrays of Unit-Separator (US=$'\x1f') records + ordered key lists.
+# Lookup is linear scan — desk-scale (tens of ports/pids). Absent key → empty.
+# US (0x1F) cannot appear in ports (digits), pids (digits), bind addresses,
+# process names from ss, or TSV declaration fields (human-edited printable).
+
+_SERVERS_US=$'\x1f'
+
+# Find index of key in a parallel key array; prints index or empty if absent.
+# Usage: _servers_idx_of key "${keys[@]}"
+_servers_idx_of() {
+  local needle="$1" i=0 _servers_k
+  shift
+  for _servers_k in "$@"; do
+    if [[ "$_servers_k" == "$needle" ]]; then
+      printf '%s' "$i"
+      return 0
+    fi
+    i=$((i + 1))
+  done
+  return 0
+}
+
+# Get field N (1-based) from a US-delimited record. Empty if missing.
+# awk FS=\037 is Unit Separator (same as $_SERVERS_US).
+_servers_rec_field() {
+  local rec="$1" n="$2"
+  printf '%s' "$rec" | awk -F '\037' -v n="$n" '{ if (n >= 1 && n <= NF) print $n }'
+}
+
+# True when the host can run the full servers view (ss + /proc), or when a
+# fixture supplies listener text (tests). Capability-based — not uname.
+_servers_platform_capable() {
+  if [[ -n "${FERRY_SERVERS_SS_FIXTURE:-}" ]]; then
+    return 0
+  fi
+  command -v ss >/dev/null 2>&1 || return 1
+  [[ -d /proc ]] || return 1
+  return 0
+}
+
+# Emit one stderr notice when the servers view cannot run; never fatal.
+_servers_capability_warn() {
+  local missing=""
+  if ! command -v ss >/dev/null 2>&1; then
+    missing="ss"
+  fi
+  if [[ ! -d /proc ]]; then
+    if [[ -n "$missing" ]]; then
+      missing="${missing} and /proc"
+    else
+      missing="/proc"
+    fi
+  fi
+  [[ -n "$missing" ]] || missing="required platform tools"
+  printf 'mossferry servers: %s not available — servers view is Linux-host-only (needs ss and /proc). Skipping.\n' \
+    "$missing" >&2
+}
+
 # Merge L0–L5 into full 14-column rows.
 # When FERRY_SERVERS_SS_FIXTURE is set, listener lines are read from stdin.
 build_server_rows() {
-  local -A decl_id decl_class decl_label decl_mac decl_health
-  local -A live_bind live_pid live_comm live_class live_restart live_repo live_owner
-  local -A seen_port
+  # Capability gate: without ss+/proc (and without a fixture) the view would
+  # silently list nothing — same class of lie as empty on a busy desk. Warn
+  # once on stderr and return empty; rest of mossferry keeps working.
+  if ! _servers_platform_capable; then
+    if [[ "${_FERRY_SERVERS_CAPABILITY_WARNED:-0}" -eq 0 ]]; then
+      _servers_capability_warn
+      _FERRY_SERVERS_CAPABILITY_WARNED=1
+    fi
+    return 0
+  fi
+
+  # Parallel key/value arrays (bash 3.2 — no associative maps). Keys keep insertion order.
+  local decl_keys=() decl_recs=()
+  local live_keys=() live_recs=()
+  local cache_sd_keys=() cache_sd_vals=()
+  local cache_docker_keys=() cache_docker_vals=()
+  local cache_tmux_keys=() cache_tmux_vals=()
   local port id class label mac health bind pid comm repo owner mac_state mac_url restart state
-  local line f files
+  local line f files k v idx rec p i ppid expect_repo
+  local US="$_SERVERS_US"
 
   # --- L0 declarations ---
   files=()
@@ -475,11 +554,17 @@ build_server_rows() {
   if (( ${#files[@]} > 0 )); then
     while IFS=$'\t' read -r port id class label mac health; do
       [[ -z "$port" ]] && continue
-      decl_id["$port"]="$id"
-      decl_class["$port"]="$class"
-      decl_label["$port"]="$label"
-      decl_mac["$port"]="$mac"
-      decl_health["$port"]="$health"
+      rec="${id}${US}${class}${US}${label}${US}${mac}${US}${health}"
+      idx=""
+      if (( ${#decl_keys[@]} > 0 )); then
+        idx="$(_servers_idx_of "$port" "${decl_keys[@]}")"
+      fi
+      if [[ -n "$idx" ]]; then
+        decl_recs[$idx]="$rec"
+      else
+        decl_keys+=("$port")
+        decl_recs+=("$rec")
+      fi
     done < <(servers_parse_declarations "${files[@]}")
   fi
 
@@ -499,42 +584,73 @@ build_server_rows() {
     scan_out="$listeners"
   fi
 
-  # Bulk caches (once)
-  local -A cache_sd cache_docker cache_tmux
-  local k v
+  # Bulk caches (once) — parallel key/value arrays
   while IFS=$'\t' read -r k v; do
-    [[ -n "$k" ]] && cache_sd["$k"]="$v"
+    [[ -n "$k" ]] || continue
+    idx=""
+    (( ${#cache_sd_keys[@]} > 0 )) && idx="$(_servers_idx_of "$k" "${cache_sd_keys[@]}")"
+    if [[ -n "$idx" ]]; then
+      cache_sd_vals[$idx]="$v"
+    else
+      cache_sd_keys+=("$k")
+      cache_sd_vals+=("$v")
+    fi
   done < <(_servers_cache_systemd_pids)
   while IFS=$'\t' read -r k v; do
-    [[ -n "$k" ]] && cache_docker["$k"]="$v"
+    [[ -n "$k" ]] || continue
+    idx=""
+    (( ${#cache_docker_keys[@]} > 0 )) && idx="$(_servers_idx_of "$k" "${cache_docker_keys[@]}")"
+    if [[ -n "$idx" ]]; then
+      cache_docker_vals[$idx]="$v"
+    else
+      cache_docker_keys+=("$k")
+      cache_docker_vals+=("$v")
+    fi
   done < <(_servers_cache_docker_ports)
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     k="${line%% *}"
     v="${line#* }"
-    [[ -n "$k" ]] && cache_tmux["$k"]="$v"
+    [[ -n "$k" ]] || continue
+    idx=""
+    (( ${#cache_tmux_keys[@]} > 0 )) && idx="$(_servers_idx_of "$k" "${cache_tmux_keys[@]}")"
+    if [[ -n "$idx" ]]; then
+      cache_tmux_vals[$idx]="$v"
+    else
+      cache_tmux_keys+=("$k")
+      cache_tmux_vals+=("$v")
+    fi
   done < <(_servers_cache_tmux_panes)
 
   while IFS=$'\t' read -r port bind pid comm; do
     [[ -z "$port" ]] && continue
-    live_bind["$port"]="$bind"
-    live_pid["$port"]="$pid"
-    live_comm["$port"]="$comm"
-    seen_port["$port"]=1
 
     class=""
     # L2 systemd (cached)
-    if [[ -n "$pid" && "$pid" != "-" && -n "${cache_sd[$pid]:-}" ]]; then
-      class="spine"
+    if [[ -n "$pid" && "$pid" != "-" && ${#cache_sd_keys[@]} -gt 0 ]]; then
+      idx="$(_servers_idx_of "$pid" "${cache_sd_keys[@]}")"
+      if [[ -n "$idx" ]]; then
+        class="spine"
+      fi
     fi
     # L3 docker (cached)
-    if [[ -n "${cache_docker[$port]:-}" ]]; then
-      class="${class:-docker}"
-      live_restart["$port"]="${cache_docker[$port]}"
+    restart="-"
+    if (( ${#cache_docker_keys[@]} > 0 )); then
+      idx="$(_servers_idx_of "$port" "${cache_docker_keys[@]}")"
+      if [[ -n "$idx" ]]; then
+        class="${class:-docker}"
+        restart="${cache_docker_vals[$idx]}"
+      fi
     fi
     # Declaration class fills gaps
     if [[ -z "$class" || "$class" == "-" ]]; then
-      class="${decl_class[$port]:-}"
+      class=""
+      if (( ${#decl_keys[@]} > 0 )); then
+        idx="$(_servers_idx_of "$port" "${decl_keys[@]}")"
+        if [[ -n "$idx" ]]; then
+          class="$(_servers_rec_field "${decl_recs[$idx]}" 2)"
+        fi
+      fi
     fi
     # Heuristic class from comm when still empty
     if [[ -z "$class" || "$class" == "-" ]]; then
@@ -545,20 +661,23 @@ build_server_rows() {
         *) class="${class:-}" ;;
       esac
     fi
-    live_class["$port"]="${class:--}"
+    class="${class:--}"
 
     # L4 tmux owner — direct pane or walk parents against cache
     owner="-"
-    if [[ -n "$pid" && "$pid" != "-" ]]; then
-      if [[ -n "${cache_tmux[$pid]:-}" ]]; then
-        owner="${cache_tmux[$pid]}"
+    if [[ -n "$pid" && "$pid" != "-" && ${#cache_tmux_keys[@]} -gt 0 ]]; then
+      idx="$(_servers_idx_of "$pid" "${cache_tmux_keys[@]}")"
+      if [[ -n "$idx" ]]; then
+        owner="${cache_tmux_vals[$idx]}"
       else
-        local p="$pid" i=0 ppid
+        p="$pid"
+        i=0
         while (( i < 8 )); do
           ppid="$(awk '/^PPid:/{print $2; exit}' "/proc/$p/status" 2>/dev/null || true)"
           [[ -n "$ppid" && "$ppid" =~ ^[0-9]+$ && "$ppid" -gt 1 ]] || break
-          if [[ -n "${cache_tmux[$ppid]:-}" ]]; then
-            owner="${cache_tmux[$ppid]}"
+          idx="$(_servers_idx_of "$ppid" "${cache_tmux_keys[@]}")"
+          if [[ -n "$idx" ]]; then
+            owner="${cache_tmux_vals[$idx]}"
             break
           fi
           p="$ppid"
@@ -566,42 +685,79 @@ build_server_rows() {
         done
       fi
     fi
-    live_owner["$port"]="$owner"
 
     # L5 repo
     repo="$(servers_proc_repo "$pid" 2>/dev/null || true)"
-    live_repo["$port"]="${repo:--}"
+    repo="${repo:--}"
+
+    # live record: bind US pid US comm US class US restart US repo US owner
+    rec="${bind}${US}${pid}${US}${comm}${US}${class}${US}${restart}${US}${repo}${US}${owner}"
+    idx=""
+    if (( ${#live_keys[@]} > 0 )); then
+      idx="$(_servers_idx_of "$port" "${live_keys[@]}")"
+    fi
+    if [[ -n "$idx" ]]; then
+      live_recs[$idx]="$rec"
+    else
+      live_keys+=("$port")
+      live_recs+=("$rec")
+    fi
   done <<<"$scan_out"
 
-  # Emit live rows
-  for port in "${!live_bind[@]}"; do
-    bind="${live_bind[$port]}"
-    pid="${live_pid[$port]:--}"
-    comm="${live_comm[$port]:--}"
-    class="${live_class[$port]:--}"
-    [[ "$class" == "-" || -z "$class" ]] && class="${decl_class[$port]:--}"
-    id="${decl_id[$port]:--}"
-    label="${decl_label[$port]:--}"
+  # Emit live rows in scan/insertion order (deterministic; bash 4 hash order was not).
+  i=0
+  while (( i < ${#live_keys[@]} )); do
+    port="${live_keys[$i]}"
+    rec="${live_recs[$i]}"
+    bind="$(_servers_rec_field "$rec" 1)"
+    pid="$(_servers_rec_field "$rec" 2)"
+    comm="$(_servers_rec_field "$rec" 3)"
+    class="$(_servers_rec_field "$rec" 4)"
+    restart="$(_servers_rec_field "$rec" 5)"
+    repo="$(_servers_rec_field "$rec" 6)"
+    owner="$(_servers_rec_field "$rec" 7)"
+    [[ -z "$pid" ]] && pid="-"
+    [[ -z "$comm" ]] && comm="-"
+    [[ -z "$class" ]] && class="-"
+    [[ -z "$restart" ]] && restart="-"
+    [[ -z "$repo" ]] && repo="-"
+    [[ -z "$owner" ]] && owner="-"
+
+    id="-"
+    label="-"
+    mac="ok"
+    health="-"
+    if (( ${#decl_keys[@]} > 0 )); then
+      idx="$(_servers_idx_of "$port" "${decl_keys[@]}")"
+      if [[ -n "$idx" ]]; then
+        id="$(_servers_rec_field "${decl_recs[$idx]}" 1)"
+        [[ "$class" == "-" || -z "$class" ]] && class="$(_servers_rec_field "${decl_recs[$idx]}" 2)"
+        label="$(_servers_rec_field "${decl_recs[$idx]}" 3)"
+        mac="$(_servers_rec_field "${decl_recs[$idx]}" 4)"
+        health="$(_servers_rec_field "${decl_recs[$idx]}" 5)"
+        [[ -z "$id" ]] && id="-"
+        [[ -z "$class" ]] && class="-"
+        [[ -z "$label" ]] && label="-"
+        [[ -z "$mac" ]] && mac="ok"
+        [[ -z "$health" ]] && health="-"
+      fi
+    fi
+    [[ "$class" == "-" || -z "$class" ]] && class="-"
     [[ "$label" == "-" || -z "$label" ]] && label="${comm:--}"
-    mac="${decl_mac[$port]:-ok}"
-    health="${decl_health[$port]:--}"
-    restart="${live_restart[$port]:--}"
-    repo="${live_repo[$port]:--}"
-    owner="${live_owner[$port]:--}"
+
     # FOREIGN: declaration exists and live cwd repo disagrees with expectation.
     # We only mark FOREIGN when declaration id suggests a repo and live repo is set and differs.
     state="LISTEN"
-    if [[ -n "${decl_id[$port]:-}" && "${decl_id[$port]}" != "-" \
-          && -n "$repo" && "$repo" != "-" ]]; then
+    if [[ -n "$id" && "$id" != "-" && -n "$repo" && "$repo" != "-" ]]; then
       # If id looks like repo-something and repo doesn't match prefix, flag FOREIGN
-      local expect_repo="${decl_id[$port]%%-*}"
-      if [[ -n "$expect_repo" && "$repo" != "$expect_repo" && "$repo" != "${decl_id[$port]}" ]]; then
+      expect_repo="${id%%-*}"
+      if [[ -n "$expect_repo" && "$repo" != "$expect_repo" && "$repo" != "$id" ]]; then
         # Only if declaration carried an explicit class/id from a known file — soft signal
         :
       fi
     fi
     # Stronger FOREIGN: FERRY_SERVERS_EXPECT_REPO_$port or id field "repo/name"
-    if [[ -n "${decl_label[$port]:-}" && -n "$repo" && "$repo" != "-" ]]; then
+    if [[ -n "$label" && -n "$repo" && "$repo" != "-" ]]; then
       :
     fi
 
@@ -622,16 +778,33 @@ build_server_rows() {
       "$(_servers_dash "$mac_url")" \
       "$(_servers_dash "$health")" \
       "$(_servers_dash "$restart")"
+    i=$((i + 1))
   done
 
-  # Declared-missing: in declarations but not live
-  for port in "${!decl_id[@]}"; do
-    [[ -n "${seen_port[$port]:-}" ]] && continue
-    id="${decl_id[$port]:--}"
-    class="${decl_class[$port]:--}"
-    label="${decl_label[$port]:--}"
-    mac="${decl_mac[$port]:-ok}"
-    health="${decl_health[$port]:--}"
+  # Declared-missing: in declarations but not live (sorted by port, as before)
+  i=0
+  while (( i < ${#decl_keys[@]} )); do
+    port="${decl_keys[$i]}"
+    # skip if live
+    idx=""
+    if (( ${#live_keys[@]} > 0 )); then
+      idx="$(_servers_idx_of "$port" "${live_keys[@]}")"
+    fi
+    if [[ -n "$idx" ]]; then
+      i=$((i + 1))
+      continue
+    fi
+    rec="${decl_recs[$i]}"
+    id="$(_servers_rec_field "$rec" 1)"
+    class="$(_servers_rec_field "$rec" 2)"
+    label="$(_servers_rec_field "$rec" 3)"
+    mac="$(_servers_rec_field "$rec" 4)"
+    health="$(_servers_rec_field "$rec" 5)"
+    [[ -z "$id" ]] && id="-"
+    [[ -z "$class" ]] && class="-"
+    [[ -z "$label" ]] && label="-"
+    [[ -z "$mac" ]] && mac="ok"
+    [[ -z "$health" ]] && health="-"
     mac_state="$(servers_mac_state "127.0.0.1" "$port" "$mac")"
     # declared-missing is not reachable; force reserved if policy says never
     if [[ "$mac" == "never" ]] || _servers_port_reserved "$port"; then
@@ -653,6 +826,7 @@ build_server_rows() {
       "-" \
       "$(_servers_dash "$health")" \
       "-"
+    i=$((i + 1))
   done | sort -t$'\t' -k1,1n
 
   # Detached armory / agent children (class=agent, port=-). Read-only; missing dir = zero rows.
