@@ -356,61 +356,54 @@ usage() {
   fi
   cat <<EOF
 ${S}Usage${Z}
-  mossferry <host> [<repo>] [flags]   open a remote tmux session over mosh on <host>
-  (\`ferry\` is the short command)
+  ferry [<host>] [<repo>] [flags]   attach to a remote repo's tmux session (mosh/ssh)
+  (\`mossferry\` is the same binary)
 
-  Default action is the session picker (global with no <repo>, scoped with one).
-  Nothing attaches or creates a shared main session implicitly.
-  Repo typos are caught locally via automatic pre-validation (no mosh).
-  Bare \`ferry\` picks a host via FERRY_HOST_CANDIDATES (first reachable) or
-  FERRY_DEFAULT_HOST. Put LAN vs Tailscale aliases in ~/.ssh/config — mossferry
-  only tries the names you list (OSS-flexible; no hard-coded IPs).
+  Laptop client: resolves host, hops over mosh (default) or ssh, runs repo-session
+  on the host. Default action is the session picker — nothing attaches a shared
+  main session implicitly. Repo typos pre-validate over ssh (no mosh).
 
-${S}Picker keys${Z}
-  enter=attach · ➕ new → nested start menu (default / AI CLIs)
-  ctrl-x=kill (instant) · ctrl-r=rename · --cycle · esc=quit
-  Start menu: FERRY_START_MENU (default claude,grok — put personal profiles in your config)
-  Optional hotkeys: FERRY_LAUNCHERS (empty by default; ctrl-x/ctrl-r reserved)
-  Local: FERRY_WRAP=auto runs interactive sessions under \`grok wrap\` when
-  \`grok\` is on PATH (clipboard + terminal restore). FERRY_TRANSPORT=ssh
-  forces ssh instead of mosh (better OSC 52 with wrap; no mosh roam).
+${S}Primary commands${Z}
+  ferry <host>                      global session picker
+  ferry <host> <repo>               picker scoped to that repo basename
+  ferry <host> <repo> -p            attach/create primary session
+  ferry <host> --list               list sessions over ssh (no hop)
+  ferry <host> --list-servers       list listeners (TSV); add --json
+  ferry doctor [host]               read-only health (exit 1 if any FAIL)
+  ferry update [host]               git pull local + remote; print versions
+  ferry --help                      this help (local only; no network)
 
-${S}Flags${Z}
-  (none)             open the session picker
-  --primary, -p      attach the repo's primary session, creating it if missing
-  --new              force a fresh session  (repo, repo-2, repo-3, ...)
-  --claude, -c       run \`claude\` in newly-created sessions  (default: neofetch)
-  --list, -l         list sessions and exit  (with <repo>: just that repo;
-                     without <repo>: every tmux session on the host)
-  --list-servers     list remote listeners (TSV); add --json for agents
-  --resume [N|name]  no arg -> session picker; N -> the Nth session;
-                     name -> attach that exact session (e.g. --resume syndcast-2)
-  --resume-closed    reattach one EXISTING session per caller, distinct (atomic).
-                     Fired across a ghostty-grid each pane gets a different one;
-                     panes past the session count stay BLANK.
-  --resume-or-new    like --resume-closed, but fill leftover panes with fresh
-                     sessions — so an N-pane grid always ends up full.
-  -- cmd...          custom startup command for newly-created sessions
+${S}Happy path${Z}
+  # config: ~/.config/mossferry/config  →  FERRY_DEFAULT_HOST=workstation
+  ferry doctor workstation
+  ferry workstation                 # pick → enter attaches
+  ferry workstation my-app -p       # primary attach/create
 
-  Subcommands:
-    update [host]    git pull local clone + remote; print both versions
-    doctor [host]    read-only health checks (exit 1 if any FAIL)
-    --help, -h       this help (printed locally; no connection)
+  Bare \`ferry\` uses FERRY_HOST_CANDIDATES (first BatchMode-reachable) or
+  FERRY_DEFAULT_HOST. Put LAN vs remote aliases in ~/.ssh/config — ferry only
+  tries the names you list (no hard-coded IPs).
 
-${S}Config${Z}
-  ~/.config/mossferry/config  (FERRY_* keys; env overrides file)
-  See config.example and README for the full key list.
+${S}Picker keys (on the host)${Z}
+  enter=attach · ➕ new → nested start menu · ctrl-x=kill · ctrl-r=rename
+  ctrl-s=servers face · esc=quit
+  Start menu: FERRY_START_MENU (default claude,grok). Optional: FERRY_LAUNCHERS.
+  Local wrap: FERRY_WRAP=auto + \`grok\` on PATH → \`grok wrap\` around the hop.
+  Transport: FERRY_TRANSPORT=mosh|ssh (ssh = better OSC 52; no mosh roam).
 
-${S}Examples${Z}
-  ferry manjaro-remote                        global session picker
-  ferry manjaro-remote syndcast               scoped picker for syndcast
-  ferry manjaro-remote syndcast --primary     attach/create the primary session
-  ferry manjaro-remote syndcast --new -c      fresh session running claude
-  ferry manjaro-remote syndcast --list        list syndcast's sessions
-  ferry manjaro-remote --resume               pick any session
-  ferry update                                pull local + remote (default host)
-  ferry doctor manjaro-remote                 health checks
-  ghostty-grid -8 -- ferry manjaro-remote syndcast --resume-or-new --claude
+${S}More flags${Z}
+  --primary, -p      attach primary session, create if missing (needs <repo>)
+  --new              fresh session name (repo, repo-2, …) (needs <repo>)
+  --claude, -c       new sessions start \`claude\` (default start: neofetch)
+  --list, -l         list sessions and exit (ssh; with <repo>: scoped)
+  --list-servers     remote listeners (maps to repo-session --servers)
+  --resume [N|name]  bare → picker; N → Nth; name → exact session attach
+  --resume-closed    claim one EXISTING session (atomic; grid panes)
+  --resume-or-new    claim or create until every grid pane has a session
+  -- cmd...          custom start command for newly created sessions
+
+${S}Full reference${Z}
+  docs/command-reference.md · docs/configuration.md · config.example
+  Host brain help: repo-session --help
 
 mossferry ${ver} · the green ferry between your machines
 EOF

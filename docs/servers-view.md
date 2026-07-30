@@ -7,9 +7,11 @@ order: 25
 
 # Servers view
 
-A second face in the ferry picker answers: **what is actually running on this
-box, and can my Mac browser reach it?** Discovery is read-only. The ferry
-reports; it does not supervise processes by default.
+The picker’s **servers face** (`ctrl-s`) answers: **what is listening on this
+host, and can a Mac browser reach it?** Here “server” means a **listener**
+(port / process), not the remote machine — that machine is always the
+**host**. Discovery is read-only. Ferry reports; it does not supervise
+processes by default.
 
 ## How to open it
 

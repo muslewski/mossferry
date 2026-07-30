@@ -48,7 +48,7 @@ Entry: `bash tests/run.sh` or `npm test`.
   extracts JSON with pure `awk`. The helper is `devlog_xdg_tmp` (XDG only —
   does not claim full HOME isolation). Wired blocks that set `HOME` restore it.
   Optional JS dual-source uses `FLEET_REPO_ID_JS` + pre-captured `SUITE_NODE_BIN`
-  and **SKIP**s visibly when absent — never a hardcoded `/home/kento/...` path.
+  and **SKIP**s visibly when absent — never a hardcoded `/home/<user>/...` path.
 - **t45 is PATH-honest:** picker-preview chrome must pass with a broken `node`
   first on PATH (product uses awk, not `node -e`). Same verdict under desk PATH
   and `PATH=/usr/bin:/bin:/usr/local/bin`.

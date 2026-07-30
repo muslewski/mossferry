@@ -8,6 +8,6 @@
 
 **Steps:** TDD — write failing t29–t32 per the spec's Acceptance; implement `parse_launchers` + `launcher_cmd` (LIB-exported), launcher keys in the `--expect` lists of the main picker and destination sub-picker, the armed-launcher start-command override (beats FERRY_DEFAULT_CMD / --claude / `-- cmd`), the dynamic sub-picker hints line; green; commit per milestone.
 
-**Verify:** `bash tests/run.sh`; `bash -n bin/repo-session`; `git grep -iE '\bmoshi\b|/home/kento|/Users/muslewski' -- bin tests README.md` empty.
+**Verify:** `bash tests/run.sh`; `bash -n bin/repo-session`; `git grep -iE '\bmoshi\b' -- bin tests README.md` empty; `git grep -E '/home/|/Users/' -- bin README.md` empty (tests/demo may keep deliberate sanitisation fixtures).
 
 **Advisor after receipt:** gate, merge `--no-ff`, suite on main, VERSION → 2.3.0, push github, `ferry update` on Mac, manual checklist: ctrl-a/ctrl-g on repo, home, new-repo, and scoped new-session rows; enter unchanged.

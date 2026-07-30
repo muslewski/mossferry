@@ -24,6 +24,7 @@ npm install -g .   # or: ./install.sh
 
 ```bash
 bash tests/run.sh
+PATH=/usr/bin:/bin:/usr/local/bin bash tests/run.sh   # same verdict expected
 bash -n bin/mossferry bin/repo-session
 ```
 
@@ -32,6 +33,7 @@ bash -n bin/mossferry bin/repo-session
 - Install must work on **both shores** (local client + remote `repo-session`).
 - Keep `config.example` in sync with documented `FERRY_*` keys.
 - Prefer hermetic tests under `tests/` with fakes over live ssh.
+- A missing dependency must **SKIP** with a reason — never look like a pass. Details: [docs/troubleshooting.md](./docs/troubleshooting.md#test-harness-contributors).
 
 ## Project mind (informal knowledge base)
 

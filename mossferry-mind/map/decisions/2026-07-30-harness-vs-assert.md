@@ -33,7 +33,7 @@ next agent to "fix the emitter" instead of "fix the harness".
    XDG/HOME isolation (`DOGFOOD_NODE_BIN` / nvm v24 absolute path) and
    **SKIP** with a named message when the dependency is absent.
 2. **Never embed absolute desk paths** in the OSS test surface
-   (`/home/kento/...` is forbidden).
+   (`/home/<user>/...` and other personal absolute HOME paths are forbidden).
 3. **Harness vs assert is textual.** Failures from missing tools, empty
    event files when the harness could not run, or interpreter exit use
    `FAIL harness: …` (or `HARNESS_FAIL`). Never `|| echo parse-fail` into a

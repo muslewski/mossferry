@@ -2,10 +2,10 @@
 title: "Grok + ferry"
 description: "Keep ferry as the entrypoint: FERRY_WRAP / grok wrap on the laptop, ctrl-g / ctrl-a launchers on the remote picker."
 section: guide
-order: 20
+order: 30
 ---
 
-# Grok + ferry (Mac client → headless host)
+# Grok + ferry
 
 Keep **`ferry`** as the entrypoint. Do not replace it with raw `grok wrap ssh`.
 

@@ -1,8 +1,8 @@
 ---
 title: "Safety roadmap"
 description: "What mossferry is responsible for today, what stays on the host, and safety-oriented features coming later."
-section: guides
-order: 20
+section: guide
+order: 40
 ---
 
 # Safety roadmap

@@ -19,7 +19,7 @@
 
 **Tests:** every existing test updated mechanically (command paths, env prefixes, expected strings). `--client-version` assertions must read `$(cat VERSION)` — fix any hardcoded `1.x`. New: t20 `install`-side not needed; add m14: fake run asserts the mosh line uses `--client-version 2.0.0` (dynamic read proves VERSION wiring); i-test (test-install.sh): assert both `mossferry` and `ferry` symlinks exist and a stale `moshi` symlink into the repo is removed; config-migration case (old moshi config with MOSHI_DEFAULT_HOST → new path has FERRY_DEFAULT_HOST, old renamed `.migrated`).
 
-**Verify:** `bash tests/run.sh` green; `bash -n` both binaries + install.sh; `git grep -iE '\bmoshi\b' -- bin tests install.sh config.example README.md` empty; `git grep -E '/home/kento|/Users/muslewski' -- bin tests install.sh config.example README.md` empty.
+**Verify:** `bash tests/run.sh` green; `bash -n` both binaries + install.sh; `git grep -iE '\bmoshi\b' -- bin tests install.sh config.example README.md` empty; `git grep -E '/home/|/Users/' -- bin install.sh config.example README.md` empty (tests/demo may keep deliberate sanitisation fixtures).
 
 ### Advisor migration (after merge, in order)
 1. manjaro: merge --no-ff, suite green, worktree removed. Then `mv ~/Repositories/moshi ~/Repositories/mossferry` and run `~/Repositories/mossferry/install.sh` (re-points dangling symlinks, adds `ferry`, drops `moshi`, migrates config).
