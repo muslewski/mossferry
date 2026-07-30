@@ -1925,11 +1925,21 @@ main() {
     exit $?
   fi
 
-  # Informational verbs that must not require tmux (macOS may lack it entirely).
+  # Verbs that must not require tmux (macOS may lack it entirely).
   # --help is handled later (after optional version handshake); skip preflight for it.
-  # --servers lists listeners via lib/servers.sh — no tmux.
-  # Everything else (list, picker, attach, claim, internal fzf helpers) needs tmux.
-  if (( ! help && ! servers_list )); then
+  # The servers face and the face header never call tmux: print_servers_picker_rows
+  # (:1397), print_servers_preview (:1408) and _picker_servers_fix (:1357) contain no
+  # TMUXBIN reference — the nearest ones are _do_new_judge_flow (:1319) and run_picker
+  # (:1562). --picker-face-header is a bare printf.
+  # Verified on real macOS (bash 3.2, no tmux): without these exemptions
+  # `--picker-face-header` died on the preflight and test-servers lost the two
+  # header assertions.
+  # The face-dependent verbs (--picker-face-rows / --picker-face-preview) require
+  # tmux only on their sessions branch; each calls _require_tmux there.
+  # Everything else (list, picker, attach, claim, session fzf helpers) needs tmux.
+  if (( ! help && ! servers_list && ! picker_servers_rows && ! picker_servers_preview \
+        && ! picker_servers_fix && ! picker_face_header && ! picker_face_rows \
+        && ! picker_face_preview )); then
     _require_tmux
   fi
 
@@ -1967,6 +1977,7 @@ main() {
     if [[ "$face" == "servers" ]]; then
       print_servers_picker_rows
     else
+      _require_tmux
       print_picker_rows "$repo"
     fi
     exit 0
@@ -1976,6 +1987,7 @@ main() {
     if [[ "$face" == "servers" ]]; then
       print_servers_preview "$picker_face_arg2"
     else
+      _require_tmux
       print_picker_preview "$picker_face_arg2" "$picker_face_arg3"
     fi
     exit 0
