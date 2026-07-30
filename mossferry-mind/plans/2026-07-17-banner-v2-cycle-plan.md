@@ -8,6 +8,6 @@
 
 **Steps:** TDD — update t26/t27/t28/m16 and add failing t33–t35 per the spec's Acceptance; implement the width-tiered `ferry_banner [width]` (both scripts, keep-in-sync), the main picker's 40%-width call, `--cycle` on all three fzf invocations; green; commit per milestone.
 
-**Verify:** `bash tests/run.sh`; `bash -n bin/repo-session`; `bash -n bin/mossferry`; `git grep -iE '\bmoshi\b|/home/kento|/Users/muslewski' -- bin tests README.md` empty.
+**Verify:** `bash tests/run.sh`; `bash -n bin/repo-session`; `bash -n bin/mossferry`; `git grep -iE '\bmoshi\b' -- bin tests README.md` empty; `git grep -E '/home/|/Users/' -- bin README.md` empty (tests/demo may keep deliberate sanitisation fixtures).
 
 **Advisor after receipt:** gate (including byte-diff of all three art tiers), merge `--no-ff`, suite on main, VERSION → 2.4.0, push github, `ferry update` on Mac, manual checklist: wide/medium/small tiers + wrap-around scroll.

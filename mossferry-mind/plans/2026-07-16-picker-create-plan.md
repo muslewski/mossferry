@@ -8,6 +8,6 @@
 
 **Steps:** TDD — write failing t21–t25 per the spec's Acceptance; implement `create_repo`, `create_home_session`, the two picker rows (global chain only) + fallback `r)`/`h)` entries + `/dev/tty` prompts with reload-on-invalid; green; commit per milestone.
 
-**Verify:** `bash tests/run.sh`; `bash -n bin/repo-session`; `git grep -iE '\bmoshi\b|/home/kento|/Users/muslewski' -- bin tests README.md` empty.
+**Verify:** `bash tests/run.sh`; `bash -n bin/repo-session`; `git grep -iE '\bmoshi\b' -- bin tests README.md` empty; `git grep -E '/home/|/Users/' -- bin README.md` empty (tests/demo may keep deliberate sanitisation fixtures).
 
 **Advisor after receipt:** gate, merge `--no-ff`, suite on main, VERSION → 2.1.0, `ferry update` on Mac, manual checklist: global picker → new session → new repo flow; → home session flow; scoped picker unchanged.

@@ -28,8 +28,9 @@ Composes with `ghostty-grid` (which knows nothing about moshi):
    parallel edit sessions clobbered and lost fixes twice. moshi lives as
    zsh functions inside `~/.zshrc`, plus a legacy `mosh()` wrapper that
    duplicates it.
-3. **Hardcoded personal paths.** `/home/kento/.local/bin/repo-session` is
-   baked into the Mac's zshrc; blocks open-sourcing.
+3. **Hardcoded personal paths.** `~/.local/bin/repo-session` (as an absolute
+   personal HOME path on one machine) is baked into the Mac's zshrc; blocks
+   open-sourcing.
 4. **Connection config asymmetry.** Manjaro→Mac (`Host mac-music`, used by
    the sound-effect hook) has keepalives + ControlMaster + timeouts;
    Mac→Manjaro has none of that, plus a duplicate broken `Host manjaro`

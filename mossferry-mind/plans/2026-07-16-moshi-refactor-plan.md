@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Every script: `#!/usr/bin/env bash`, `set -u`; no `set -e` in repo-session (matches baseline; deliberate exit codes).
-- **No personal paths** — no literal `/home/kento` or `/Users/muslewski` anywhere; only `$HOME`-derived defaults and config keys.
+- **No personal paths** — no literal personal HOME prefixes (`/home/<user>`, `/Users/<user>`) anywhere; only `$HOME`-derived defaults and config keys.
 - **Baseline flags preserved byte-for-byte:** `--new`, `--list|-l`, `--resume|-R [N|name]`, `--resume-closed`, `--resume-or-new`, `--claude|-c`, `--help|-h`, `-- cmd…`.
 - **New surface:** `--primary|-p` and `--client-version <v>` (repo-session); `update [host]`, `doctor [host]` subcommands (moshi).
 - **Default action = picker.** Nothing ever attaches or creates `main` implicitly. Typo'd repo exits 1.
@@ -159,7 +159,7 @@
 ## Phase 1 gate (advisor)
 
 - [ ] Receipts from all three monitors say `RESULT: ok`.
-- [ ] Review each `git diff main...HEAD` (contract conformance, no personal paths: `git grep -nE '/home/kento|/Users/muslewski'` must be empty).
+- [ ] Review each `git diff main...HEAD` (contract conformance, no personal paths: `git grep -nE '/home/|/Users/' -- bin install.sh config.example README.md` must be empty; tests/demo may keep deliberate sanitisation fixtures).
 - [ ] Merge sequentially (`git merge --no-ff`), running `tests/run.sh` on main after each merge; remove worktrees.
 - [ ] Bump nothing — `VERSION` stays `1.0.0` until first post-migration change.
 

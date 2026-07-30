@@ -48,7 +48,7 @@ Entry: `bash tests/run.sh` or `npm test`.
   extracts JSON with pure `awk`. The helper is `devlog_xdg_tmp` (XDG only —
   does not claim full HOME isolation). Wired blocks that set `HOME` restore it.
   Optional JS dual-source uses `FLEET_REPO_ID_JS` + pre-captured `SUITE_NODE_BIN`
-  and **SKIP**s visibly when absent — never a hardcoded `/home/kento/...` path.
+  and **SKIP**s visibly when absent — never a hardcoded `/home/<user>/...` path.
 - **Harness failures are textually distinct:** `FAIL harness: …` / `HARNESS_FAIL`
   never `|| echo parse-fail` into a value compared as product output. See
   [[2026-07-30-hermetic-home-no-node-shim]], [[2026-07-30-harness-vs-assert]].

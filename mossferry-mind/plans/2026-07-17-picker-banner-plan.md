@@ -8,6 +8,6 @@
 
 **Steps:** TDD — write failing t26–t28 + m16 per the spec's Acceptance; implement `ferry_banner` (both scripts, LIB-exported in repo-session), `--layout=reverse --header-first` + banner headers on both fzf invocations, fallback-menu + `--help` banner printing, `FERRY_BANNER` config key; green; commit per milestone.
 
-**Verify:** `bash tests/run.sh`; `bash -n bin/repo-session`; `bash -n bin/mossferry`; `git grep -iE '\bmoshi\b|/home/kento|/Users/muslewski' -- bin tests README.md` empty.
+**Verify:** `bash tests/run.sh`; `bash -n bin/repo-session`; `bash -n bin/mossferry`; `git grep -iE '\bmoshi\b' -- bin tests README.md` empty; `git grep -E '/home/|/Users/' -- bin README.md` empty (tests/demo may keep deliberate sanitisation fixtures).
 
 **Advisor after receipt:** gate, merge `--no-ff`, suite on main, VERSION → 2.2.0, push github, `ferry update` on Mac, manual checklist: banner in real picker (full + short pane + off), reverse layout feel.
