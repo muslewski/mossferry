@@ -133,13 +133,13 @@ With **mosh**, a blip can reconnect the hop without a new login (until `FERRY_SE
 
 ## Repo name rules
 
-`_ferry_repo_token_ok` (used by validate, create, list-scoped, claim):
+`_ferry_repo_token_ok` (shared `lib/repo-token.sh`; used by laptop `ferry` and host validate/create/list-scoped/claim):
 
 - Allowed: letters, digits, `.`, `_`, `-` only (`^[A-Za-z0-9._-]+$`)
 - Rejected: empty, spaces, quotes, `/`, `\`, any `..` substring, absolute paths
-- After join with `FERRY_REPO_BASE`, `realpath` must stay under the base when `realpath` exists
+- Laptop rejects invalid tokens **before ssh**; host re-checks and also enforces `realpath` under `FERRY_REPO_BASE` when `realpath` exists
 
-Remote argv for the hop is built with `printf %q` so OpenSSH’s space-joining cannot split tokens — but **invalid repo names are still rejected** before attach.
+Remote argv for the hop is built with `printf %q` so OpenSSH’s space-joining cannot split tokens.
 
 Full observed tables (refusals, quoting samples, session match, status gaps): [Quoting and containment](./quoting-and-containment.md).
 
@@ -154,6 +154,8 @@ ghostty-grid -8 -- ferry workstation my-app --resume-closed
 
 `--resume-closed`: each pane claims a distinct **existing** session; extras stay blank.  
 `--resume-or-new`: same, then creates sessions until every pane has one.
+
+Headless automation: creating a session works without a TTY; **attaching** needs a terminal (`open terminal failed: not a terminal` from tmux if there is none).
 
 ## Config keys (summary)
 

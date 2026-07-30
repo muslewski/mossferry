@@ -19,7 +19,7 @@ repo-session --validate my-app
 # exit 0 when $FERRY_REPO_BASE/my-app is a directory
 
 ferry workstation my-app --primary
-# laptop pre-validates over ssh, then hops mosh/ssh with a fully quoted remote command
+# laptop: local shape gate → ssh --validate (existence) → mosh/ssh hop with fully quoted remote argv
 ```
 
 Allowed characters for a **repo token** (basename only):
@@ -41,7 +41,7 @@ Examples that pass the shape check (then succeed or fail only on “does the dir
 
 ## What is rejected
 
-`repo-session --validate <token>` (and create / scoped list / claim paths that call the same check) **exit 1** with:
+The shape gate is shared (`lib/repo-token.sh` → `_ferry_repo_token_ok`). The **laptop** rejects bad tokens **before any ssh**; the **host** rejects them again in `validate_repo` / create / scoped list / claim. Both print:
 
 ```text
 repo-session: invalid repo name '…'
@@ -99,21 +99,24 @@ The laptop client now builds **one** remote command string with `printf %q` on e
 - **ssh (list / validate / non-interactive):** `ssh <host> '<quoted remote cmd>'`
 - **mosh (interactive default):** `mosh … <host> -- bash -lc '<quoted remote cmd>'`
 
-Observed remote fragments (fake transport log; same quoting as production):
+Observed remote fragments for **shape-valid** tokens and for custom start commands (fake transport log; same quoting as production). Invalid repo tokens never appear here — the laptop rejects them first.
 
 ```text
-# spaces → backslash-escaped in the remote string
-… --validate name\ with\ spaces
-… bash -lc .local/bin/repo-session --client-version 2.7.4 name\ with\ spaces --primary
+# valid basename on validate + hop
+… --validate my-app
+… bash -lc .local/bin/repo-session --client-version 2.7.4 my-app --primary
 
-# apostrophe → shell-quoted
-… --validate o\'neil
-… bash -lc .local/bin/repo-session --client-version 2.7.4 o\'neil --primary
+# spaces in a custom start command (after --), not in the repo token
+… bash -lc .local/bin/repo-session --client-version 2.7.4 my-app --primary -- cmd\ with\ spaces
 ```
 
-**What quoting does not do:** it does not make spaces or quotes **valid** repo names. The host still runs `--validate` with `_ferry_repo_token_ok`. Quoting only ensures the remote shell sees the same bytes the laptop sent, so rejection is clean instead of a parse error or a half-name.
+**What quoting does not do:** it does not make spaces or quotes **valid** repo names. The laptop rejects them locally; if something still reached the host, `--validate` would reject them too. Quoting only ensures the remote shell sees the same bytes the laptop sent for *allowed* tokens and for non-repo arguments (flags, custom `-- cmd…`).
 
-Interactive hops with a repo token **pre-validate over ssh** before mosh, so a typo fails on the laptop without opening a session.
+Gates for a repo-bearing interactive hop:
+
+1. **Local shape** — no network; `invalid repo name` on fail.
+2. **Remote existence** — `ssh … repo-session --validate <repo>`; `no repo '…'` on fail.
+3. **Hop** — mosh or ssh with fully quoted remote argv.
 
 ## Path containment
 
