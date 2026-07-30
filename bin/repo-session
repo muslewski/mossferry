@@ -16,7 +16,9 @@
 # shellcheck disable=SC1090,SC1091
 set -u
 
-TMUXBIN="${REPO_SESSION_TMUXBIN:-/usr/bin/tmux}"
+# Resolve tmux from PATH first (Homebrew on macOS is not under /usr/bin).
+# Absolute path below is last-resort so Linux installs keep working.
+TMUXBIN="${REPO_SESSION_TMUXBIN:-$(command -v tmux 2>/dev/null || printf '/usr/bin/tmux')}"
 
 # Populated by parse_launchers (after load_config). Empty = feature off.
 LAUNCHER_KEYS=()
@@ -125,6 +127,24 @@ _rs_err() {
   else
     printf 'repo-session: %s\n' "$*" >&2
   fi
+}
+
+# Fail early with an actionable message when tmux is missing (stock macOS has
+# none; Homebrew installs under /opt/homebrew or /usr/local).
+# Uses die() from green-ui (or the fallback defined above).
+_require_tmux() {
+  if [[ -x "$TMUXBIN" ]]; then
+    return 0
+  fi
+  # Relative names / PATH hits: re-resolve once.
+  local resolved
+  resolved=$(command -v "$TMUXBIN" 2>/dev/null) || true
+  if [[ -n "$resolved" && -x "$resolved" ]]; then
+    TMUXBIN="$resolved"
+    return 0
+  fi
+  die "tmux not found on PATH (looked for: ${TMUXBIN}).
+macOS: brew install tmux   ·   or set REPO_SESSION_TMUXBIN=/path/to/tmux"
 }
 
 # ---- config / version helpers ------------------------------------------------
@@ -1807,6 +1827,14 @@ main() {
   if (( validate )); then
     validate_repo "$validate_arg"
     exit $?
+  fi
+
+  # Informational verbs that must not require tmux (macOS may lack it entirely).
+  # --help is handled later (after optional version handshake); skip preflight for it.
+  # --servers lists listeners via lib/servers.sh — no tmux.
+  # Everything else (list, picker, attach, claim, internal fzf helpers) needs tmux.
+  if (( ! help && ! servers_list )); then
+    _require_tmux
   fi
 
   # Internal picker helpers (fzf bind+reload) — exit immediately.
