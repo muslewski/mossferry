@@ -315,21 +315,47 @@ trap 'rm -rf "$tmpdir"' EXIT
   fi
 }
 
-# --- m23: repo token with spaces is shell-quoted on the remote command ---
+# --- m23: invalid repo shape is rejected locally (no ssh, no mosh) ---
 {
   name=m23
   outf="$tmpdir/m23.out" errf="$tmpdir/m23.err" logf="$tmpdir/m23.log"
   unset FAKE_SSH_VALIDATE_EXIT || true
   run_ferry "$outf" "$errf" "$logf" -- h "name with spaces" --primary
+  err="$(cat "$errf" 2>/dev/null || true)"
   log_content="$(cat "$logf" 2>/dev/null || true)"
-  # printf %q turns spaces into backslash-escapes in the remote string.
-  if [[ "$log_content" == *"--validate"* ]] \
-    && [[ "$log_content" == *'name\ with\ spaces'* ]] \
-    && [[ "$log_content" == *'bash -lc'* ]]; then
+  has_ssh=0 has_mosh=0
+  while IFS= read -r l || [[ -n "$l" ]]; do
+    base="${l%% *}"; base="${base##*/}"
+    [[ "$base" == ssh ]] && has_ssh=1
+    [[ "$base" == mosh ]] && has_mosh=1
+  done <"$logf"
+  # Shape gate runs before any transport; same message as host validate_repo.
+  if [[ $_exit -eq 1 ]] \
+    && [[ "$err" == *"invalid repo name 'name with spaces'"* ]] \
+    && [[ $has_ssh -eq 0 ]] && [[ $has_mosh -eq 0 ]] \
+    && [[ -z "$log_content" ]]; then
     ok "$name"
   else
     FAIL "$name"
-    printf '  log=%s\n' "$log_content" >&2
+    printf '  exit=%s has_ssh=%s has_mosh=%s err=%s log=%s\n' \
+      "$_exit" "$has_ssh" "$has_mosh" "$err" "$log_content" >&2
+  fi
+}
+
+# --- m23b: path-shaped repo token rejected locally (no DNS/ssh) ---
+{
+  name=m23b
+  outf="$tmpdir/m23b.out" errf="$tmpdir/m23b.err" logf="$tmpdir/m23b.log"
+  run_ferry "$outf" "$errf" "$logf" -- h '../etc' --primary
+  err="$(cat "$errf" 2>/dev/null || true)"
+  log_content="$(cat "$logf" 2>/dev/null || true)"
+  if [[ $_exit -eq 1 ]] \
+    && [[ "$err" == *"invalid repo name '../etc'"* ]] \
+    && [[ -z "$log_content" ]]; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  exit=%s err=%s log=%s\n' "$_exit" "$err" "$log_content" >&2
   fi
 }
 
