@@ -7,16 +7,17 @@
 | client | active | ok | Local ferry CLI (bin/mossferry): FERRY_* config, mosh/ssh launch of repo-session, optional grok wrap, pre-validate over ssh, doctor/update, --list-servers pass-through, opt-in fleet-devlog. |
 | demo | seeded | seeded | Demo recording pipeline (demo/) and published GIF assets (assets/): VHS tapes for picker/help/doctor, green-demo.sh, fixtures with stub ferry/mosh/ssh/tmux-greenui for offline capture. |
 | green-ui | active | ok | Vendored GREEN-UI-KIT (lib/green-ui.sh): source-able bash UI library — detect_color, ui_tty, banner/ok/warn/die/panel/checklist; stdout=data stderr=chrome; missing kit never kills ferry tools. |
-| install-config | active | ok | Install and packaging surface: install.sh (symlink ferry/mossferry/repo-session into ~/.local/bin, seed/migrate config), config.example FERRY_* keys (START_MENU + optional LAUNCHERS), package.json npm bins, VERSION. |
+| install-config | active | ⚠ stale | Install and packaging surface: install.sh (symlink ferry/mossferry/repo-session into ~/.local/bin, seed/migrate config), config.example FERRY_* keys (START_MENU + optional LAUNCHERS), package.json npm bins, VERSION. |
 | repo-session | active | ok | Remote brain (bin/repo-session): fzf/menu session picker + servers face (ctrl-s), create/attach, atomic claim, nested start menu, FERRY_LAUNCHERS, Grok wallet badge, FERRY_SAGE wire, kill/rename, --servers discovery, validate_repo. |
 | tests | active | ok | Bash test harness (tests/): run.sh drives test-mossferry, test-repo-session, test-install, test-ui-ops, test-fleet-devlog with fake-tmux and fake-bin stubs — no framework beyond bash. |
 
 ## ⚠ Verification gaps
 
+- zone install-config: ⚠ stale — code changed since verifiedAt, review and re-stamp
 - zone demo: seeded — not yet verified (verifiedAt: unverified)
 - zone client: invariant missing rule field (flow-style YAML maps are not supported — use block style)
 - zone client: invariant missing rule field (flow-style YAML maps are not supported — use block style)
-- decision number 2026 reused: 2026-07-29-servers-view, 2026-07-30-harness-vs-assert, 2026-07-30-hermetic-home-no-node-shim, 2026-07-30-sage-chrome-no-node
+- decision number 2026 reused: 2026-07-29-servers-view, 2026-07-30-collapse-vendored-skills, 2026-07-30-harness-vs-assert, 2026-07-30-hermetic-home-no-node-shim, 2026-07-30-sage-chrome-no-node
 
 ## ⚠ Graph coherence
 
@@ -31,7 +32,7 @@ _none_
 - specs: 9 (? 8 · approved 1)
 - plans: 8 (? 8)
 - reports: 1 (snapshot 1)
-- decisions: 6 (active 6)
+- decisions: 7 (active 7)
 
 ### Recent
 

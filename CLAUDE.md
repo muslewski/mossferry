@@ -1,3 +1,7 @@
+<!-- sage-fleet-pointer -->
+**Parallel sessions** — other agent sessions may run concurrently. Before claiming work or opening a PR, use the `sage-fleet` skill (collision check → claim → merge brief). SAGE off/absent ⇒ silent no-op.
+<!-- /sage-fleet-pointer -->
+
 <!-- atlas:onramp v0.1 -->
 ### Working with the Atlas (`mossferry-mind/`)
 
@@ -37,6 +41,7 @@ code it describes.
   execute.
 - **Vendored third-party skills are not Atlas projections** — never
   tombstone or regenerate them during recollection.
-- Retrieval: use the `atlas-nav` skill if it's been copied into this repo,
-  or see `adapters/ctx-search/README.md`.
+- Retrieval: use the `atlas-nav` skill (user scope), or see `adapters/ctx-search/README.md`.
 <!-- /atlas:onramp -->
+
+Atlas skills (atlas-nav, atlas-adopt, atlas-recollection, atlas-update, atlas-seed, writing-for-retrieval) install once at user scope (`~/.claude/skills/`), not vendored here — verify: `test -f ~/.claude/skills/atlas-nav/SKILL.md`.
