@@ -606,7 +606,8 @@ cmd_doctor() {
     printf '⛴ %s%smossferry doctor%s · %s\n' "${UI_G-}${UI_BOLD-}" "${UI_Z-}${UI_G-}" "${UI_Z-}" "$host" >&2
   fi
 
-  # Emit one check line. kind = ok|FAIL|info. Non-TTY: exact tokens. TTY: glyph + line.
+  # Emit one check line. kind = ok|FAIL|WARN|info. Non-TTY: exact tokens. TTY: glyph + line.
+  # WARN is soft (never sets failed); same line shape as ok/FAIL/info.
   _doc_emit() {
     local kind=$1
     shift
@@ -619,6 +620,9 @@ cmd_doctor() {
           ;;
         FAIL)
           printf '%s%s%s FAIL %s\n' "${UI_R-}" "${UI_ERR-XX}" "${UI_Z-}" "$msg"
+          ;;
+        WARN)
+          printf '%s%s%s WARN %s\n' "${UI_Y-}" "${UI_WARN-!!}" "${UI_Z-}" "$msg"
           ;;
         info)
           printf '%sinfo %s%s\n' "${UI_D-}" "$msg" "${UI_Z-}"
@@ -696,6 +700,38 @@ cmd_doctor() {
       ;;
   esac
 
+  # 4d. local bash version (info/WARN — not FAIL; 3.2 is supported)
+  # BASH_VERSINFO is available in bash 3.2. green-ui self-describes bash >= 4.
+  local bash_ver="${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"
+  if [[ "${BASH_VERSINFO[0]}" -eq 3 ]]; then
+    _doc_emit WARN "local bash ${bash_ver} — 3.2 is supported; lib/green-ui.sh self-describes bash >= 4 so UI may degrade"
+  else
+    _doc_emit ok "local bash ${bash_ver}"
+  fi
+
+  # 4e. local tmux (WARN if absent — only matters for local repo-session)
+  # Same resolution order repo-session uses: REPO_SESSION_TMUXBIN, else command -v.
+  local local_tmux=""
+  if [[ -n "${REPO_SESSION_TMUXBIN:-}" ]]; then
+    local_tmux="$REPO_SESSION_TMUXBIN"
+  elif command -v tmux >/dev/null 2>&1; then
+    local_tmux=$(command -v tmux 2>/dev/null) || local_tmux=""
+  fi
+  if [[ -n "$local_tmux" && -x "$local_tmux" ]]; then
+    _doc_emit ok "local tmux: $local_tmux"
+  elif [[ -n "$local_tmux" ]]; then
+    _doc_emit WARN "local tmux not executable: $local_tmux — only matters if you run repo-session locally (laptop client: irrelevant; tmux lives on the host). On macOS: brew install tmux"
+  else
+    _doc_emit WARN "local tmux absent — only matters if you run repo-session locally (laptop client: irrelevant; tmux lives on the host). On macOS: brew install tmux"
+  fi
+
+  # 4f. local fzf — picker runs on the remote host (bin/repo-session), not here
+  if command -v fzf >/dev/null 2>&1; then
+    _doc_emit info "local fzf present — unused by ferry (picker runs on remote via repo-session)"
+  else
+    _doc_emit info "local fzf absent — unused by ferry (picker runs on remote via repo-session)"
+  fi
+
   # When connect failed, remote probes cannot succeed — skip them (no hang) and
   # emit the same FAIL/info tokens a failed probe would have produced.
   if (( ! connect_ok )); then
@@ -726,11 +762,20 @@ cmd_doctor() {
     fix_hints+=("run: ferry update ${host}")
   fi
 
-  # 7. remote fzf (info if missing)
+  # 7. remote fzf (info if missing) — picker is remote (repo-session)
   if (( connect_ok )) && ssh "${SSH_OPTS[@]}" "$host" command -v fzf >/dev/null 2>&1; then
     _doc_emit ok "remote fzf present"
   else
     _doc_emit info "remote fzf missing — numbered menu fallback available"
+  fi
+
+  # 7b. remote tmux — attach dies without it; must FAIL (docs previously: not checked)
+  # Reuse the same SSH_OPTS / connect_ok gate as every other remote probe.
+  if (( connect_ok )) && ssh "${SSH_OPTS[@]}" "$host" command -v tmux >/dev/null 2>&1; then
+    _doc_emit ok "remote tmux present"
+  else
+    _doc_emit FAIL "remote tmux missing — session attach will fail (install tmux on the host)"
+    failed=1
   fi
 
   # 8. remote mosh-server count (info)
