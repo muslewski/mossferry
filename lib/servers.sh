@@ -472,7 +472,7 @@ _servers_cache_tmux_panes() {
 _SERVERS_US=$'\x1f'
 
 # Find index of key in a parallel key array; prints index or empty if absent.
-# Usage: _servers_idx_of key "${keys[@]}"
+# Usage: _servers_idx_of key ${keys[@]+"${keys[@]}"}
 _servers_idx_of() {
   local needle="$1" i=0 _servers_k
   shift
@@ -557,7 +557,7 @@ build_server_rows() {
       rec="${id}${US}${class}${US}${label}${US}${mac}${US}${health}"
       idx=""
       if (( ${#decl_keys[@]} > 0 )); then
-        idx="$(_servers_idx_of "$port" "${decl_keys[@]}")"
+        idx="$(_servers_idx_of "$port" ${decl_keys[@]+"${decl_keys[@]}"})"
       fi
       if [[ -n "$idx" ]]; then
         decl_recs[$idx]="$rec"
@@ -565,7 +565,7 @@ build_server_rows() {
         decl_keys+=("$port")
         decl_recs+=("$rec")
       fi
-    done < <(servers_parse_declarations "${files[@]}")
+    done < <(servers_parse_declarations ${files[@]+"${files[@]}"})
   fi
 
   # --- L1 listeners ---
@@ -588,7 +588,7 @@ build_server_rows() {
   while IFS=$'\t' read -r k v; do
     [[ -n "$k" ]] || continue
     idx=""
-    (( ${#cache_sd_keys[@]} > 0 )) && idx="$(_servers_idx_of "$k" "${cache_sd_keys[@]}")"
+    (( ${#cache_sd_keys[@]} > 0 )) && idx="$(_servers_idx_of "$k" ${cache_sd_keys[@]+"${cache_sd_keys[@]}"})"
     if [[ -n "$idx" ]]; then
       cache_sd_vals[$idx]="$v"
     else
@@ -599,7 +599,7 @@ build_server_rows() {
   while IFS=$'\t' read -r k v; do
     [[ -n "$k" ]] || continue
     idx=""
-    (( ${#cache_docker_keys[@]} > 0 )) && idx="$(_servers_idx_of "$k" "${cache_docker_keys[@]}")"
+    (( ${#cache_docker_keys[@]} > 0 )) && idx="$(_servers_idx_of "$k" ${cache_docker_keys[@]+"${cache_docker_keys[@]}"})"
     if [[ -n "$idx" ]]; then
       cache_docker_vals[$idx]="$v"
     else
@@ -613,7 +613,7 @@ build_server_rows() {
     v="${line#* }"
     [[ -n "$k" ]] || continue
     idx=""
-    (( ${#cache_tmux_keys[@]} > 0 )) && idx="$(_servers_idx_of "$k" "${cache_tmux_keys[@]}")"
+    (( ${#cache_tmux_keys[@]} > 0 )) && idx="$(_servers_idx_of "$k" ${cache_tmux_keys[@]+"${cache_tmux_keys[@]}"})"
     if [[ -n "$idx" ]]; then
       cache_tmux_vals[$idx]="$v"
     else
@@ -628,7 +628,7 @@ build_server_rows() {
     class=""
     # L2 systemd (cached)
     if [[ -n "$pid" && "$pid" != "-" && ${#cache_sd_keys[@]} -gt 0 ]]; then
-      idx="$(_servers_idx_of "$pid" "${cache_sd_keys[@]}")"
+      idx="$(_servers_idx_of "$pid" ${cache_sd_keys[@]+"${cache_sd_keys[@]}"})"
       if [[ -n "$idx" ]]; then
         class="spine"
       fi
@@ -636,7 +636,7 @@ build_server_rows() {
     # L3 docker (cached)
     restart="-"
     if (( ${#cache_docker_keys[@]} > 0 )); then
-      idx="$(_servers_idx_of "$port" "${cache_docker_keys[@]}")"
+      idx="$(_servers_idx_of "$port" ${cache_docker_keys[@]+"${cache_docker_keys[@]}"})"
       if [[ -n "$idx" ]]; then
         class="${class:-docker}"
         restart="${cache_docker_vals[$idx]}"
@@ -646,7 +646,7 @@ build_server_rows() {
     if [[ -z "$class" || "$class" == "-" ]]; then
       class=""
       if (( ${#decl_keys[@]} > 0 )); then
-        idx="$(_servers_idx_of "$port" "${decl_keys[@]}")"
+        idx="$(_servers_idx_of "$port" ${decl_keys[@]+"${decl_keys[@]}"})"
         if [[ -n "$idx" ]]; then
           class="$(_servers_rec_field "${decl_recs[$idx]}" 2)"
         fi
@@ -666,7 +666,7 @@ build_server_rows() {
     # L4 tmux owner — direct pane or walk parents against cache
     owner="-"
     if [[ -n "$pid" && "$pid" != "-" && ${#cache_tmux_keys[@]} -gt 0 ]]; then
-      idx="$(_servers_idx_of "$pid" "${cache_tmux_keys[@]}")"
+      idx="$(_servers_idx_of "$pid" ${cache_tmux_keys[@]+"${cache_tmux_keys[@]}"})"
       if [[ -n "$idx" ]]; then
         owner="${cache_tmux_vals[$idx]}"
       else
@@ -675,7 +675,7 @@ build_server_rows() {
         while (( i < 8 )); do
           ppid="$(awk '/^PPid:/{print $2; exit}' "/proc/$p/status" 2>/dev/null || true)"
           [[ -n "$ppid" && "$ppid" =~ ^[0-9]+$ && "$ppid" -gt 1 ]] || break
-          idx="$(_servers_idx_of "$ppid" "${cache_tmux_keys[@]}")"
+          idx="$(_servers_idx_of "$ppid" ${cache_tmux_keys[@]+"${cache_tmux_keys[@]}"})"
           if [[ -n "$idx" ]]; then
             owner="${cache_tmux_vals[$idx]}"
             break
@@ -694,7 +694,7 @@ build_server_rows() {
     rec="${bind}${US}${pid}${US}${comm}${US}${class}${US}${restart}${US}${repo}${US}${owner}"
     idx=""
     if (( ${#live_keys[@]} > 0 )); then
-      idx="$(_servers_idx_of "$port" "${live_keys[@]}")"
+      idx="$(_servers_idx_of "$port" ${live_keys[@]+"${live_keys[@]}"})"
     fi
     if [[ -n "$idx" ]]; then
       live_recs[$idx]="$rec"
@@ -728,7 +728,7 @@ build_server_rows() {
     mac="ok"
     health="-"
     if (( ${#decl_keys[@]} > 0 )); then
-      idx="$(_servers_idx_of "$port" "${decl_keys[@]}")"
+      idx="$(_servers_idx_of "$port" ${decl_keys[@]+"${decl_keys[@]}"})"
       if [[ -n "$idx" ]]; then
         id="$(_servers_rec_field "${decl_recs[$idx]}" 1)"
         [[ "$class" == "-" || -z "$class" ]] && class="$(_servers_rec_field "${decl_recs[$idx]}" 2)"
@@ -788,7 +788,7 @@ build_server_rows() {
     # skip if live
     idx=""
     if (( ${#live_keys[@]} > 0 )); then
-      idx="$(_servers_idx_of "$port" "${live_keys[@]}")"
+      idx="$(_servers_idx_of "$port" ${live_keys[@]+"${live_keys[@]}"})"
     fi
     if [[ -n "$idx" ]]; then
       i=$((i + 1))

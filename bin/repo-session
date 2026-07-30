@@ -314,7 +314,7 @@ _pick_start_cmd() {
   for c in "${LAUNCHER_CMDS[@]+"${LAUNCHER_CMDS[@]}"}"; do
     [[ "$c" == "$def" ]] && continue
     local seen=0 o
-    for o in "${opts[@]}"; do
+    for o in ${opts[@]+"${opts[@]}"}; do
       [[ "$o" == "$c" ]] && { seen=1; break; }
     done
     (( seen )) && continue
@@ -329,7 +329,7 @@ _pick_start_cmd() {
 
   if command -v fzf >/dev/null 2>&1 && [[ -z "${FERRY_NO_FZF:-}" ]]; then
     pickfile="${TMPDIR:-/tmp}/repo-session-start.$$"
-    printf '%s\n' "${opts[@]}" | fzf --layout=reverse --header-first --cycle \
+    printf '%s\n' ${opts[@]+"${opts[@]}"} | fzf --layout=reverse --header-first --cycle \
       --header "start command · enter=pick · esc=cancel" \
       --prompt='start> ' >"$pickfile" || { rm -f "$pickfile"; [[ -n "${facefile:-}" ]] && rm -f "$facefile" "$facefile"; return 1; }
     choice=$(cat "$pickfile")
@@ -337,7 +337,7 @@ _pick_start_cmd() {
   else
     # Numbered fallback — read stdin (same as other no-fzf menus; tests pipe here).
     i=1
-    for o in "${opts[@]}"; do
+    for o in ${opts[@]+"${opts[@]}"}; do
       printf '%d) %s\n' "$i" "$o" >&2
       ((i++)) || true
     done
@@ -806,7 +806,7 @@ build_session_rows() {
       names+=("$_line")
     done < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
   fi
-  for s in "${names[@]}"; do
+  for s in ${names[@]+"${names[@]}"}; do
     [[ -z "$s" ]] && continue
     # Hide coding-ops monitor side-sessions (ccops-*-mon) — attach the main job session only
     [[ "$s" == *-mon || "$s" == *-mon-* ]] && continue
@@ -1125,16 +1125,16 @@ _pick_repo_for_new() {
     fi
     pickfile="${TMPDIR:-/tmp}/repo-session-subpick.$$"
     if (( scoped )); then
-      printf '%s\n' "${dirs[@]}" | fzf --layout=reverse --header-first --cycle \
-        "${sub_hdr[@]}" "${sub_expect[@]}" --prompt='new session repo> ' \
+      printf '%s\n' ${dirs[@]+"${dirs[@]}"} | fzf --layout=reverse --header-first --cycle \
+        ${sub_hdr[@]+"${sub_hdr[@]}"} ${sub_expect[@]+"${sub_expect[@]}"} --prompt='new session repo> ' \
         >"$pickfile" || { rm -f "$pickfile"; [[ -n "${facefile:-}" ]] && rm -f "$facefile"; return 1; }
     else
       {
-        printf '%s\n' "${dirs[@]}"
+        printf '%s\n' ${dirs[@]+"${dirs[@]}"}
         printf '%s\n' "$_NEW_REPO_LABEL"
         printf '%s\n' "$_HOME_SESSION_LABEL"
       } | fzf --layout=reverse --header-first --cycle \
-        "${sub_hdr[@]}" "${sub_expect[@]}" --prompt='new session repo> ' \
+        ${sub_hdr[@]+"${sub_hdr[@]}"} ${sub_expect[@]+"${sub_expect[@]}"} --prompt='new session repo> ' \
         >"$pickfile" || { rm -f "$pickfile"; [[ -n "${facefile:-}" ]] && rm -f "$facefile"; return 1; }
     fi
     if (( ${#LAUNCHER_KEYS[@]} > 0 )); then
@@ -1159,7 +1159,7 @@ _pick_repo_for_new() {
 
   # numbered menu (no-fzf)
   i=1
-  for d in "${dirs[@]}"; do
+  for d in ${dirs[@]+"${dirs[@]}"}; do
     printf '%d) %s\n' "$i" "$d" >&2
     ((i++)) || true
   done
@@ -1283,11 +1283,11 @@ _do_new_judge_flow() {
       return 1
     fi
     if command -v fzf >/dev/null 2>&1 && [[ -z "${FERRY_NO_FZF:-}" ]]; then
-      choice=$(printf '%s\n' "${dirs[@]}" | fzf --layout=reverse --header-first --cycle \
+      choice=$(printf '%s\n' ${dirs[@]+"${dirs[@]}"} | fzf --layout=reverse --header-first --cycle \
         --header 'judge repo · enter=pick · esc=cancel' --prompt='judge repo> ') || exit 130
     else
       i=1
-      for d in "${dirs[@]}"; do
+      for d in ${dirs[@]+"${dirs[@]}"}; do
         printf '%d) %s\n' "$i" "$d" >&2
         ((i++)) || true
       done
@@ -1539,7 +1539,7 @@ run_picker() {
         printf '%s\n' "$_FERRY_UPDATE_NUDGE"
       fi
       i=1
-      for line in "${rows[@]}"; do
+      for line in ${rows[@]+"${rows[@]}"}; do
         name="${line%%$'\t'*}"
         printf '%d) %s\n' "$i" "$line" | tr '\t' ' '
         ((i++)) || true
@@ -1697,9 +1697,9 @@ run_picker() {
       fzf_args+=(--expect="$expect_keys")
     fi
     if [[ "$face" == "servers" ]]; then
-      print_servers_picker_rows | fzf "${fzf_args[@]}" >"$pickfile"
+      print_servers_picker_rows | fzf ${fzf_args[@]+"${fzf_args[@]}"} >"$pickfile"
     else
-      print_picker_rows "$repo" | fzf "${fzf_args[@]}" >"$pickfile"
+      print_picker_rows "$repo" | fzf ${fzf_args[@]+"${fzf_args[@]}"} >"$pickfile"
     fi
     fzf_status=$?
     if (( fzf_status != 0 )); then
@@ -2099,7 +2099,7 @@ EOF
       if [[ -z "$target" ]]; then
         echo "no session #$pick${repo:+ for ${repo}}. available:" >&2
         local i=1 s
-        for s in "${sessions[@]}"; do echo "  $i) $s" >&2; ((i++)) || true; done
+        for s in ${sessions[@]+"${sessions[@]}"}; do echo "  $i) $s" >&2; ((i++)) || true; done
         exit 1
       fi
       exec "$TMUXBIN" attach -t "$target"
@@ -2167,14 +2167,14 @@ EOF
       [[ -z "$c" ]] || (( now - c >= ttl ))
     }
     # pass 1: prefer a genuinely DETACHED session
-    for s in "${sessions[@]}"; do
+    for s in ${sessions[@]+"${sessions[@]}"}; do
       [[ "$("$TMUXBIN" display-message -p -t "$s" '#{session_attached}')" == "0" ]] || continue
       claimable "$s" || continue
       target="$s"; "$TMUXBIN" set-option -t "$s" @claim_ts "$now" >/dev/null 2>&1; break
     done
     # pass 2: none detached → TAKE OVER an attached one.
     if [[ -z "$target" ]]; then
-      for s in "${sessions[@]}"; do
+      for s in ${sessions[@]+"${sessions[@]}"}; do
         claimable "$s" || continue
         target="$s"; "$TMUXBIN" set-option -t "$s" @claim_ts "$now" >/dev/null 2>&1; break
       done

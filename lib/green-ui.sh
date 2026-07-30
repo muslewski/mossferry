@@ -308,7 +308,7 @@ checklist() {
   fi
 
   n=0
-  for item in "${items[@]}"; do
+  for item in ${items[@]+"${items[@]}"}; do
     id=${item%%:*}
     label=${item#*:}
     st=$(_green_ui_state_of "$sf" "$id")
@@ -395,7 +395,7 @@ sparkline() {
   fi
 
   if (( min == max )); then
-    for n in "${nums[@]}"; do
+    for n in ${nums[@]+"${nums[@]}"}; do
       printf '%s' "${ticks[4]}"
     done
     printf '\n'
@@ -403,7 +403,7 @@ sparkline() {
   fi
 
   # scale to 0..7
-  for n in "${nums[@]}"; do
+  for n in ${nums[@]+"${nums[@]}"}; do
     # idx = round((n-min) / (max-min) * 7)
     idx=$(( (n - min) * 7 / (max - min) ))
     if (( idx < 0 )); then idx=0; fi
@@ -438,7 +438,7 @@ panel() {
     if (( pad < 0 )); then pad=0; fi
     for (( i = 0; i < pad; i++ )); do printf '-' >&2; done
     printf '+%s\n' "$z" >&2
-    for line in "${lines[@]}"; do
+    for line in ${lines[@]+"${lines[@]}"}; do
       pad=$(( w - ${#line} ))
       if (( pad < 0 )); then pad=0; fi
       printf '%s|%s %s%*s %s|%s\n' "$a" "$z" "$line" "$pad" '' "$a" "$z" >&2
@@ -452,7 +452,7 @@ panel() {
     if (( pad < 0 )); then pad=0; fi
     for (( i = 0; i < pad; i++ )); do printf '─' >&2; done
     printf '╮%s\n' "$z" >&2
-    for line in "${lines[@]}"; do
+    for line in ${lines[@]+"${lines[@]}"}; do
       pad=$(( w - ${#line} ))
       if (( pad < 0 )); then pad=0; fi
       printf '%s│%s %s%*s %s│%s\n' "$a" "$z" "$line" "$pad" '' "$a" "$z" >&2
@@ -523,7 +523,7 @@ choose() {
     local fopts
     fopts=$(green_fzf_opts)
     # shellcheck disable=SC2086
-    sel=$(printf '%s\n' "${opts[@]}" | fzf --prompt="${prompt} " --height=40% --reverse $fopts) || {
+    sel=$(printf '%s\n' ${opts[@]+"${opts[@]}"} | fzf --prompt="${prompt} " --height=40% --reverse $fopts) || {
       local ec=$?
       if (( ec == 130 || ec == 1 )); then exit 130; fi
       exit "$ec"
