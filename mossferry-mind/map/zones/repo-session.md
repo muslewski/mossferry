@@ -5,7 +5,7 @@ tags: [remote, tmux, picker, fzf, sage, grok]
 status: active
 created: 2026-07-21
 updated: 2026-07-30
-verifiedAt: 6320e84a
+verifiedAt: 5f96f1c1
 owns:
   routes: []
   testids: []
