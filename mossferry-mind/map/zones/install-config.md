@@ -5,7 +5,7 @@ tags: [install, config, npm, packaging]
 status: active
 created: 2026-07-21
 updated: 2026-07-30
-verifiedAt: d8df0027
+verifiedAt: 9cea64cf796c14fea10f4528465cd1eda781c438
 owns:
   routes: []
   testids: []
@@ -36,7 +36,8 @@ How mossferry gets onto a machine and how runtime knobs are documented.
   (`ferry`, `mossferry`, `repo-session`), config dir, legacy MOSHI→FERRY
   migration, seed `config` only if absent; TTY chrome via green-ui.
   **Exit honesty:** `mkdir` / `ln` / `cp` failures print `install: …` and
-  exit nonzero — never report success after a failed step.
+  exit nonzero — never report success after a failed step (tested:
+  `mkdir failure exits nonzero`).
 - **`config.example`** — commented `FERRY_*` template (remote bin, repo base,
   default cmd/host, mosh timeout, banner, `FERRY_START_MENU`, optional
   `FERRY_LAUNCHERS`). Defaults ship generic CLI names only; personal profiles

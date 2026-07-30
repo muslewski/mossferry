@@ -5,7 +5,7 @@ tags: [cli, client, mosh, ssh, grok-wrap]
 status: active
 created: 2026-07-21
 updated: 2026-07-30
-verifiedAt: d8df0027
+verifiedAt: 9cea64cf796c14fea10f4528465cd1eda781c438
 owns:
   routes: []
   testids: []
@@ -61,6 +61,13 @@ yank pipes (tmux → pbcopy).
 ## Lineage
 
 Seed 2026-07-21; wrap/transport added 2026-07-22 (2.7.0).
+
+## Version / remote argv
+
+- `own_version` strips UTF-8 BOM + CR so status `local X / remote Y` equality
+  is not broken by a BOM-only VERSION file.
+- Remote argv is `printf %q`-joined (`_ferry_ssh_remote_cmd`) before ssh/mosh
+  so repo tokens with spaces or quotes survive OpenSSH's bare-space join.
 
 ## Fleet-devlog
 
