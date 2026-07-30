@@ -13,6 +13,10 @@ host, and can a Mac browser reach it?** Here “server” means a **listener**
 **host**. Discovery is read-only. Ferry reports; it does not supervise
 processes by default.
 
+**Platform:** live discovery uses Linux `ss -ltnp` and `/proc` inside
+`lib/servers.sh`. It runs on the **host** (or via `ferry <host> --list-servers`
+over ssh). A stock macOS userland has neither `ss` nor `/proc` — do not expect
+the servers face to work if `repo-session --servers` is run on a bare Mac.
 ## How to open it
 
 | Surface | How |

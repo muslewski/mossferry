@@ -30,6 +30,13 @@ Site: [mossferry.muslewski.com](https://mossferry.muslewski.com)
 
 Two sides: **laptop** (where you type `ferry`) and **host** (where tmux and the repos live). Both need the package on `PATH`.
 
+| Side | Package bins | External tools (from reading the code) |
+|------|--------------|----------------------------------------|
+| **Laptop** | `ferry` / `mossferry` | `ssh`; **`mosh`** when `FERRY_TRANSPORT=mosh` (default — doctor always checks local mosh); optional local `grok` for `FERRY_WRAP` |
+| **Host** | `repo-session` | **`tmux`** (all session logic); **`mosh-server`** when clients use mosh; **`fzf` optional** (numbered menu fallback); **`ss` + `/proc`** only for the servers face |
+
+The **fzf picker runs on the host** inside the hop — a Mac laptop does **not** need local `fzf` or local `tmux` for normal `ferry` use. Install `tmux` on the laptop only if you run `repo-session` there (local host / single-machine setup).
+
 ### 1. Install (runnable anywhere)
 
 ```sh
@@ -37,6 +44,15 @@ npm install -g mossferry    # bins: ferry | mossferry | repo-session
 # or clone the repo and run ./install.sh on that machine
 ferry --help                # printed locally; no network
 ```
+
+**macOS laptop (Homebrew):** package via npm as above, plus transport:
+
+```sh
+brew install mosh           # default FERRY_TRANSPORT=mosh; doctor FAILs without local mosh
+# brew install tmux         # only if you also run repo-session on this Mac
+```
+
+Stock `/bin/bash` on macOS is **3.2** — fine for the client; see [Troubleshooting → macOS client](./docs/troubleshooting.md#macos-client).
 
 `ferry --help` ends with a version line like:
 
@@ -66,7 +82,7 @@ npm install -g mossferry
 # or: clone + ./install.sh  → symlinks ferry/mossferry/repo-session into ~/.local/bin
 ```
 
-Remote defaults expect `repo-session` at `~/.local/bin/repo-session` and repos under `~/Repositories` (`FERRY_REPO_BASE`).
+Host tools (Linux example): `tmux`, `mosh` (for `mosh-server`), and preferably `fzf`. Remote defaults expect `repo-session` at `~/.local/bin/repo-session` and repos under `~/Repositories` (`FERRY_REPO_BASE`).
 
 ### 4. Check, list, attach (needs a reachable host)
 
@@ -210,8 +226,10 @@ The long-running work is always in **remote tmux**. Mosh protects the *hop*; ssh
 
 ## Limitations
 
-- **External binaries.** Ferry launches `ssh`, `mosh`, `tmux`, and optionally `fzf` / `grok`. It does not vendor them. Behaviour is whatever those tools do on each end.
-- **Both ends must be installed.** Laptop needs `ferry`; host needs `repo-session` on the path configured by `FERRY_REMOTE_BIN` (default `.local/bin/repo-session` under remote `$HOME`), plus tmux.
+- **External binaries.** Ferry launches `ssh`, `mosh`, and (on the host) `tmux`, plus optionally `fzf` / `grok`. It does not vendor them. Behaviour is whatever those tools do on each end.
+- **Both ends must be installed.** Laptop needs `ferry` (+ `mosh` for the default transport); host needs `repo-session` on the path configured by `FERRY_REMOTE_BIN` (default `.local/bin/repo-session` under remote `$HOME`), plus tmux. The picker is host-side — laptop does not need fzf/tmux for normal hops.
+- **macOS client.** Stock bash is 3.2; `flock` / Linux `ss` / `/proc` are absent. Known limits and brew prereqs: [docs/troubleshooting.md#macos-client](./docs/troubleshooting.md#macos-client).
+
 - **Repo name charset.** CLI repo tokens must match `^[A-Za-z0-9._-]+$`: no spaces, no quotes, no `/`, no `..`, no absolute paths. The laptop client rejects invalid tokens **locally** (before any ssh) with `repo-session: invalid repo name '…'` and never starts mosh. Existence under `FERRY_REPO_BASE` is still checked over ssh (`repo-session --validate`) before the hop. Remote argv is still `printf %q`-quoted so unusual characters in *other* arguments cannot break the ssh command line.
 - **Doctor always checks for a local `mosh` binary**, even when `FERRY_TRANSPORT=ssh`. An ssh-only laptop can still see `FAIL local mosh binary missing` until mosh is installed or you accept that check as noise.
 - **Servers-face fix chords** (`ctrl-f` and enter-to-copy) are detailed in `repo-session --help` and [Servers view](./docs/servers-view.md); `ferry --help` lists `ctrl-s` to open that face.
