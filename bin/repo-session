@@ -1390,6 +1390,24 @@ _picker_servers_fix() {
 
 # Formatted rows for the servers face / --servers one-shot (TSV, 14 cols).
 print_servers_rows() {
+  # The `2>/dev/null` below is deliberate: ss//proc parse noise must never corrupt
+  # --servers output (agents consume it). But it also swallowed the capability
+  # notice, so on macOS `repo-session --servers` printed NOTHING on either stream
+  # and exited 0 — the exact "no servers running" lie the notice exists to prevent.
+  # Emit it here, unsuppressed, before the suppressed row generation. All three
+  # output paths (--servers, --servers --json, the picker face) funnel through
+  # this function, so one check covers them and stdout stays machine-clean.
+  # declare -F guard: lib/servers.sh may be absent, in which case only the
+  # build_server_rows stub exists (see _ferry_load_servers).
+  if declare -F _servers_platform_capable >/dev/null 2>&1 \
+     && ! _servers_platform_capable; then
+    if [[ "${_FERRY_SERVERS_CAPABILITY_WARNED:-0}" -eq 0 ]] \
+       && declare -F _servers_capability_warn >/dev/null 2>&1; then
+      _servers_capability_warn
+      _FERRY_SERVERS_CAPABILITY_WARNED=1
+    fi
+    return 0
+  fi
   build_server_rows 2>/dev/null || true
 }
 
