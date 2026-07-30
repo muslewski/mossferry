@@ -510,6 +510,9 @@ _ferry_lock_release() {
   _FERRY_LOCK_DIR=""
   case "$kind" in
     flock)
+      # portable-ok: reached only when _FERRY_LOCK_KIND=flock, which is set inside
+      # the `command -v flock` branch of _ferry_lock_acquire — guarded by control
+      # flow, not by a guard on this line.
       flock -u 9 2>/dev/null || true
       ;;
     mkdir)

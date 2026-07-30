@@ -117,6 +117,40 @@ function has_portable_ok(s) {
   return (s ~ /#[[:space:]]*portable-ok:/)
 }
 
+# Drop a trailing `# ...` comment so a tool name MENTIONED in a comment is not
+# reported as a call. `_FERRY_LOCK_KIND=""  # flock | mkdir | empty` is code plus
+# a comment, so is_comment_only() does not catch it. Quote-aware: a `#` inside a
+# string is data, not a comment.
+function strip_trailing_comment(s,   i, c, sq, dq) {
+  sq = 0; dq = 0
+  for (i = 1; i <= length(s); i++) {
+    c = substr(s, i, 1)
+    if (c == "\\") { i++; continue }
+    if (c == "'" && !dq) { sq = !sq; continue }
+    if (c == "\"" && !sq) { dq = !dq; continue }
+    if (c == "#" && !sq && !dq) {
+      if (i == 1 || substr(s, i - 1, 1) ~ /[[:space:]]/) return substr(s, 1, i - 1)
+    }
+  }
+  return s
+}
+
+# True when `re` matches OUTSIDE a double-quoted string — so a tool name inside a
+# message (e.g. die "... timeout acquiring lock ...") is not read as a call.
+# Checks the first match only; a quoted first occurrence hides a later bare one,
+# which is an accepted limitation of a static fence.
+function unquoted_match(s, re,   pre, i, c, q) {
+  if (!match(s, re)) return 0
+  pre = substr(s, 1, RSTART - 1)
+  q = 0
+  for (i = 1; i <= length(pre); i++) {
+    c = substr(pre, i, 1)
+    if (c == "\\") { i++; continue }
+    if (c == "\"") q++
+  }
+  return (q % 2 == 0)
+}
+
 function guarded_tool(tool,   j, tline) {
   for (j = 0; j < GUARD_WIN; j++) {
     tline = hist[NR - j]
@@ -170,7 +204,7 @@ function track_assign(line,   var, path, rest) {
   if (is_comment_only($0)) next
   if (has_portable_ok($0)) next
 
-  line = $0
+  line = strip_trailing_comment($0)
 
   # ---- 1. bash-4-only ----
   if (wbeg(line, "mapfile([^A-Za-z0-9_]|$)")) emit("bash4-mapfile", line)
@@ -246,7 +280,7 @@ function track_assign(line,   var, path, rest) {
   if (line ~ /sed[[:space:]]+-r([[:space:]]|$)/) {
     if (!guarded_tool("sed")) emit("gnu-sed-r", line)
   }
-  if (wbeg(line, "timeout[[:space:]]")) {
+  if (unquoted_match(line, "(^|[^A-Za-z0-9_])timeout[[:space:]]")) {
     if (!guarded_tool("timeout")) emit("gnu-timeout", line)
   }
 
