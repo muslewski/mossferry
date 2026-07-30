@@ -58,6 +58,13 @@ None claimed on seed. Install contract from README:
 
 - Symlinks point into the clone so `git pull` is deploy.
 - Config seed never overwrites an existing user config.
+- `config.example` documents `REPO_SESSION_TMUXBIN` as the escape hatch for hosts
+  where tmux is not at `/usr/bin/tmux` (macOS Homebrew: `/opt/homebrew/bin/tmux`).
+  Commented-out entries only — this file is copied to `~/.config/mossferry/config`.
+  See [[2026-07-30-macos-bash32-portability]].
+- `install.sh` symlinks `repo-session` onto the laptop with **no OS branch**, so a
+  laptop-only Mac gets a binary that needs host-side tools. That is why the tmux
+  preflight has to be actionable rather than a raw ENOENT.
 
 ## Lineage
 

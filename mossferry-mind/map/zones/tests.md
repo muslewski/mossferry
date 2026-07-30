@@ -55,6 +55,29 @@ Entry: `bash tests/run.sh` or `npm test`.
 - **Harness failures are textually distinct:** `FAIL harness: …` / `HARNESS_FAIL`
   never `|| echo parse-fail` into a value compared as product output. See
   [[2026-07-30-hermetic-home-no-node-shim]], [[2026-07-30-harness-vs-assert]].
+- **`tests/test-macos-compat.sh` is a static portability fence** (32 assertions)
+  over `bin/*`, `lib/*.sh`, `install.sh`. Needs no Mac, tmux, mosh, fzf, ss, or
+  network. Deliberate exceptions carry a trailing `# portable-ok: <reason>` — never
+  loosen the patterns. It is quote- and comment-aware, so a tool name in a comment
+  or inside a message string is not read as a call.
+- **The fence does NOT scan `tests/`**, so the harness can still be unportable
+  while the product is clean. That gap is real: a `timeout 8` inside
+  `test-ui-ops.sh` failed with rc=127 on every Mac (no `timeout`/`gtimeout` on
+  stock macOS) and the fence could not see it. Tech-debt: extend the scan.
+- **The suite itself must parse under bash 3.2.** A heredoc inside `$( )` is a
+  bash 3.2 *parse* error, so it killed all 54 assertions in
+  `test-repo-session.sh` on every Mac before one of them ran. Use
+  `IFS= read -r -d '' var <<'EOF' … EOF || true` and strip the trailing newline
+  (`$()` strips it, `read` does not).
+- **Compare physical paths, not logical ones.** `readlink -f` against a `pwd`-derived
+  `ROOT` fails on macOS because `/tmp` is a symlink to `private/tmp`; resolve both
+  sides with `pwd -P`. This repo also deliberately never depends on GNU
+  `readlink -f` (absent on macOS without coreutils).
+- **A green Linux suite says nothing about macOS.** Three of seven modules were
+  failing or not parsing on the Mac while Linux was green. Baseline any macOS
+  failure against the pre-change commit before calling it a regression, and export
+  the real user PATH first — `node` is absent from a non-interactive ssh PATH on
+  that Mac. See [[2026-07-30-macos-bash32-portability]].
 
 ## Lineage
 

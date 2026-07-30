@@ -42,6 +42,12 @@ None enforced-by on seed. README product rule to confirm later:
 
 - Non-TTY / pipes / CI stay monochrome and parse-stable (`ok` / `FAIL` /
   version lines).
+- Array expansions use `${arr[@]+"${arr[@]}"}` so an empty array cannot abort a
+  caller under macOS bash 3.2 + `set -u`. The file header still advertises
+  "bash >= 4"; the intent is that the UI **degrades** on 3.2 rather than dying, and
+  the consumers (`bin/mossferry`, `bin/repo-session`, `install.sh`) already install
+  inline fallbacks when this library is missing or unusable.
+  See [[2026-07-30-macos-bash32-portability]].
 
 ## Lineage
 

@@ -74,6 +74,24 @@ optional **FERRY_LAUNCHERS** hotkeys, in-place kill/rename binds, and
 - Create path: destination first, then nested start menu when
   `FERRY_START_MENU` or launcher cmds are non-empty.
 - Live Grok panes badge wallet from `GROK_HOME` (Linux `/proc` only).
+- **Runs on macOS stock bash 3.2** (`3.2.57`, the only bash on the human's Mac) as
+  well as bash 5. No `mapfile`, no `declare/local -A`; every array expansion uses
+  `${arr[@]+"${arr[@]}"}` because bash 3.2 under `set -u` treats an empty
+  `"${arr[@]}"` as unbound (bash reports the *function declaration* line, not the
+  expansion). See [[2026-07-30-macos-bash32-portability]].
+- **`TMUXBIN` resolves from PATH**, absolute path only as last resort; a preflight
+  turns a missing tmux into an actionable message naming `REPO_SESSION_TMUXBIN`.
+  The preflight must **not** fire for verbs that never touch tmux — `--servers`,
+  `--picker-servers-*`, `--picker-face-header` — and the two face-dependent verbs
+  require tmux only on their sessions branch. A laptop with no tmux can browse the
+  servers face; attach still refuses.
+- **Locking never proceeds unlocked.** `flock` when present, else an atomic `mkdir`
+  mutex with PID-liveness stale recovery and a bounded 30 s wait, released on
+  signal. `flock` is Linux util-linux only and is absent on macOS.
+- **Servers view degrades by capability, not `uname`:** without `ss` + `/proc` (and
+  without a fixture) it emits one stderr notice instead of an empty list that reads
+  as "no servers running". PID liveness does *not* need `/proc` —
+  `servers_scan_agents` uses signal 0, with `EPERM` counting as alive.
 
 ## Lineage
 

@@ -60,6 +60,17 @@ remote `repo-session` over **mosh** (default) or **ssh** (`FERRY_TRANSPORT` /
   only when local `grok` is on PATH; `--list` is never wrapped.
 - Picker `ctrl-g` → remote start command `grok` lives in `[[repo-session]]`;
   it does **not** re-wrap mid-session. Wrap is decided at connect time on the client.
+- **Runs on macOS stock bash 3.2** as well as bash 5 — the human's laptop has only
+  `/bin/bash` 3.2.57. No bash-4 syntax; array expansions use
+  `${arr[@]+"${arr[@]}"}`. See [[2026-07-30-macos-bash32-portability]].
+- **Never trust `date`'s exit status for `%N`.** BSD `date` does not support it but
+  **exits 0** and emits a literal `N`, so a `|| date +%s` fallback never fires and
+  every fleet-devlog duration silently measured 0 ms on the Mac. Check the *output*
+  for the unexpanded token, the way `lib/fleet-devlog.sh` already does.
+- **Doctor reports the platform**, so the next mismatch is self-diagnosing: local
+  bash version, local tmux (WARN — only matters if `repo-session` runs locally,
+  since tmux lives on the host), remote tmux (previously documented as unchecked,
+  which let a host pass doctor and then fail at attach), and local fzf.
 
 ## Grok clipboard path
 
