@@ -442,6 +442,88 @@ _ferry_claim_lockf() {
   printf '%s\n' "${TMPDIR:-/tmp}/repo-session-${safe}.claim"
 }
 
+# Portable exclusive lock for claim/create paths.
+# Linux: flock on fd 9 (same as before).
+# macOS / no util-linux: atomic mkdir mutex (mkdir is atomic on POSIX fs;
+# pattern mirrors lib/fleet-devlog.sh EEXIST handling). Stale recovery via
+# PID liveness (kill -0); if the holder is alive we wait up to 30s then die
+# — never proceed unlocked.
+_FERRY_LOCK_KIND=""   # flock | mkdir | empty
+_FERRY_LOCK_DIR=""    # set when kind=mkdir
+
+_ferry_lock_acquire() {
+  local lockf=${1-}
+  local lockdir pidfile holder waited max_wait=30
+
+  [[ -n "$lockf" ]] || die "repo-session: lock path required"
+
+  if command -v flock >/dev/null 2>&1; then
+    # Keep fd 9 open for the critical section (matches prior exec 9>"$lockf").
+    exec 9>"$lockf" || die "repo-session: cannot open lock file ${lockf}"
+    flock 9 || die "repo-session: cannot acquire lock ${lockf}"
+    _FERRY_LOCK_KIND=flock
+    _FERRY_LOCK_DIR=""
+    return 0
+  fi
+
+  # mkdir mutex fallback (no flock on stock macOS).
+  lockdir="${lockf}.lockdir"
+  pidfile="${lockdir}/pid"
+  waited=0
+  while true; do
+    if mkdir "$lockdir" 2>/dev/null; then
+      # Write holder pid; if write fails, drop the dir so others are not stuck.
+      if ! printf '%s\n' "$$" >"$pidfile" 2>/dev/null; then
+        rmdir "$lockdir" 2>/dev/null || true
+        die "repo-session: cannot write lock pid ${pidfile}"
+      fi
+      _FERRY_LOCK_KIND=mkdir
+      _FERRY_LOCK_DIR=$lockdir
+      # Release on signal / unexpected exit (normal path calls _ferry_lock_release).
+      trap '_ferry_lock_release' EXIT INT TERM HUP
+      return 0
+    fi
+    # Held or leftover from a crashed run — reclaim only if holder is dead.
+    holder=""
+    if [[ -f "$pidfile" ]]; then
+      holder=$(cat "$pidfile" 2>/dev/null || true)
+      holder=${holder%%[!0-9]*}
+    fi
+    if [[ -z "$holder" ]] || ! kill -0 "$holder" 2>/dev/null; then
+      # Stale: no pid, or process gone. Best-effort reclaim (dir only holds pid).
+      rm -f "$pidfile" 2>/dev/null || true
+      rmdir "$lockdir" 2>/dev/null || true
+      # If rmdir failed (not empty / race), fall through to wait+retry.
+      continue
+    fi
+    waited=$((waited + 1))
+    if (( waited >= max_wait )); then
+      die "repo-session: timeout acquiring lock ${lockdir} (held by pid ${holder})"
+    fi
+    sleep 1
+  done
+}
+
+_ferry_lock_release() {
+  local kind=${_FERRY_LOCK_KIND-} dir=${_FERRY_LOCK_DIR-}
+  _FERRY_LOCK_KIND=""
+  _FERRY_LOCK_DIR=""
+  case "$kind" in
+    flock)
+      flock -u 9 2>/dev/null || true
+      ;;
+    mkdir)
+      # Clear trap first so EXIT during release does not recurse.
+      trap - EXIT INT TERM HUP
+      if [[ -n "$dir" ]]; then
+        rm -f "${dir}/pid" 2>/dev/null || true
+        rmdir "$dir" 2>/dev/null || true
+      fi
+      ;;
+  esac
+  return 0
+}
+
 # Fixed-string session name match for a repo (no regex interpolation of $repo).
 # Matches: exact name (optional trailing space), name-N digits, ccops-name-*.
 _ferry_session_matches_repo() {
@@ -962,13 +1044,12 @@ _create_session_locked() {
   local dir="${FERRY_REPO_BASE}/${repo}"
   local lockf
   lockf=$(_ferry_claim_lockf "$repo")
-  exec 9>"$lockf"
-  flock 9
+  _ferry_lock_acquire "$lockf"
   if ! "$TMUXBIN" has-session -t "$session_name" 2>/dev/null; then
     "$TMUXBIN" new-session -d -s "$session_name" -c "$dir"
     "$TMUXBIN" send-keys -t "$session_name" "${startcmd:-$FERRY_DEFAULT_CMD}" C-m
   fi
-  flock -u 9
+  _ferry_lock_release
 }
 
 _next_free_name() {
@@ -2064,7 +2145,7 @@ EOF
     _list_repo_sessions
     local lockf now ttl target s n c
     lockf=$(_ferry_claim_lockf "$repo")
-    exec 9>"$lockf"; flock 9
+    _ferry_lock_acquire "$lockf"
     now=$(date +%s); ttl=25; target=""
     claimable() {   # not reserved by another pane in the last ttl seconds
       local c; c=$("$TMUXBIN" show-options -t "$1" -v -q @claim_ts 2>/dev/null)
@@ -2090,7 +2171,7 @@ EOF
       "$TMUXBIN" send-keys -t "$target" "${startcmd:-$FERRY_DEFAULT_CMD}" C-m
       "$TMUXBIN" set-option -t "$target" @claim_ts "$now" >/dev/null 2>&1
     fi
-    flock -u 9
+    _ferry_lock_release
     if [[ -n "$target" ]]; then exec "$TMUXBIN" attach -d -t "$target"; fi
     echo "no ${repo} sessions left to resume — blank shell" >&2
     # Blank fallback: plain login shell (no env -u SSH_CONNECTION; .bashrc auto-attach removed in Phase 2).
@@ -2110,12 +2191,12 @@ EOF
     local session="$repo"
     local lockf
     lockf=$(_ferry_claim_lockf "$repo")
-    exec 9>"$lockf"; flock 9
+    _ferry_lock_acquire "$lockf"
     if ! "$TMUXBIN" has-session -t "$session" 2>/dev/null; then
       "$TMUXBIN" new-session -d -s "$session" -c "$dir"
       "$TMUXBIN" send-keys -t "$session" "${startcmd:-$FERRY_DEFAULT_CMD}" C-m
     fi
-    flock -u 9
+    _ferry_lock_release
     exec "$TMUXBIN" attach -t "$session"
   fi
 
@@ -2132,14 +2213,14 @@ EOF
     local session="$repo" n=2
     local lockf
     lockf=$(_ferry_claim_lockf "$repo")
-    exec 9>"$lockf"; flock 9
+    _ferry_lock_acquire "$lockf"
     while "$TMUXBIN" has-session -t "$session" 2>/dev/null; do
       session="$repo-$n"
       ((n++)) || true
     done
     "$TMUXBIN" new-session -d -s "$session" -c "$dir"
     "$TMUXBIN" send-keys -t "$session" "${startcmd:-$FERRY_DEFAULT_CMD}" C-m
-    flock -u 9
+    _ferry_lock_release
     exec "$TMUXBIN" attach -t "$session"
   fi
 
@@ -2152,12 +2233,12 @@ EOF
       local session="$repo"
       local lockf
       lockf=$(_ferry_claim_lockf "$repo")
-      exec 9>"$lockf"; flock 9
+      _ferry_lock_acquire "$lockf"
       if ! "$TMUXBIN" has-session -t "$session" 2>/dev/null; then
         "$TMUXBIN" new-session -d -s "$session" -c "$dir"
         "$TMUXBIN" send-keys -t "$session" "${startcmd:-$FERRY_DEFAULT_CMD}" C-m
       fi
-      flock -u 9
+      _ferry_lock_release
       exec "$TMUXBIN" attach -t "$session"
     fi
   fi
