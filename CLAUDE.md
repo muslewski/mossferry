@@ -40,3 +40,5 @@ code it describes.
 - Retrieval: use the `atlas-nav` skill if it's been copied into this repo,
   or see `adapters/ctx-search/README.md`.
 <!-- /atlas:onramp -->
+
+Atlas skills (atlas-nav, atlas-adopt, atlas-recollection, atlas-update, atlas-seed, writing-for-retrieval) install once at user scope (`~/.claude/skills/`), not vendored here — verify: `test -f ~/.claude/skills/atlas-nav/SKILL.md`.
