@@ -6,6 +6,62 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.8.0] — 2026-07-30
+
+### Changed
+
+- **Invalid repo names are rejected on the laptop before any ssh.** A token
+  outside `A–Z a–z 0–9 . _ -`, or path-shaped (`/`, `\`, `..`), prints
+  `repo-session: invalid repo name '…'` and exits **1** with no network attempt.
+  Previously a typo often surfaced as a DNS error (`Could not resolve hostname …`),
+  which looked like a network problem. Host `repo-session` uses the same rule.
+- **`doctor` short-circuits after a failed BatchMode connect.** Remaining remote
+  probes are skipped (info: `remote checks skipped — ssh BatchMode connect failed`)
+  instead of blocking on an unreachable host. Exit stays **1** when connect fails.
+  Every doctor ssh probe also uses BatchMode + ConnectTimeout=5.
+- **Remote argv is fully shell-quoted** on ssh list/validate hops and on mosh
+  (`bash -lc '…'`). OpenSSH’s bare-space join no longer splits repo names or flags
+  that contain spaces or metacharacters once they pass the local shape gate.
+- **Session match is fixed-string** for scoped lists (repo dots are not regex).
+  Scoped `--list` validates that the repo directory exists; create cleans an empty
+  orphan directory after a failed `git init`.
+- **Help and examples use neutral placeholders** (`workstation`, `my-app`) instead
+  of personal host/repo names. Ferry help leads with a command index; primary
+  usage line is `mossferry <host>`.
+
+### Added
+
+- **Servers face** in the picker (`ctrl-s`): live listeners merged from process
+  discovery and optional `servers.tsv` declarations, Mac reachability, and
+  `ctrl-f` fix plans (recipes for previews / tunnels for services — never a
+  silent rebind). One-shots: `repo-session --servers` / `--servers --json`,
+  client `ferry <host> --list-servers` / `--list-servers --json`. Doctor prints
+  a best-effort servers summary (info only; discovery errors never fail doctor
+  alone).
+- **fleet-devlog v1** — shared, **opt-in**, **local-only** developer log (no
+  network). Off by default; enable with `FLEET_DEVLOG=1` or
+  `~/.config/fleet-devlog/config.json` `{"enabled":true}`. Writes under
+  `$XDG_STATE_HOME/fleet-devlog/` (fail-open; never changes command exit codes).
+  `--no-devlog` anywhere in ferry argv disables emit for that run (not a parsed
+  flag — as first token it is still treated as the host).
+
+### Fixed
+
+- **`install.sh` failures exit nonzero** when `mkdir` / `ln` / `cp` fail (no
+  silent partial install).
+- **UTF-8 BOM** is stripped before sourcing config and `VERSION` so a BOM-saved
+  file no longer breaks version reads.
+- **Sage picker chrome** parses `sage about` JSON with awk (not `node -e`) so a
+  broken/missing node on PATH cannot empty the preview under hermetic or desk
+  PATH layouts.
+
+### Docs
+
+- Public docs expanded: README around one-command remote attach; command
+  reference and configuration from verified flags; troubleshooting by symptom
+  (including doctor and test-harness contract); quoting/containment; servers
+  view; neutral examples throughout.
+
 ## [2.7.4] — 2026-07-29
 
 ### Added
