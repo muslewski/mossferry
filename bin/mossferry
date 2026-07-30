@@ -111,6 +111,8 @@ own_version() {
   local f="$REPO_ROOT/VERSION" v
   if [[ -r "$f" ]]; then
     IFS= read -r v <"$f" || true
+    # Strip UTF-8 BOM + CR so local X matches remote after the same strip.
+    v=$(printf '%s' "${v:-unknown}" | sed $'s/^\xEF\xBB\xBF//' | tr -d '\r')
     printf '%s\n' "${v:-unknown}"
   else
     printf '%s\n' unknown
