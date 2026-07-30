@@ -1,7 +1,7 @@
 {
   "name": "mossferry",
   "version": "2.7.4",
-  "description": "The green ferry between your machines — open remote tmux sessions over mosh/ssh with a fzf picker.",
+  "description": "The green ferry between your machines \u2014 open remote tmux sessions over mosh/ssh with a fzf picker.",
   "bin": {
     "mossferry": "bin/mossferry",
     "ferry": "bin/mossferry",
@@ -24,7 +24,15 @@
   "scripts": {
     "test": "bash tests/run.sh",
     "docs:check": "node ../docs-kit/bin/docs-kit.mjs check docs/",
-    "docs:health": "node ../docs-kit/bin/docs-kit.mjs health docs/"
+    "docs:health": "node ../docs-kit/bin/docs-kit.mjs health docs/",
+    "atlas": "atlas",
+    "atlas:gate": "atlas gate",
+    "atlas:doctor": "atlas doctor",
+    "atlas:wire": "atlas wire all",
+    "predev": "atlas gate",
+    "mind:check": "atlas check",
+    "mind:build": "atlas build",
+    "//sage-gate": "global only \u2014 sage gate (preferred judge) is machine-level; not chained into predev. run: sage gate"
   },
   "keywords": [
     "mosh",
@@ -36,7 +44,7 @@
     "cli",
     "ferry"
   ],
-  "author": "Mateusz Muślewski <10kento10@gmail.com>",
+  "author": "Mateusz Mu\u015blewski <10kento10@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -45,5 +53,8 @@
   "bugs": {
     "url": "https://github.com/muslewski/mossferry/issues"
   },
-  "homepage": "https://mossferry.muslewski.com/"
+  "homepage": "https://mossferry.muslewski.com/",
+  "devDependencies": {
+    "memory-atlas": "0.5.3"
+  }
 }
