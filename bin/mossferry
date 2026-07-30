@@ -652,7 +652,7 @@ cmd_doctor() {
   fi
 
   # 3. ssh BatchMode connect
-  if ssh "${SSH_OPTS[@]}" "$host" true >/dev/null 2>&1; then
+  if ssh ${SSH_OPTS[@]+"${SSH_OPTS[@]}"} "$host" true >/dev/null 2>&1; then
     _doc_emit ok "ssh BatchMode connect to $host"
     connect_ok=1
   else
@@ -739,7 +739,7 @@ cmd_doctor() {
   fi
 
   # 5. remote FERRY_REMOTE_BIN executable (relative to remote $HOME)
-  if (( connect_ok )) && ssh "${SSH_OPTS[@]}" "$host" "test -x $FERRY_REMOTE_BIN || test -x \"\$HOME/$FERRY_REMOTE_BIN\"" >/dev/null 2>&1; then
+  if (( connect_ok )) && ssh ${SSH_OPTS[@]+"${SSH_OPTS[@]}"} "$host" "test -x $FERRY_REMOTE_BIN || test -x \"\$HOME/$FERRY_REMOTE_BIN\"" >/dev/null 2>&1; then
     _doc_emit ok "remote $FERRY_REMOTE_BIN executable"
   else
     _doc_emit FAIL "remote $FERRY_REMOTE_BIN not executable"
@@ -750,7 +750,7 @@ cmd_doctor() {
   local v_local v_remote=""
   v_local="$(own_version | tr -d '[:space:]')"
   if (( connect_ok )); then
-    v_remote="$(ssh "${SSH_OPTS[@]}" "$host" cat "${FERRY_REMOTE_REPO}/VERSION" 2>/dev/null || true)"
+    v_remote="$(ssh ${SSH_OPTS[@]+"${SSH_OPTS[@]}"} "$host" cat "${FERRY_REMOTE_REPO}/VERSION" 2>/dev/null || true)"
     v_remote=$(printf '%s' "$v_remote" | sed $'s/^\xEF\xBB\xBF//' | tr -d '\r\n[:space:]')
   fi
   if [[ -n "$v_remote" && "$v_local" == "$v_remote" ]]; then
@@ -763,7 +763,7 @@ cmd_doctor() {
   fi
 
   # 7. remote fzf (info if missing) — picker is remote (repo-session)
-  if (( connect_ok )) && ssh "${SSH_OPTS[@]}" "$host" command -v fzf >/dev/null 2>&1; then
+  if (( connect_ok )) && ssh ${SSH_OPTS[@]+"${SSH_OPTS[@]}"} "$host" command -v fzf >/dev/null 2>&1; then
     _doc_emit ok "remote fzf present"
   else
     _doc_emit info "remote fzf missing — numbered menu fallback available"
@@ -771,7 +771,7 @@ cmd_doctor() {
 
   # 7b. remote tmux — attach dies without it; must FAIL (docs previously: not checked)
   # Reuse the same SSH_OPTS / connect_ok gate as every other remote probe.
-  if (( connect_ok )) && ssh "${SSH_OPTS[@]}" "$host" command -v tmux >/dev/null 2>&1; then
+  if (( connect_ok )) && ssh ${SSH_OPTS[@]+"${SSH_OPTS[@]}"} "$host" command -v tmux >/dev/null 2>&1; then
     _doc_emit ok "remote tmux present"
   else
     _doc_emit FAIL "remote tmux missing — session attach will fail (install tmux on the host)"
@@ -781,7 +781,7 @@ cmd_doctor() {
   # 8. remote mosh-server count (info)
   local count=""
   if (( connect_ok )); then
-    count="$(ssh "${SSH_OPTS[@]}" "$host" pgrep -c mosh-server 2>/dev/null || true)"
+    count="$(ssh ${SSH_OPTS[@]+"${SSH_OPTS[@]}"} "$host" pgrep -c mosh-server 2>/dev/null || true)"
   fi
   count="${count//$'\n'/}"
   : "${count:=0}"
@@ -814,7 +814,7 @@ cmd_doctor() {
   # Best-effort remote servers summary; never fail doctor on discovery errors
   srv_summary=""
   if (( connect_ok )); then
-    srv_summary="$(ssh "${SSH_OPTS[@]}" "$host" "$FERRY_REMOTE_BIN" --servers 2>/dev/null | awk -F'\t' '
+    srv_summary="$(ssh ${SSH_OPTS[@]+"${SSH_OPTS[@]}"} "$host" "$FERRY_REMOTE_BIN" --servers 2>/dev/null | awk -F'\t' '
       $2=="LISTEN"{l++}
       $2=="declared-missing"{m++}
       $2=="FOREIGN"{f++}
@@ -955,7 +955,7 @@ launch_remote() {
             remote_args+=("$a")
           fi
         done
-        _ferry_ssh_quoted "$host" "$FERRY_REMOTE_BIN" --client-version "$ver" "${remote_args[@]}"
+        _ferry_ssh_quoted "$host" "$FERRY_REMOTE_BIN" --client-version "$ver" ${remote_args[@]+"${remote_args[@]}"}
         return $?
         ;;
     esac
