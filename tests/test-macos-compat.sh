@@ -19,6 +19,9 @@
 #   4. No unguarded GNU-only flag forms (readlink -f, stat -c, sed -i without
 #      backup suffix, date -d, base64 -w, sha256sum, nproc, xargs -r, grep -P,
 #      sed -r, timeout)
+#   4b. No unguarded ${name[@]}/${name[*]} expansions (bash 3.2 + set -u dies
+#      on empty arrays). Portable form: ${name[@]+"${name[@]}"}. Counts
+#      ${#name[@]} are safe and not flagged.
 #   5. Every source/`.` of a REPO_ROOT-relative path inside bin/* is under a
 #      path present in package.json "files" (npm ship set)
 #
@@ -284,6 +287,33 @@ function track_assign(line,   var, path, rest) {
     if (!guarded_tool("timeout")) emit("gnu-timeout", line)
   }
 
+  # ---- 4b. unguarded empty-array expansions (bash 3.2 set -u) ----
+  # Under bash 3.2 + set -u, "${arr[@]}" / "${arr[*]}" is unbound when arr is
+  # empty. Portable form: ${arr[@]+"${arr[@]}"}. Counts ${#arr[@]} are safe
+  # (${#name not matched — name must start with [A-Za-z_]). portable-ok on
+  # the same line silences via has_portable_ok above.
+  {
+    rest = line
+    while (match(rest, /\$\{[A-Za-z_][A-Za-z0-9_]*\[[@*]\]\}/)) {
+      full = substr(rest, RSTART, RLENGTH)
+      before = substr(rest, 1, RSTART - 1)
+      after = substr(rest, RSTART + RLENGTH)
+      # Outer half of guard: ${name[@]+...
+      if (after ~ /^\+/) {
+        rest = substr(rest, RSTART + RLENGTH)
+        continue
+      }
+      # Inner half of guard: ${name[@]+"${name[@]}"} — the alternate word is
+      # a quoted (or bare) re-expansion immediately after +.
+      if (before ~ /\+"?$/) {
+        rest = substr(rest, RSTART + RLENGTH)
+        continue
+      }
+      emit("bash32-empty-array", full)
+      rest = substr(rest, RSTART + RLENGTH)
+    }
+  }
+
   # ---- 5. source targets (bin/* only) ----
   if (FILENAME ~ /\/bin\// && line ~ /^[[:space:]]*(source|\.)[[:space:]]/) {
     rest = line
@@ -340,6 +370,7 @@ for rule in \
   bash4-mapfile bash4-readarray bash4-declare-A bash4-local-A \
   bash4-declare-n bash4-local-n bash4-upper bash4-lower bash4-coproc \
   bash4-v-test bash4-append-both bash4-semi-semi bash4-neg-index \
+  bash32-empty-array \
   abs-tmux abs-usr-local-bin abs-opt-homebrew \
   flock-unguarded \
   gnu-readlink-f gnu-stat-c gnu-sed-i gnu-date-d gnu-base64-w \
