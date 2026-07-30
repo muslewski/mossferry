@@ -4,8 +4,8 @@ summary: "Vendored GREEN-UI-KIT (lib/green-ui.sh): source-able bash UI library â
 tags: [ui, tty, green-ui-kit]
 status: active
 created: 2026-07-21
-updated: 2026-07-29
-verifiedAt: f57de42d
+updated: 2026-07-30
+verifiedAt: 69e11f9b
 owns:
   routes: []
   testids: []

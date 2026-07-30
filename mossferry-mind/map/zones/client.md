@@ -5,7 +5,7 @@ tags: [cli, client, mosh, ssh, grok-wrap]
 status: active
 created: 2026-07-21
 updated: 2026-07-30
-verifiedAt: 9abae1f5
+verifiedAt: 69e11f9b
 owns:
   routes: []
   testids: []
