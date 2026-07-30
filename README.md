@@ -228,6 +228,7 @@ The long-running work is always in **remote tmux**. Mosh protects the *hop*; ssh
 | [Command reference](./docs/command-reference.md) | Full flags, combinations, exit codes, real output |
 | [Configuration](./docs/configuration.md) | Every `FERRY_*` key and env var |
 | [Usage](./docs/usage.md) | Compact flag map and picker summary |
+| [Troubleshooting](./docs/troubleshooting.md) | Symptom fixes, doctor, test harness |
 | [Servers view](./docs/servers-view.md) | Listeners, Mac reachability, fix plans |
 | [Grok + ferry](./docs/guides/grok-and-ferry.md) | `FERRY_WRAP`, start menu, mosh vs clipboard |
 | [Works with](./docs/works-with.md) | Fleet tools on the host you land on |
@@ -247,9 +248,10 @@ node ../docs-kit/bin/docs-kit.mjs health docs/
 
 ```sh
 bash tests/run.sh
+PATH=/usr/bin:/bin:/usr/local/bin bash tests/run.sh   # require the same verdict
 ```
 
-Plain bash harness with fake `tmux` / `mosh` / `ssh` stubs. No `jq`, `bats`, or `shellcheck` required. Nonzero exit on any failure.
+Plain bash harness with fake `tmux` / `mosh` / `ssh` stubs. No `jq`, `bats`, or `shellcheck` required. Nonzero exit on any failure. Skips must print `SKIP …` with a reason — never silent green. Contributor contract: [docs/troubleshooting.md](./docs/troubleshooting.md#test-harness-contributors).
 
 ---
 

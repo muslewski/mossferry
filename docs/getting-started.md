@@ -107,6 +107,8 @@ FAIL versions: local 2.7.4 / remote unknown
 
 **Note:** doctor always looks for a **local mosh** binary, even if you set `FERRY_TRANSPORT=ssh`.
 
+Symptom playbook and full doctor limitations: [Troubleshooting](./troubleshooting.md).
+
 ## 5. First hop
 
 ```sh

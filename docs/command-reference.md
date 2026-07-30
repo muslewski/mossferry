@@ -358,7 +358,7 @@ npm install -g mossferry
 
 ### `ferry doctor [host]`
 
-Read-only. Exit **1** if any check is `FAIL`, else **0**. Non-TTY lines use stable tokens `ok` / `FAIL` / `info`.
+Read-only. Exit **1** if any check is `FAIL`, else **0**. Non-TTY lines use stable tokens `ok` / `FAIL` / `info`. Full check table, known gaps (no `--json`, no remote tmux check, BOM vs hop), and symptom playbook: [Troubleshooting](./troubleshooting.md).
 
 Checks performed (in order):
 

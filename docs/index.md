@@ -20,6 +20,7 @@ Site: [mossferry.muslewski.com](https://mossferry.muslewski.com) · npm: [`mossf
 | [Configuration](./configuration.md) | Every `FERRY_*` key, env vars, defaults |
 | [Usage](./usage.md) | Compact flag map and picker summary |
 | [Quoting and containment](./quoting-and-containment.md) | Safe repo names, remote argv quoting, literal session match, status gaps |
+| [Troubleshooting](./troubleshooting.md) | Symptom fixes, full `ferry doctor`, test-harness rules |
 | [Servers view](./servers-view.md) | Listeners, Mac reachability, fix plans |
 | [Grok + ferry](./guides/grok-and-ferry.md) | `FERRY_WRAP`, start menu, mosh vs clipboard |
 | [Safety roadmap](./safety-roadmap.md) | Door vs building; planned safety nits |
