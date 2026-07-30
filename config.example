@@ -33,4 +33,7 @@
 #FERRY_SAGE="auto"                           # remote: wire agentic-sage when `sage` on PATH
 #                                            # (picker preview one-liners + ⚖ new judge…).
 #                                            # auto|on|off — off hard-kills even if sage installed.
+#REPO_SESSION_TMUXBIN="/opt/homebrew/bin/tmux"  # local: override tmux binary for repo-session
+#                                            # (default /usr/bin/tmux is absent on macOS Homebrew;
+#                                            # only needed if you run repo-session on this machine)
 
