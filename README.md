@@ -257,6 +257,35 @@ Plain bash harness with fake `tmux` / `mosh` / `ssh` stubs. No `jq`, `bats`, or 
 
 ---
 
+## Composition with ghostty-grid
+
+mossferry does not embed a terminal grid. Drivers such as **`ghostty-grid`** only run a command per pane; the atomic claim flags fill those panes with distinct remote sessions:
+
+```sh
+ghostty-grid -8 -- ferry workstation my-app --resume-or-new --claude
+# 8 panes: reattach existing my-app sessions, fill the rest with new ones running claude
+
+ghostty-grid -8 -- ferry workstation my-app --resume-closed
+# reattach existing only; leftover panes stay blank
+```
+
+`--resume-closed` claims one **existing** session per caller (atomic). `--resume-or-new` does the same, then creates sessions until every pane has one. See [Usage](./docs/usage.md#grid-drivers-composition) and [Command reference](./docs/command-reference.md).
+
+---
+
+## Open-sourcing
+
+mossferry is built with no personal paths or hardcoded hosts. Config takes **ssh aliases** you choose (`FERRY_DEFAULT_HOST`, `FERRY_HOST_CANDIDATES`); defaults are portable (`~/Repositories`, `~/.local/bin/repo-session`). When you want a public remote for your own fork or mirror:
+
+```sh
+git remote add origin <url>
+git push -u origin main
+```
+
+Self-host without npm: clone on laptop and host, run `./install.sh` on each side, set `FERRY_DEFAULT_HOST` to a real `Host` from `~/.ssh/config`, then `ferry doctor <host>`.
+
+---
+
 ## Community
 
 - **Website:** [mossferry.muslewski.com](https://mossferry.muslewski.com)

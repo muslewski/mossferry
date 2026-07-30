@@ -5,7 +5,7 @@ tags: [cli, client, mosh, ssh, grok-wrap]
 status: active
 created: 2026-07-21
 updated: 2026-07-30
-verifiedAt: 9cea64cf796c14fea10f4528465cd1eda781c438
+verifiedAt: 5f96f1c1
 owns:
   routes: []
   testids: []
@@ -18,6 +18,7 @@ depends:
 invariants:
   - "Interactive transport only: FERRY_WRAP may prefix mosh/ssh with grok wrap; --list/doctor/update never wrap."
   - "AI launchers (ctrl-g) are remote startcmd only — wrap is always local-side around the whole hop."
+  - "Curated --help is an index (purpose + primary verbs + one happy path) but still emits contract section headings Usage/Picker/Flags/Config/Examples and the literal usage form mossferry <host>."
 skills: []
 related:
   - "[[repo-session]]"
@@ -77,6 +78,14 @@ default; enable with `FLEET_DEVLOG=1` or machine config under
 `~/.config/fleet-devlog/`. Shared install-id with the three JS fleet tools.
 Fail-open always — never affects the ferry exit code. Hand-rolled JSON writer
 (no `jq` on host). See [[0002-fleet-devlog-handrolled-json]].
+
+## Curated help contract
+
+`usage()` is a command index, not a flag wall. Tests in `tests/test-ui-ops.sh`
+and `tests/test-mossferry.sh` (m6/m16) pin section headings, `mossferry <host>`,
+MEDIUM hull banner line, and `start menu` / `FERRY_START_MENU`. Picker lists
+`fzf --cycle` as list wrap-around — not a mossferry flag or key chord (see
+[[2026-07-30-help-contract-curated-index]]).
 
 Each event may include `repo_id` = `<basename>-<sha256 first 8 hex>` of the
 **main** repository root (same scheme as `agentic-sage/lib/repo-id.mjs`).
