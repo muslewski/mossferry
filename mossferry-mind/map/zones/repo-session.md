@@ -5,7 +5,7 @@ tags: [remote, tmux, picker, fzf, sage, grok]
 status: active
 created: 2026-07-21
 updated: 2026-07-30
-verifiedAt: d8df0027
+verifiedAt: 9cea64cf796c14fea10f4528465cd1eda781c438
 owns:
   routes: []
   testids: []
@@ -61,7 +61,10 @@ optional **FERRY_LAUNCHERS** hotkeys, in-place kill/rename binds, and
   synthetic rows never call bare `capture-pane -t ''`.
 - Optional **FERRY_SAGE** hybrid wire: when `sage` on PATH and not `off`, preview
   shows `sage about --tmux` facts/judge lines; **⚖ new judge…** runs
-  `sage judge run --fleet|--repo`.
+  `sage judge run --fleet|--repo`. Sage chrome JSON is parsed with awk (no
+  `node -e`) so hermetic HOME / desk nvm shims cannot empty the preview.
+- **desk:ship** is not yet shown on local status/list surfaces (deferred —
+  [[2026-07-30-survivors-reconcile]]).
 - Create path: destination first, then nested start menu when
   `FERRY_START_MENU` or launcher cmds are non-empty.
 - Live Grok panes badge wallet from `GROK_HOME` (Linux `/proc` only).

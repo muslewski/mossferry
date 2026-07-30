@@ -786,6 +786,27 @@ _is_new_judge_row() {
   [[ "$n" == "$_NEW_JUDGE_LABEL" || "$n" == "⚖ new judge…" || "$n" == ⚖* ]]
 }
 
+# Extract a JSON string field value without node/jq (desk nvm shim dies under
+# hermetic HOME; picker chrome must not depend on it). First "key":"value" only.
+_ferry_json_str_field() {
+  local json=${1-} key=${2-}
+  [[ -n "$json" && -n "$key" ]] || return 0
+  printf '%s' "$json" | awk -F'"' -v key="$key" '
+    { for (i = 1; i <= NF; i++) if ($i == key) { print $(i + 2); exit } }
+  '
+}
+
+# True when top-level JSON boolean "key":true is present (substring-safe for
+# the sage about contract; not a full parser).
+_ferry_json_bool_true() {
+  local json=${1-} key=${2-} s
+  s=$(printf '%s' "$json" | tr -d ' \t\n\r\f\v')
+  case "$s" in
+    *"\"${key}\":true"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # fzf preview helper: optional sage chrome + pane capture.
 # Args: session_name (field 1) [preview_target field 6]
 print_picker_preview() {
@@ -799,22 +820,19 @@ print_picker_preview() {
     return 0
   fi
   if _ferry_sage_enabled && [[ -n "$name" ]]; then
-    local json chrome=""
+    local json chrome="" facts judge
     if command -v timeout >/dev/null 2>&1; then
       json=$(timeout 0.25 sage about --tmux "$name" --json 2>/dev/null) || true
     else
       json=$(sage about --tmux "$name" --json 2>/dev/null) || true
     fi
-    if [[ -n "$json" ]] && command -v node >/dev/null 2>&1; then
-      chrome=$(printf '%s' "$json" | node -e '
-let d=""; process.stdin.on("data",c=>d+=c); process.stdin.on("end",()=>{
-  try {
-    const j=JSON.parse(d);
-    if (!j || !j.found) return;
-    if (j.facts) console.log(j.facts);
-    if (j.judge) console.log("⚖ "+j.judge);
-  } catch {}
-});') || true
+    # awk/boolean parse only — never node (hermetic HOME + desk nvm shim → 127).
+    if [[ -n "$json" ]] && _ferry_json_bool_true "$json" found; then
+      facts=$(_ferry_json_str_field "$json" facts)
+      judge=$(_ferry_json_str_field "$json" judge)
+      [[ -n "$facts" ]] && chrome+="$facts"$'\n'
+      [[ -n "$judge" ]] && chrome+="⚖ $judge"$'\n'
+      chrome=${chrome%$'\n'}
     fi
     if [[ -n "$chrome" ]]; then
       printf '%s\n' "$chrome"

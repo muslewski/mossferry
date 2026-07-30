@@ -1050,24 +1050,32 @@ t44() {
   teardown
 }
 
-# ---- t45: --picker-preview with fake sage prints facts then capture ----
+# ---- t45: --picker-preview with fake sage prints facts (no node required) ----
+# Product chrome must not depend on PATH node: desk nvm shim exits 127 under
+# hermetic HOME (setup sets HOME=tmp). Assert with awk (not shell grep wrappers).
 t45() {
   setup
-  local out
+  local out slog broken
   export REPO_SESSION_TMUXBIN="$FAKE"
   export FAKE_TMUX_SESSIONS=$'demo'
   export FAKE_TMUX_META=$'demo|bash|1w detached bash'
   export FERRY_SAGE=auto
-  export PATH="$ROOT/tests/fake-bin:$PATH"
+  # Broken node first + no NVM_DIR: would empty chrome if product still used node -e.
+  unset NVM_DIR DOGFOOD_NODE_BIN 2>/dev/null || true
+  broken="$(mktemp -d "${TMPDIR}/broken-node.XXXXXX")"
+  printf '%s\n' '#!/bin/bash' 'echo "error: broken node (t45)" >&2' 'exit 127' >"$broken/node"
+  chmod +x "$broken/node"
+  export PATH="$ROOT/tests/fake-bin:$broken:/usr/bin:/bin"
   export FAKE_SAGE_LOG="$(mktemp "${TMPDIR}/sage-log.XXXXXX")"
   out=$(bash "$RS" --picker-preview demo 'demo:0' 2>/dev/null) || true
-  if printf '%s\n' "$out" | grep -q 'working' \
-    && printf '%s\n' "$out" | grep -q 'watch merge' \
-    && grep -q 'about' "$FAKE_SAGE_LOG"; then
+  slog=$(cat "$FAKE_SAGE_LOG" 2>/dev/null || true)
+  if printf '%s\n' "$out" | awk '/working/{w=1} /watch merge/{j=1} END{exit !(w&&j)}' \
+    && printf '%s\n' "$slog" | awk '/about/{found=1} END{exit !found}'; then
     ok t45
   else
-    fail t45 "out=[$out] sage_log=[$(cat "$FAKE_SAGE_LOG" 2>/dev/null)]"
+    fail t45 "out=[$out] sage_log=[$slog] (must pass without working node)"
   fi
+  rm -rf "$broken"
   teardown
 }
 
@@ -1140,6 +1148,46 @@ t48() {
   teardown
 }
 
+# ---- t49: create_repo removes empty orphan when git init fails ----
+t49() {
+  setup
+  local out rc dir fakebin
+  fakebin="$(mktemp -d "${TMPDIR}/fakebin.XXXXXX")"
+  # git that always fails — product must not leave a non-git directory.
+  printf '%s\n' '#!/bin/bash' 'exit 1' >"$fakebin/git"
+  chmod +x "$fakebin/git"
+  export PATH="$fakebin:$PATH"
+  dir="${FERRY_REPO_BASE}/orphan-repo"
+  out=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    create_repo orphan-repo 2>&1
+  )
+  rc=$?
+  if [[ $rc -ne 0 ]] && [[ ! -e "$dir" ]] && [[ "$out" == *"git init failed"* ]]; then
+    ok t49
+  else
+    fail t49 "rc=$rc exists=$([[ -e $dir ]] && echo y || echo n) out=[$out]"
+  fi
+  rm -rf "$fakebin"
+  teardown
+}
+
+# ---- t50: scoped --list missing repo exits nonzero (not silent empty) ----
+t50() {
+  setup
+  local out rc
+  out=$(bash "$RS" vanished-repo --list 2>&1)
+  rc=$?
+  if [[ $rc -ne 0 ]] && [[ "$out" == *"no repo"* || "$out" == *"invalid"* ]]; then
+    ok t50
+  else
+    fail t50 "rc=$rc out=[$out]"
+  fi
+  teardown
+}
+
 export TEST_TMPDIR_ROOT="${TMPDIR:-/tmp}"
 set +e
 t1; t2; t3; t4; t5; t6; t7; t8; t9; t10; t11; t12
@@ -1152,5 +1200,5 @@ t36; t37; t38; t38b
 t39
 t40; t41; t42
 t43; t44; t45
-t46; t47; t48
+t46; t47; t48; t49; t50
 exit $FAIL

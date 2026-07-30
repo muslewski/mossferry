@@ -5,7 +5,7 @@ tags: [tests, harness, fakes]
 status: active
 created: 2026-07-21
 updated: 2026-07-30
-verifiedAt: d8df0027
+verifiedAt: 9cea64cf796c14fea10f4528465cd1eda781c438
 owns:
   routes: []
   testids: []
@@ -49,6 +49,9 @@ Entry: `bash tests/run.sh` or `npm test`.
   does not claim full HOME isolation). Wired blocks that set `HOME` restore it.
   Optional JS dual-source uses `FLEET_REPO_ID_JS` + pre-captured `SUITE_NODE_BIN`
   and **SKIP**s visibly when absent — never a hardcoded `/home/kento/...` path.
+- **t45 is PATH-honest:** picker-preview chrome must pass with a broken `node`
+  first on PATH (product uses awk, not `node -e`). Same verdict under desk PATH
+  and `PATH=/usr/bin:/bin:/usr/local/bin`.
 - **Harness failures are textually distinct:** `FAIL harness: …` / `HARNESS_FAIL`
   never `|| echo parse-fail` into a value compared as product output. See
   [[2026-07-30-hermetic-home-no-node-shim]], [[2026-07-30-harness-vs-assert]].

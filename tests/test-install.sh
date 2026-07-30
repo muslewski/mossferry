@@ -209,6 +209,23 @@ cfg_keep="$(cat "$MIG_HOME/.config/mossferry/config")"
 assert_eq "migration does not overwrite existing new config" "$cfg_keep" "FERRY_DEFAULT_HOST=keep-me"
 rm -rf "$MIG_HOME"
 
+# ---------------------------------------------------------------------------
+# mkdir failure must exit nonzero (never print success and exit 0)
+# ---------------------------------------------------------------------------
+FAIL_HOME="$(mktemp -d "${TMPDIR:-/tmp}/ferry-install-fail.XXXXXX")"
+# Make ~/.local a file so mkdir -p ~/.local/bin fails.
+: >"$FAIL_HOME/.local"
+set +e
+fail_out="$(HOME="$FAIL_HOME" bash "$INSTALL" 2>&1)"
+fail_rc=$?
+set -e
+if [[ "$fail_rc" -ne 0 ]] && [[ "$fail_out" == *"mkdir failed"* || "$fail_out" == *"install:"* ]]; then
+  ok "mkdir failure exits nonzero"
+else
+  FAIL "mkdir failure exits nonzero (rc=$fail_rc out=[$fail_out])"
+fi
+rm -rf "$FAIL_HOME"
+
 if [[ "$fail" -eq 0 ]]; then
   printf 'tests/test-install.sh: all ok\n'
   exit 0

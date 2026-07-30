@@ -572,6 +572,24 @@ CFG
   fi
 }
 
+# --- m25: own_version strips UTF-8 BOM (local status equality) ---
+{
+  name=m25
+  # Do not mutate VERSION (parallel-safe). Assert the strip pipeline and that
+  # own_version still applies it (reverting the sed fails this test).
+  stripped=$(printf '\xEF\xBB\xBF%s' "$VERSION" | sed $'s/^\xEF\xBB\xBF//' | tr -d '\r')
+  in_fn=$(awk '/^own_version\(\)/,/^}/' "$FERRY")
+  if [[ "$stripped" == "$VERSION" ]] \
+    && printf '%s\n' "$in_fn" | command grep -q 'xEF' \
+    && printf '%s\n' "$in_fn" | command grep -q 'sed'; then
+    ok "$name"
+  else
+    FAIL "$name"
+    printf '  stripped=%s VERSION=%s fn_has_sed=%s\n' "$stripped" "$VERSION" \
+      "$(printf '%s\n' "$in_fn" | command grep -c sed || true)" >&2
+  fi
+}
+
 if [[ $fail -ne 0 ]]; then
   exit 1
 fi
