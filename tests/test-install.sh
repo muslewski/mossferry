@@ -44,11 +44,19 @@ assert_symlink_into_repo() {
     FAIL "$name (not a symlink: $link)"
     return
   fi
-  local target
-  target="$(readlink -f "$link")"
+  local target raw dir root_phys
+  # No `readlink -f`: this repo deliberately never depends on it (bin/mossferry:7,
+  # bin/repo-session:30) because it is absent on macOS without coreutils. Resolve
+  # the physical path by hand instead, and compare against a physical ROOT —
+  # otherwise macOS fails every one of these, since /tmp is a symlink to
+  # private/tmp and the two sides disagree on the same directory.
+  raw="$(readlink "$link")"
+  dir="$(cd "$(dirname "$raw")" 2>/dev/null && pwd -P)" || dir=""
+  target="${dir:-$(dirname "$raw")}/$(basename "$raw")"
+  root_phys="$(cd "$ROOT" 2>/dev/null && pwd -P)" || root_phys="$ROOT"
   case "$target" in
-    "$ROOT"/*) ok "$name" ;;
-    *) FAIL "$name (target $target not under $ROOT)" ;;
+    "$root_phys"/*) ok "$name" ;;
+    *) FAIL "$name (target $target not under $root_phys)" ;;
   esac
 }
 

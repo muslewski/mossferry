@@ -589,7 +589,8 @@ _strip_ansi() {
 t26() {
   setup
   local out stripped expected nlines rc
-  expected=$(cat <<'EOF'
+  # bash 3.2 (macOS stock) cannot parse a heredoc inside $( ) — see t33.
+  IFS= read -r -d '' expected <<'EOF' || true
            |>
          __|__
       __|_o_o_|__
@@ -597,7 +598,7 @@ t26() {
    \   mossferry   /
  ~~~\_____________/~~~
 EOF
-)
+  expected=${expected%$'\n'}
   out=$(
     export REPO_SESSION_LIB=1
     # shellcheck source=/dev/null
@@ -667,7 +668,13 @@ t28() {
 t33() {
   setup
   local out stripped expected nlines rc
-  expected=$(cat <<'EOF'
+  # bash 3.2 (macOS stock) cannot parse a heredoc inside $( ): it re-scans the body
+  # as shell source, and this art contains `||` and `'`, so the whole FILE failed to
+  # parse with
+  #   tests/test-repo-session.sh: line 674: syntax error near unexpected token `||'
+  # which silently cost all 54 assertions in this module on every Mac. Verified on
+  # Darwin 25.5.0 / bash 3.2.57: `read -r -d ''` parses, `$(cat <<EOF)` does not.
+  IFS= read -r -d '' expected <<'EOF' || true
            |>
          __|__               __
       __|_o_o_|__           / _|___ _ _ _ _ _  _
@@ -675,7 +682,7 @@ t33() {
    \   o   o   o   /       |_| \___|_| |_|  \_, |
  ~~~\_____________/~~~~~~~~~~~~~~~~~~~~~~~~ |__/ ~~
 EOF
-)
+  expected=${expected%$'\n'}
   out=$(
     export REPO_SESSION_LIB=1
     # shellcheck source=/dev/null
