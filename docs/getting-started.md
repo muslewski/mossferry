@@ -81,7 +81,7 @@ If nothing is set:
 mossferry: doctor: no host (pass one, or set FERRY_HOST_CANDIDATES / FERRY_DEFAULT_HOST)
 ```
 
-Full key list: [Usage](./usage.md) and `config.example`.
+Full key list: [Configuration](./configuration.md) and `config.example`.
 
 ## 4. Verify (needs a reachable host)
 
@@ -145,7 +145,9 @@ If you still have a pre-rename client or a `.bashrc` auto-attach on `SSH_CONNECT
 
 ## Next
 
-- [Usage](./usage.md) — full flags, errors, grid drivers
+- [Command reference](./command-reference.md) — full flags, combinations, exit codes
+- [Configuration](./configuration.md) — every key and env var
+- [Usage](./usage.md) — compact flag map
 - [Grok + ferry](./guides/grok-and-ferry.md) — wrap, start menu, clipboard
 - [Servers view](./servers-view.md) — listeners and Mac reachability
 - [Works with](./works-with.md) — fleet tools on the host

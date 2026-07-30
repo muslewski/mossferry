@@ -214,7 +214,7 @@ The long-running work is always in **remote tmux**. Mosh protects the *hop*; ssh
 - **Both ends must be installed.** Laptop needs `ferry`; host needs `repo-session` on the path configured by `FERRY_REMOTE_BIN` (default `.local/bin/repo-session` under remote `$HOME`), plus tmux.
 - **Repo name charset.** CLI repo tokens must match `^[A-Za-z0-9._-]+$`: no spaces, no quotes, no `/`, no `..`, no absolute paths. Invalid tokens print `repo-session: invalid repo name '…'` and never start mosh. Remote argv is still `printf %q`-quoted so unusual characters in *other* arguments cannot break the ssh command line.
 - **Doctor always checks for a local `mosh` binary**, even when `FERRY_TRANSPORT=ssh`. An ssh-only laptop can still see `FAIL local mosh binary missing` until mosh is installed or you accept that check as noise.
-- **Client `--help` omits the servers-face chords** (`ctrl-s` / `ctrl-f`); `repo-session --help` lists them. The picker runs on the host, so the remote help is the accurate chord list.
+- **Servers-face fix chords** (`ctrl-f` and enter-to-copy) are detailed in `repo-session --help` and [Servers view](./docs/servers-view.md); `ferry --help` lists `ctrl-s` to open that face.
 - **Not a sandbox.** Same OS user on the host can reach other sessions’ files. See [docs/safety-roadmap.md](./docs/safety-roadmap.md).
 - **No hosted CI** for this project. Verify locally with `bash tests/run.sh` and the docs commands below.
 
@@ -224,8 +224,10 @@ The long-running work is always in **remote tmux**. Mosh protects the *hop*; ssh
 
 | Page | For |
 |------|-----|
-| [Getting started](./docs/getting-started.md) | Install both sides, config keys, doctor, update |
-| [Usage](./docs/usage.md) | Full flags, picker details, errors, grid drivers |
+| [Getting started](./docs/getting-started.md) | Install both sides, doctor, update |
+| [Command reference](./docs/command-reference.md) | Full flags, combinations, exit codes, real output |
+| [Configuration](./docs/configuration.md) | Every `FERRY_*` key and env var |
+| [Usage](./docs/usage.md) | Compact flag map and picker summary |
 | [Servers view](./docs/servers-view.md) | Listeners, Mac reachability, fix plans |
 | [Grok + ferry](./docs/guides/grok-and-ferry.md) | `FERRY_WRAP`, start menu, mosh vs clipboard |
 | [Works with](./docs/works-with.md) | Fleet tools on the host you land on |

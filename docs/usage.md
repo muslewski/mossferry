@@ -7,7 +7,7 @@ order: 15
 
 # Usage
 
-**mossferry** is the laptop hop; **repo-session** is the host brain. You almost always type **`ferry`**. This page is the command reference. For install and first config, see [Getting started](./getting-started.md).
+**mossferry** is the laptop hop; **repo-session** is the host brain. You almost always type **`ferry`**. This page is a compact flag map. For the full verified reference (combinations, exit codes, real output), see [Command reference](./command-reference.md). For every config key, see [Configuration](./configuration.md). For install and first config, see [Getting started](./getting-started.md).
 
 ## Commands (laptop)
 
@@ -74,7 +74,7 @@ Runs **on the host** inside the interactive hop.
 
 **Grok wrap** is laptop-side (`FERRY_WRAP`), not a picker key. See [Grok + ferry](./guides/grok-and-ferry.md).
 
-**Client help gap:** `ferry --help` does not list `ctrl-s` / servers-face chords; `repo-session --help` does. Trust the remote help for picker keys.
+Both `ferry --help` and `repo-session --help` list `ctrl-s` (servers face). Full picker chords and servers-face keys: [Command reference](./command-reference.md) and [Servers view](./servers-view.md).
 
 ## Session list format
 
@@ -157,12 +157,12 @@ ghostty-grid -8 -- ferry workstation my-app --resume-closed
 
 ## Config keys (summary)
 
-Full template: `config.example`. Env overrides file; file overrides built-in defaults.
+Full table (defaults, malformed behaviour, servers/devlog vars): [Configuration](./configuration.md). Template: `config.example`. Env overrides file; file overrides built-in defaults.
 
 | Key | Default | Side |
 |-----|---------|------|
 | `FERRY_REMOTE_BIN` | `.local/bin/repo-session` | remote path relative to `$HOME` |
-| `FERRY_REPO_BASE` | `$HOME/Repositories` | remote repo parent |
+| `FERRY_REPO_BASE` | `$HOME/Repositories` | remote repo parent (containment root) |
 | `FERRY_DEFAULT_CMD` | `neofetch` | start command for new sessions |
 | `FERRY_DEFAULT_HOST` | _(unset)_ | bare `ferry` / doctor / update |
 | `FERRY_HOST_CANDIDATES` | _(empty)_ | comma-separated aliases; first BatchMode-reachable wins |
@@ -177,17 +177,12 @@ Full template: `config.example`. Env overrides file; file overrides built-in def
 
 ## Developer logging
 
-Opt-in, **local-only** event log shared with sibling fleet tools. Off by default.
-
-- Enable: `FLEET_DEVLOG=1` (or `true` / `on` / `yes`), or `~/.config/fleet-devlog/config.json` with `{"enabled": true}`
-- Disable: `FLEET_DEVLOG=0` / `false` / `off` / `no`, or `--no-devlog`
-- Path: `${XDG_STATE_HOME:-$HOME/.local/state}/fleet-devlog/events.jsonl`
-- Never records prompts, file contents, secrets, or free-form paths. No network uploader.
-
-Delete: `rm -rf ~/.local/state/fleet-devlog`
+Opt-in, **local-only** event log. Details: [Configuration → Developer logging](./configuration.md#developer-logging).
 
 ## See also
 
+- [Command reference](./command-reference.md)
+- [Configuration](./configuration.md)
 - [Getting started](./getting-started.md)
 - [Quoting and containment](./quoting-and-containment.md)
 - [Servers view](./servers-view.md)

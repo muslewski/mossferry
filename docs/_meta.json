@@ -11,6 +11,14 @@
       "href": "getting-started.md"
     },
     {
+      "title": "Command reference",
+      "href": "command-reference.md"
+    },
+    {
+      "title": "Configuration",
+      "href": "configuration.md"
+    },
+    {
       "title": "Usage",
       "href": "usage.md"
     },
