@@ -31,6 +31,10 @@
       "href": "troubleshooting.md"
     },
     {
+      "title": "Servers view",
+      "href": "servers-view.md"
+    },
+    {
       "title": "Guides",
       "items": [
         {
@@ -40,10 +44,6 @@
         {
           "title": "Safety roadmap",
           "href": "safety-roadmap.md"
-        },
-        {
-          "title": "Servers view",
-          "href": "servers-view.md"
         }
       ]
     },

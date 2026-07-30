@@ -163,9 +163,9 @@ repo-session: no repo 'typoo' under ~/Repositories — pick one below, or run 'f
 
 ---
 
-## Servers / status view
+## Servers view
 
-Second face of the picker: **what is listening on the host, and can a Mac browser reach it?** Discovery is read-only.
+Second face of the picker (**servers face**, toggle with `ctrl-s`): **what is listening on the host, and can a Mac browser reach it?** Discovery is read-only.
 
 | Surface | Command / key |
 |---------|----------------|
@@ -228,9 +228,11 @@ The long-running work is always in **remote tmux**. Mosh protects the *hop*; ssh
 | [Command reference](./docs/command-reference.md) | Full flags, combinations, exit codes, real output |
 | [Configuration](./docs/configuration.md) | Every `FERRY_*` key and env var |
 | [Usage](./docs/usage.md) | Compact flag map and picker summary |
+| [Quoting and containment](./docs/quoting-and-containment.md) | Safe repo names, remote argv quoting, session match |
 | [Troubleshooting](./docs/troubleshooting.md) | Symptom fixes, doctor, test harness |
 | [Servers view](./docs/servers-view.md) | Listeners, Mac reachability, fix plans |
 | [Grok + ferry](./docs/guides/grok-and-ferry.md) | `FERRY_WRAP`, start menu, mosh vs clipboard |
+| [Safety roadmap](./docs/safety-roadmap.md) | Door vs building; planned safety nits |
 | [Works with](./docs/works-with.md) | Fleet tools on the host you land on |
 
 Architecture notes live in [`mossferry-mind/`](./mossferry-mind/) (Atlas vault), not under `docs/`.

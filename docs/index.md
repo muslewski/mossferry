@@ -11,7 +11,20 @@ order: 0
 
 Site: [mossferry.muslewski.com](https://mossferry.muslewski.com) · npm: [`mossferry`](https://www.npmjs.com/package/mossferry)
 
+## Words the tool uses
+
+| Word | Means |
+|------|--------|
+| **host** | The machine you hop to — an ssh `Host` alias from config, not an IP |
+| **repo** | One basename under `FERRY_REPO_BASE` (default `~/Repositories`) |
+| **session** | A tmux session on the host |
+| **picker** | fzf (or numbered menu) UI that runs **on the host** inside the hop |
+| **attach** | `tmux attach` to a chosen session |
+| **servers face** | Second picker face (`ctrl-s`): listeners / Mac reachability — see [Servers view](./servers-view.md) |
+
 ## Start here
+
+Reading order matches the sidebar:
 
 | Path | For |
 |------|-----|

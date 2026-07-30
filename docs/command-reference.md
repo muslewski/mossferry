@@ -282,7 +282,7 @@ Repo-bearing interactive launches **pre-validate** over ssh (`repo-session --val
 
 ---
 
-## Servers and status view
+## Servers view
 
 ### One-shot
 

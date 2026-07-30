@@ -7,7 +7,7 @@ order: 5
 
 # Works with
 
-**mossferry** is the hop. Sibling tools live (and run) on the **app host** you open with `ferry` — often a headless workstation. Name them in feature docs when a **real** integration exists; this page is the short map.
+**mossferry** is the hop. Sibling tools live (and run) on the **host** you open with `ferry` — often a headless workstation. Name them in feature docs when a **real** integration exists; this page is the short map.
 
 | Package | Relationship to mossferry | Links |
 |---------|---------------------------|--------|
