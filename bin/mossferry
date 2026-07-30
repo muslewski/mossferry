@@ -158,11 +158,30 @@ _ferry_load_devlog() {
 }
 _ferry_load_devlog
 
+# Epoch time in nanoseconds for duration math. BSD/macOS date exits 0 and
+# leaves %N unexpanded (literal), so exit status alone is unreliable — same
+# technique as lib/fleet-devlog.sh _devlog_ts (check OUTPUT, not status).
+# Fallback: whole-second precision padded to ns. No gdate/coreutils required.
+_ferry_now_ns() {
+  local t
+  t=$(date +%s%N 2>/dev/null) || t=""
+  if [[ -n "$t" && "$t" != *%N* && "$t" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$t"
+    return 0
+  fi
+  t=$(date +%s 2>/dev/null) || t=0
+  if [[ "$t" =~ ^[0-9]+$ ]]; then
+    printf '%s000000000\n' "$t"
+  else
+    printf '0\n'
+  fi
+}
+
 # Emit one event for a finished subcommand. Never changes the caller's exit code.
 _ferry_devlog_emit() {
   local cmd=${1-} rc=${2:-0} t0=${3:-0}
   local now ms=0 rclass=failed ver corr=""
-  now=$(date +%s%N 2>/dev/null || date +%s000000000)
+  now=$(_ferry_now_ns)
   if [[ "$now" =~ ^[0-9]+$ && "$t0" =~ ^[0-9]+$ ]]; then
     ms=$(( (now - t0) / 1000000 ))
     [[ $ms -lt 0 ]] && ms=0
@@ -931,7 +950,7 @@ main() {
   # Snapshot argv for fleet-devlog --no-devlog detection (array, not exported).
   DEVLOG_ARGV=("$@")
   local _dl_t0 _dl_rc=0 _dl_cmd=""
-  _dl_t0=$(date +%s%N 2>/dev/null || date +%s000000000)
+  _dl_t0=$(_ferry_now_ns)
 
   # Subcommand / zero-arg dispatch before host parsing.
   if [[ $# -eq 0 ]]; then
