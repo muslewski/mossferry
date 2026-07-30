@@ -705,14 +705,21 @@ build_session_rows() {
   local filter="${1:-}" s cname wins att cmd attword
   local active_name active_idx display_name preview_target glob wline widx wname found
   local -a names=()
-  local badge
+  local badge _line
   glob="${FERRY_HIDDEN_WINDOW_GLOB:-_*}"
   if [[ -n "$filter" ]]; then
     # Fixed-string match only — never interpolate $filter into grep -E
     # (dots in o'neil-file.txt must not match o'neil-fileXtxt).
-    mapfile -t names < <(_ferry_list_sessions_for_repo "$filter")
+    # bash 3.2-safe line read into array (order + blank lines preserved).
+    names=()
+    while IFS= read -r _line || [[ -n "$_line" ]]; do
+      names+=("$_line")
+    done < <(_ferry_list_sessions_for_repo "$filter")
   else
-    mapfile -t names < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
+    names=()
+    while IFS= read -r _line || [[ -n "$_line" ]]; do
+      names+=("$_line")
+    done < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
   fi
   for s in "${names[@]}"; do
     [[ -z "$s" ]] && continue
@@ -929,7 +936,12 @@ create_home_session() {
 
 _list_repo_sessions() {
   # populate global `sessions` array for $repo (fixed-string; no grep -E)
-  mapfile -t sessions < <(_ferry_list_sessions_for_repo "$repo")
+  # bash 3.2-safe line read into array (order + blank lines preserved).
+  local _line
+  sessions=()
+  while IFS= read -r _line || [[ -n "$_line" ]]; do
+    sessions+=("$_line")
+  done < <(_ferry_list_sessions_for_repo "$repo")
 }
 
 # Numbered list for --list. Window column uses build_session_rows (hidden-window rule).
@@ -1975,10 +1987,17 @@ EOF
   # --resume with N or name (bare --resume falls through to picker later)
   if (( wantpick )) && [[ -n "$pick" ]]; then
     if [[ "$pick" =~ ^[0-9]+$ ]]; then
+      # bash 3.2-safe line read into array (order + blank lines preserved).
+      local _line
+      sessions=()
       if [[ -n "$repo" ]]; then
-        mapfile -t sessions < <(_ferry_list_sessions_for_repo "$repo")
+        while IFS= read -r _line || [[ -n "$_line" ]]; do
+          sessions+=("$_line")
+        done < <(_ferry_list_sessions_for_repo "$repo")
       else
-        mapfile -t sessions < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
+        while IFS= read -r _line || [[ -n "$_line" ]]; do
+          sessions+=("$_line")
+        done < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
       fi
       local target="${sessions[$((pick-1))]:-}"
       if [[ -z "$target" ]]; then
@@ -2000,14 +2019,21 @@ EOF
 
   # --list
   if (( list )); then
+    # bash 3.2-safe line read into array (order + blank lines preserved).
+    local _line
+    sessions=()
     if [[ -n "$repo" ]]; then
       # Scoped list still validates so vanished/corrupt trees are not silent empty.
       if ! validate_repo "$repo"; then
         exit 1
       fi
-      mapfile -t sessions < <(_ferry_list_sessions_for_repo "$repo")
+      while IFS= read -r _line || [[ -n "$_line" ]]; do
+        sessions+=("$_line")
+      done < <(_ferry_list_sessions_for_repo "$repo")
     else
-      mapfile -t sessions < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
+      while IFS= read -r _line || [[ -n "$_line" ]]; do
+        sessions+=("$_line")
+      done < <("$TMUXBIN" list-sessions -F '#{session_name}' 2>/dev/null | sort -V)
     fi
     if (( ${#sessions[@]} == 0 )); then
       if [[ -n "$repo" ]]; then echo "no ${repo} sessions yet"; else echo "no tmux sessions running"; fi
