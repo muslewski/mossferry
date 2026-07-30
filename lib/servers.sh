@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # lib/servers.sh — layered server discovery for mossferry servers view.
-# Zero runtime deps beyond bash, ss, /proc. Sourceable pure functions.
+# Full servers view needs bash + ss + /proc (Linux host). Sourceable pure
+# functions. On hosts lacking ss or /proc, build_server_rows degrades with
+# one stderr notice (non-fatal) unless FERRY_SERVERS_SS_FIXTURE is set.
 # Row model (14 columns, tab-separated):
 #   port state id class label bind pid comm repo owner mac_state mac_url health restart
 #
 # shellcheck disable=SC2034
+
+# Once-per-shell capability warning (empty servers view without ss//proc).
+_FERRY_SERVERS_CAPABILITY_WARNED=0
 
 # Reserved ports (from preview-serve denylist). Never primary Mac URL.
 FERRY_SERVERS_RESERVED="${FERRY_SERVERS_RESERVED:-8791 3001 5432 6379 27017 8080 5173 3000}"
@@ -488,9 +493,49 @@ _servers_rec_field() {
   printf '%s' "$rec" | awk -F '\037' -v n="$n" '{ if (n >= 1 && n <= NF) print $n }'
 }
 
+# True when the host can run the full servers view (ss + /proc), or when a
+# fixture supplies listener text (tests). Capability-based — not uname.
+_servers_platform_capable() {
+  if [[ -n "${FERRY_SERVERS_SS_FIXTURE:-}" ]]; then
+    return 0
+  fi
+  command -v ss >/dev/null 2>&1 || return 1
+  [[ -d /proc ]] || return 1
+  return 0
+}
+
+# Emit one stderr notice when the servers view cannot run; never fatal.
+_servers_capability_warn() {
+  local missing=""
+  if ! command -v ss >/dev/null 2>&1; then
+    missing="ss"
+  fi
+  if [[ ! -d /proc ]]; then
+    if [[ -n "$missing" ]]; then
+      missing="${missing} and /proc"
+    else
+      missing="/proc"
+    fi
+  fi
+  [[ -n "$missing" ]] || missing="required platform tools"
+  printf 'mossferry servers: %s not available — servers view is Linux-host-only (needs ss and /proc). Skipping.\n' \
+    "$missing" >&2
+}
+
 # Merge L0–L5 into full 14-column rows.
 # When FERRY_SERVERS_SS_FIXTURE is set, listener lines are read from stdin.
 build_server_rows() {
+  # Capability gate: without ss+/proc (and without a fixture) the view would
+  # silently list nothing — same class of lie as empty on a busy desk. Warn
+  # once on stderr and return empty; rest of mossferry keeps working.
+  if ! _servers_platform_capable; then
+    if [[ "${_FERRY_SERVERS_CAPABILITY_WARNED:-0}" -eq 0 ]]; then
+      _servers_capability_warn
+      _FERRY_SERVERS_CAPABILITY_WARNED=1
+    fi
+    return 0
+  fi
+
   # Parallel key/value arrays (bash 3.2 — no associative maps). Keys keep insertion order.
   local decl_keys=() decl_recs=()
   local live_keys=() live_recs=()
