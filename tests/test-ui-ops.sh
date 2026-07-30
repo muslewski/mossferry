@@ -139,6 +139,46 @@ EOS
 }
 
 # ---------------------------------------------------------------------------
+# f1b: doctor short-circuits remote probes after BatchMode connect FAIL
+# ---------------------------------------------------------------------------
+{
+  name=f1b
+  home="$(mktemp -d)"
+  logf="$(mktemp)"
+  outf="$(mktemp)"
+  errf="$(mktemp)"
+  export HOME="$home" FAKE_NET_LOG="$logf" PATH="${FAKE_BIN}:${PATH}"
+  : >"$logf"
+
+  set +e
+  FAKE_SSH_UNREACHABLE=h timeout 8 "$FERRY" doctor h >"$outf" 2>"$errf"
+  rc=$?
+  set -e
+  out="$(cat "$outf")"
+  log_content="$(cat "$logf" 2>/dev/null || true)"
+  has_skip=0 has_connect_fail=0 remote_after_fail=0
+  [[ "$out" == *"FAIL ssh BatchMode connect to h"* ]] && has_connect_fail=1
+  [[ "$out" == *"remote checks skipped — ssh BatchMode connect failed"* ]] && has_skip=1
+  # After the connect probe, no further remote-connecting ssh (only -G is local).
+  while IFS= read -r l || [[ -n "$l" ]]; do
+    [[ "$l" == *"-G"* ]] && continue
+    [[ "$l" == *" true" || "$l" == *" true "* ]] && continue
+    base="${l%% *}"; base="${base##*/}"
+    if [[ "$base" == ssh ]]; then
+      remote_after_fail=1
+    fi
+  done <"$logf"
+  if [[ $rc -eq 1 && $has_connect_fail -eq 1 && $has_skip -eq 1 && $remote_after_fail -eq 0 ]]; then
+    ok "${name}-short-circuit"
+  else
+    FAIL "${name}-short-circuit (rc=$rc connect=$has_connect_fail skip=$has_skip remote=$remote_after_fail)"
+    printf '  out=%s\n  log=%s\n' "$out" "$log_content" >&2
+  fi
+  unset FAKE_SSH_UNREACHABLE || true
+  rm -rf "$home" "$outf" "$errf" "$logf"
+}
+
+# ---------------------------------------------------------------------------
 # f2: update — non-TTY ends local/remote; forced-TTY steps + wave strip
 # ---------------------------------------------------------------------------
 {

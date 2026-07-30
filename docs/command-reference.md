@@ -70,7 +70,7 @@ There is **no** `--version` flag. The first non-subcommand token is treated as a
 |---------|---------------|------|
 | Default host for bare `ferry` / doctor / update | `FERRY_DEFAULT_HOST` (unset) | laptop |
 | Prefer LAN then remote | `FERRY_HOST_CANDIDATES` (empty) — first `ssh -o BatchMode=yes -o ConnectTimeout=2 … true` that works | laptop |
-| Where repos live | `FERRY_REPO_BASE` → `$HOME/Repositories` | host (and client pre-validate) |
+| Where repos live | `FERRY_REPO_BASE` → `$HOME/Repositories` | host (client shape-gates tokens; existence via remote `--validate`) |
 | Path to host brain | `FERRY_REMOTE_BIN` → `.local/bin/repo-session` (relative to remote `$HOME`) | laptop → remote |
 
 Host resolution order for bare `ferry`, `ferry doctor`, and `ferry update`:
@@ -252,6 +252,8 @@ ghostty-grid -8 -- ferry workstation my-app --resume-or-new --claude
 ghostty-grid -8 -- ferry workstation my-app --resume-closed
 ```
 
+Creating a session works without a TTY (headless `repo-session <repo> -p` still runs `new-session` / `send-keys`). **Attaching** needs a real terminal: without one, tmux prints `open terminal failed: not a terminal` after create.
+
 | Flag | Behaviour |
 |------|-----------|
 | `--resume-closed` | Atomic claim of one **existing** session per caller (flock + `@claim_ts`, 25s TTL). Prefers detached; else takes over an attached session. No free session → message `no <repo> sessions left to resume — blank shell` and a plain login shell. |
@@ -278,7 +280,10 @@ With **mosh**, a short blip can reconnect without a new login until `FERRY_SERVE
 
 `--list`, `--list-servers`, `doctor`, and `update` never use wrap. `--list` / `--list-servers` always use ssh.
 
-Repo-bearing interactive launches **pre-validate** over ssh (`repo-session --validate <repo>`) before mosh so typos print locally and exit **1** without opening a hop.
+Repo-bearing launches run two gates before mosh:
+
+1. **Local shape** — `_ferry_repo_token_ok` on the laptop (shared with the host). Invalid tokens print `repo-session: invalid repo name '…'` and exit **1** with **no** ssh.
+2. **Remote existence** — `repo-session --validate <repo>` over ssh. Missing basenames print `no repo '…'` and exit **1** without opening a hop.
 
 ---
 
@@ -414,7 +419,7 @@ repo-session --validate my-app
 # exit 1: invalid name or missing directory (+ basename listing when missing)
 ```
 
-Used automatically by the laptop client before interactive hops that include a repo token.
+Used automatically by the laptop client for shape-valid repo tokens on interactive hops (after the local charset gate).
 
 ---
 

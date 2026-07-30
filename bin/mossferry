@@ -98,6 +98,31 @@ _ferry_load_ui() {
 
 _ferry_load_ui
 
+# Shared repo-token shape gate (same charset as host validate_repo).
+_ferry_load_repo_token() {
+  local f="${REPO_ROOT}/lib/repo-token.sh"
+  if [[ -r "$f" ]]; then
+    # shellcheck source=lib/repo-token.sh
+    source "$f" || true
+  fi
+  if ! declare -F _ferry_repo_token_ok >/dev/null 2>&1; then
+    _ferry_repo_token_ok() {
+      local r=${1-}
+      [[ -n "$r" ]] || return 1
+      case "$r" in
+        /*|*/*|*\\*|*..*) return 1 ;;
+      esac
+      [[ "$r" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+      return 0
+    }
+    _ferry_repo_token_reject_msg() {
+      local r=${1-}
+      printf "repo-session: invalid repo name '%s'\n" "${r//\'/}" >&2
+    }
+  fi
+}
+_ferry_load_repo_token
+
 # Client error line: always `mossferry:` prefix; red ✗ when TTY.
 _ferry_err() {
   if ui_tty 2>/dev/null; then
@@ -361,7 +386,8 @@ ${S}Usage${Z}
 
   Laptop client: resolves host, hops over mosh (default) or ssh, runs repo-session
   on the host. Default action is the session picker — nothing attaches a shared
-  main session implicitly. Repo typos pre-validate over ssh (no mosh).
+  main session implicitly. Invalid repo tokens are rejected locally; missing
+  repos pre-validate over ssh before mosh.
 
   ferry <host>                      global session picker
   ferry <host> <repo>               picker scoped to that repo basename
@@ -549,6 +575,11 @@ cmd_doctor() {
   local failed=0 checks=0 cfg="${HOME}/.config/mossferry/config"
   local chrome=0 version_failed=0
   local fix_hints=()
+  # Shared options for every remote-connecting probe. BatchMode + ConnectTimeout
+  # guarantee no check can block on an interactive password prompt. connect_ok
+  # gates remote checks so they are skipped (not hung) when the connect probe failed.
+  local connect_ok=0
+  local -a SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=5)
 
   if ui_tty 2>/dev/null; then
     chrome=1
@@ -598,8 +629,9 @@ cmd_doctor() {
   fi
 
   # 3. ssh BatchMode connect
-  if ssh -o BatchMode=yes -o ConnectTimeout=5 "$host" true >/dev/null 2>&1; then
+  if ssh "${SSH_OPTS[@]}" "$host" true >/dev/null 2>&1; then
     _doc_emit ok "ssh BatchMode connect to $host"
+    connect_ok=1
   else
     _doc_emit FAIL "ssh BatchMode connect to $host"
     failed=1
@@ -645,8 +677,14 @@ cmd_doctor() {
       ;;
   esac
 
+  # When connect failed, remote probes cannot succeed — skip them (no hang) and
+  # emit the same FAIL/info tokens a failed probe would have produced.
+  if (( ! connect_ok )); then
+    _doc_emit info "remote checks skipped — ssh BatchMode connect failed"
+  fi
+
   # 5. remote FERRY_REMOTE_BIN executable (relative to remote $HOME)
-  if ssh "$host" "test -x $FERRY_REMOTE_BIN || test -x \"\$HOME/$FERRY_REMOTE_BIN\"" >/dev/null 2>&1; then
+  if (( connect_ok )) && ssh "${SSH_OPTS[@]}" "$host" "test -x $FERRY_REMOTE_BIN || test -x \"\$HOME/$FERRY_REMOTE_BIN\"" >/dev/null 2>&1; then
     _doc_emit ok "remote $FERRY_REMOTE_BIN executable"
   else
     _doc_emit FAIL "remote $FERRY_REMOTE_BIN not executable"
@@ -654,10 +692,12 @@ cmd_doctor() {
   fi
 
   # 6. local vs remote VERSION match
-  local v_local v_remote
+  local v_local v_remote=""
   v_local="$(own_version | tr -d '[:space:]')"
-  v_remote="$(ssh "$host" cat "${FERRY_REMOTE_REPO}/VERSION" 2>/dev/null || true)"
-  v_remote=$(printf '%s' "$v_remote" | sed $'s/^\xEF\xBB\xBF//' | tr -d '\r\n[:space:]')
+  if (( connect_ok )); then
+    v_remote="$(ssh "${SSH_OPTS[@]}" "$host" cat "${FERRY_REMOTE_REPO}/VERSION" 2>/dev/null || true)"
+    v_remote=$(printf '%s' "$v_remote" | sed $'s/^\xEF\xBB\xBF//' | tr -d '\r\n[:space:]')
+  fi
   if [[ -n "$v_remote" && "$v_local" == "$v_remote" ]]; then
     _doc_emit ok "versions match: $v_local"
   else
@@ -668,20 +708,22 @@ cmd_doctor() {
   fi
 
   # 7. remote fzf (info if missing)
-  if ssh "$host" command -v fzf >/dev/null 2>&1; then
+  if (( connect_ok )) && ssh "${SSH_OPTS[@]}" "$host" command -v fzf >/dev/null 2>&1; then
     _doc_emit ok "remote fzf present"
   else
     _doc_emit info "remote fzf missing — numbered menu fallback available"
   fi
 
   # 8. remote mosh-server count (info)
-  local count
-  count="$(ssh "$host" pgrep -c mosh-server 2>/dev/null || true)"
+  local count=""
+  if (( connect_ok )); then
+    count="$(ssh "${SSH_OPTS[@]}" "$host" pgrep -c mosh-server 2>/dev/null || true)"
+  fi
   count="${count//$'\n'/}"
   : "${count:=0}"
   _doc_emit info "remote mosh-server count: $count"
 
-  # 9. MagicDNS note (info): whether HostName is an IP
+  # 9. MagicDNS note (info): whether HostName is an IP (local resolver — always runs)
   local hostname
   hostname="$(ssh -G "$host" 2>/dev/null | awk 'tolower($1)=="hostname"{print $2; exit}')"
   if [[ -z "$hostname" ]]; then
@@ -706,12 +748,15 @@ cmd_doctor() {
   reserved_list="${FERRY_SERVERS_RESERVED:-8791 3001 5432 6379 27017 8080 5173 3000}"
   _doc_emit info "reserved ports: $reserved_list"
   # Best-effort remote servers summary; never fail doctor on discovery errors
-  srv_summary="$(ssh "$host" "$FERRY_REMOTE_BIN" --servers 2>/dev/null | awk -F'\t' '
-    $2=="LISTEN"{l++}
-    $2=="declared-missing"{m++}
-    $2=="FOREIGN"{f++}
-    END{printf "%d LISTEN · %d declared-missing · %d foreign", l+0, m+0, f+0}
-  ' || true)"
+  srv_summary=""
+  if (( connect_ok )); then
+    srv_summary="$(ssh "${SSH_OPTS[@]}" "$host" "$FERRY_REMOTE_BIN" --servers 2>/dev/null | awk -F'\t' '
+      $2=="LISTEN"{l++}
+      $2=="declared-missing"{m++}
+      $2=="FOREIGN"{f++}
+      END{printf "%d LISTEN · %d declared-missing · %d foreign", l+0, m+0, f+0}
+    ' || true)"
+  fi
   if [[ -n "$srv_summary" ]]; then
     _doc_emit info "servers: $srv_summary"
   else
@@ -803,7 +848,8 @@ _ferry_ssh_quoted() {
 
 # Launch remote: ssh for --list/-l; interactive mosh (default) or ssh (FERRY_TRANSPORT).
 # Prepends --client-version <v> before user args.
-# Repo-bearing interactive launches pre-validate over ssh so typos print locally.
+# Shape-invalid repo tokens are rejected locally (no ssh). Existence still
+# pre-validates over ssh before mosh so missing-repo errors print without a hop.
 # Interactive hops use FERRY_WRAP (auto → grok wrap when local grok exists).
 launch_remote() {
   local host="$1"
@@ -819,6 +865,14 @@ launch_remote() {
         ;;
     esac
   done
+
+  # Local shape gate first — same charset as host _ferry_repo_token_ok.
+  # A typo with spaces or path characters must not reach DNS/ssh.
+  repo="$(repo_token_from_args "$@")"
+  if [[ -n "$repo" ]] && ! _ferry_repo_token_ok "$repo"; then
+    _ferry_repo_token_reject_msg "$repo"
+    return 1
+  fi
 
   for a in "$@"; do
     case "$a" in
@@ -843,7 +897,6 @@ launch_remote() {
     esac
   done
 
-  repo="$(repo_token_from_args "$@")"
   if [[ -n "$repo" ]]; then
     val_out="$(_ferry_ssh_quoted "$host" "$FERRY_REMOTE_BIN" --client-version "$ver" --validate "$repo" 2>&1)" || val_rc=$?
     if [[ $val_rc -ne 0 ]]; then

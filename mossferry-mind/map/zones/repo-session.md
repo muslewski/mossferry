@@ -1,11 +1,11 @@
 ---
 type: zone
-summary: "Remote brain (bin/repo-session): fzf/menu session picker + servers face (ctrl-s), create/attach, atomic claim, nested start menu, FERRY_LAUNCHERS, Grok wallet badge, FERRY_SAGE wire, kill/rename, --servers discovery, validate_repo."
+summary: "Remote brain (bin/repo-session): fzf/menu session picker + servers face (ctrl-s), create/attach, atomic claim, nested start menu, FERRY_LAUNCHERS, Grok wallet badge, FERRY_SAGE wire, kill/rename, --servers discovery, validate_repo; shared lib/repo-token.sh shape gate."
 tags: [remote, tmux, picker, fzf, sage, grok]
 status: active
 created: 2026-07-21
 updated: 2026-07-30
-verifiedAt: 5f96f1c1
+verifiedAt: 9abae1f5
 owns:
   routes: []
   testids: []
@@ -15,8 +15,10 @@ owns:
   tools: []
 depends:
   - "[[green-ui]]"
+  - "[[client]]"
 invariants:
   - "Curated --help keeps a Flags section heading (exact case) for test-ui-ops f3-repo-session-help; body stays an index not a full flag wall."
+  - "Shape gate lives in lib/repo-token.sh (_ferry_repo_token_ok, owned by [[client]]) — same definition as the laptop client."
 skills: []
 related:
   - "[[client]]"
@@ -31,20 +33,23 @@ live. Owns all session logic: **picker** (fzf with preview, or numbered menu),
 primary/new/list/resume flags, **atomic claim** for ghostty-grid drivers,
 `create_repo` / home sessions, **nested start menu** (`FERRY_START_MENU`) plus
 optional **FERRY_LAUNCHERS** hotkeys, in-place kill/rename binds, and
-`--validate` for local typo checks. Errors are prefixed `repo-session:`.
+`--validate` for shape + directory checks. Errors are prefixed `repo-session:`.
 
 ## Anchors
 
 - `bin/repo-session` — sole owned surface; path on remote often
   `$HOME/.local/bin/repo-session` via `FERRY_REMOTE_BIN`.
+- `lib/repo-token.sh` — shared with `[[client]]` (one charset rule).
 - Boundary: tmux + fzf interaction and session naming; no mosh client code.
+- Attach needs a TTY; create works headless (`open terminal failed: not a terminal` from tmux when attach has no terminal).
 
 ## Invariants
 
-- **Repo tokens are path-safe:** `_ferry_repo_token_ok` rejects `/`, `..`, and
-  non-basename shapes before joining with `FERRY_REPO_BASE`. `validate_repo`
-  and attach paths refuse traversal; claim lock files use a sanitized
-  basename (`_ferry_claim_lockf`), never raw `$repo` with slashes.
+- **Repo tokens are path-safe:** `_ferry_repo_token_ok` (from
+  `lib/repo-token.sh`) rejects `/`, `..`, and non-basename shapes before
+  joining with `FERRY_REPO_BASE`. `validate_repo` and attach paths refuse
+  traversal; claim lock files use a sanitized basename (`_ferry_claim_lockf`),
+  never raw `$repo` with slashes.
 - **Session filter is fixed-string:** `build_session_rows` /
   `_list_repo_sessions` never interpolate `$repo` into `grep -E` (dots in
   `o'neil-file.txt` must not match `o'neil-fileXtxt`).

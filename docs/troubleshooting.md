@@ -43,14 +43,17 @@ Doctor:
 FAIL ssh BatchMode connect to workstation
 ```
 
-Often followed by remote checks that also fail because ssh never ran a useful command:
+After a connect FAIL, doctor prints a skip line and still emits the remote FAIL/info tokens **without** opening further ssh sessions (so it always terminates):
 
 ```text
+info remote checks skipped — ssh BatchMode connect failed
 FAIL remote .local/bin/repo-session not executable
 FAIL versions: local 2.7.4 / remote unknown
 ```
 
-**Fix:** make `ssh -o BatchMode=yes -o ConnectTimeout=5 workstation true` work without a password prompt (keys + `~/.ssh/config`). Doctor’s connect probe uses that shape; later remote probes use plain `ssh` and **can hang on a password-only host** after the BatchMode fail (known limitation — see [Doctor limitations](#what-doctor-does-not-do)).
+Observed exit: **1**. Every remote-connecting probe uses `BatchMode=yes` and `ConnectTimeout=5`.
+
+**Fix:** make `ssh -o BatchMode=yes -o ConnectTimeout=5 workstation true` work without a password prompt (keys + `~/.ssh/config`).
 
 ### Local mosh missing
 
@@ -129,7 +132,9 @@ repo-session: invalid repo name 'foo/bar'
 repo-session: invalid repo name 'with space'
 ```
 
-Missing basename under `FERRY_REPO_BASE` (default `~/Repositories`):
+The **laptop client** prints the same line and exits **1** with no ssh when the token fails the shape gate (observed: `ferry workstation 'has space'` → `invalid repo name 'has space'`, empty transport log). The **host** `repo-session --validate` uses the same rule.
+
+Missing basename under `FERRY_REPO_BASE` (default `~/Repositories`) still needs a live host (ssh pre-validate):
 
 ```text
 repo-session: no repo 'missing-app' under /path/to/Repositories — pick one below, or run 'ferry <host>' to browse all sessions
@@ -138,7 +143,7 @@ repo-session: no repo 'missing-app' under /path/to/Repositories — pick one bel
 
 Exit **1**. On a TTY, a capped list and optional `did you mean …?` may follow. Non-TTY lists basenames with two-space indent.
 
-Laptop interactive hops **pre-validate over ssh** before mosh, so typos fail locally without opening a hop. Details: [Quoting and containment](./quoting-and-containment.md).
+Details: [Quoting and containment](./quoting-and-containment.md).
 
 ### Session already exists (`--primary` / picker)
 
@@ -292,7 +297,7 @@ These gaps are real behaviour, not future promises:
 | **Broken / suboptimal tiers** | Only `ok` / `FAIL` / `info`. Soft issues (no fzf, mosh-server count) are info; many connectivity issues are hard FAIL. |
 | **Nonzero only on hard failure** | Exit **1** on **any** `FAIL`, including local mosh missing under `FERRY_TRANSPORT=ssh` and version skew (hop would still work with a warning). |
 | **`--json` machine output** | **Not implemented.** `ferry doctor --json` is not JSON — `--json` becomes the host token. |
-| **Short-circuit after connect fail** | Does **not** stop. Later remote checks still run (and can hang without BatchMode on password-only hosts). |
+| **Remote probes after connect fail** | **Skipped** (no further ssh). Emits `info remote checks skipped — …` plus the usual remote FAIL/info lines; exit stays **1**. |
 | **Remote tmux present** | **Not checked.** Missing tmux passes doctor if other checks pass, then fails at session time. |
 | **BOM-safe version on hop** | Doctor strips BOM for VERSION compare; the live `--client-version` handshake does not (see [versions](#client-and-remote-versions-differ)). |
 | **Ship policy / “safe to ship”** | Not a doctor surface. See [Quoting and containment](./quoting-and-containment.md) honest-status gaps. |

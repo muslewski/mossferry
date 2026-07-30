@@ -1,17 +1,18 @@
 ---
 type: zone
-summary: "Local ferry CLI (bin/mossferry): FERRY_* config, mosh/ssh launch of repo-session, optional grok wrap, pre-validate over ssh, doctor/update, --list-servers pass-through, opt-in fleet-devlog."
+summary: "Local ferry CLI (bin/mossferry): FERRY_* config, mosh/ssh launch of repo-session, optional grok wrap, local shape gate + ssh --validate, doctor short-circuit, --list-servers, fleet-devlog."
 tags: [cli, client, mosh, ssh, grok-wrap]
 status: active
 created: 2026-07-21
 updated: 2026-07-30
-verifiedAt: 5f96f1c1
+verifiedAt: 9abae1f5
 owns:
   routes: []
   testids: []
   globs:
     - "bin/mossferry"
     - "lib/fleet-devlog.sh"
+    - "lib/repo-token.sh"
   tools: []
 depends:
   - "[[green-ui]]"
@@ -19,6 +20,8 @@ invariants:
   - "Interactive transport only: FERRY_WRAP may prefix mosh/ssh with grok wrap; --list/doctor/update never wrap."
   - "AI launchers (ctrl-g) are remote startcmd only — wrap is always local-side around the whole hop."
   - "Curated --help is an index (purpose + primary verbs + one happy path) but still emits contract section headings Usage/Picker/Flags/Config/Examples and the literal usage form mossferry <host>."
+  - "Invalid repo tokens are rejected locally via shared _ferry_repo_token_ok before any ssh; existence still uses remote --validate before mosh."
+  - "doctor short-circuits remote probes after BatchMode connect FAIL (BatchMode+ConnectTimeout=5 on every remote probe; exit 1)."
 skills: []
 related:
   - "[[repo-session]]"
@@ -38,6 +41,7 @@ remote `repo-session` over **mosh** (default) or **ssh** (`FERRY_TRANSPORT` /
 ## Anchors
 
 - `bin/mossferry` — sole owned surface; npm `bin` also maps `ferry` → this file.
+- `lib/repo-token.sh` — shared shape gate with `[[repo-session]]` (sourced by both).
 - `launch_remote` / `_ferry_run_transport` / `_ferry_should_wrap` — interactive hop.
 - Boundary: everything that must not require a remote tmux server (config
   parse, version, doctor checks, update pull, local error lines prefixed
@@ -45,8 +49,12 @@ remote `repo-session` over **mosh** (default) or **ssh** (`FERRY_TRANSPORT` /
 
 ## Invariants
 
-- Repo-bearing interactive launches run `repo-session --validate` over ssh first
-  so unknown repos never enter the alternate screen.
+- Repo-bearing launches: **local shape** (`_ferry_repo_token_ok`) first — invalid
+  tokens print `repo-session: invalid repo name '…'` with no network; then
+  shape-valid tokens run `repo-session --validate` over ssh so missing dirs
+  never enter the alternate screen.
+- `doctor`: after `FAIL ssh BatchMode connect`, remote probes are skipped (no
+  hang); every remote-connecting probe uses BatchMode + ConnectTimeout=5.
 - Missing `lib/green-ui.sh` must not kill the tool (inline fallbacks).
 - `FERRY_WRAP=auto` (default) prefixes interactive mosh/ssh with `grok wrap`
   only when local `grok` is on PATH; `--list` is never wrapped.
