@@ -141,6 +141,8 @@ With **mosh**, a blip can reconnect the hop without a new login (until `FERRY_SE
 
 Remote argv for the hop is built with `printf %q` so OpenSSH’s space-joining cannot split tokens — but **invalid repo names are still rejected** before attach.
 
+Full observed tables (refusals, quoting samples, session match, status gaps): [Quoting and containment](./quoting-and-containment.md).
+
 ## Grid drivers (composition)
 
 mossferry does not embed a terminal grid. Tools like `ghostty-grid` just run a command per pane:
@@ -187,6 +189,7 @@ Delete: `rm -rf ~/.local/state/fleet-devlog`
 ## See also
 
 - [Getting started](./getting-started.md)
+- [Quoting and containment](./quoting-and-containment.md)
 - [Servers view](./servers-view.md)
 - [Grok + ferry](./guides/grok-and-ferry.md)
 - [README](../README.md)

@@ -17,6 +17,7 @@ Site: [mossferry.muslewski.com](https://mossferry.muslewski.com) · npm: [`mossf
 |------|-----|
 | [Getting started](./getting-started.md) | Install laptop + host → config → `ferry doctor` |
 | [Usage](./usage.md) | Flags, picker, detach/reattach, errors |
+| [Quoting and containment](./quoting-and-containment.md) | Safe repo names, remote argv quoting, literal session match, status gaps |
 | [Servers view](./servers-view.md) | Listeners, Mac reachability, fix plans |
 | [Grok + ferry](./guides/grok-and-ferry.md) | `FERRY_WRAP`, start menu, mosh vs clipboard |
 | [Safety roadmap](./safety-roadmap.md) | Door vs building; planned safety nits |
