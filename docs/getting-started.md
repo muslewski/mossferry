@@ -9,6 +9,28 @@ order: 10
 
 **mossferry** is a laptop command that attaches you to a repository’s tmux session on another machine. Everyday binary: **`ferry`**. This page gets both ends installed and checks them.
 
+## Prerequisites (laptop vs host)
+
+| Need | Laptop (where you type `ferry`) | Host (tmux + repos) |
+|------|----------------------------------|---------------------|
+| Package | `ferry` / `mossferry` on `PATH` | `repo-session` on `PATH` (`FERRY_REMOTE_BIN`) |
+| Transport | **`mosh`** for default `FERRY_TRANSPORT=mosh` (doctor always checks local mosh); or set `FERRY_TRANSPORT=ssh` and use OpenSSH | **`mosh-server`** when clients use mosh |
+| Session UI | — | **`tmux`** (required); **`fzf` optional** — picker runs **on the host**; without fzf you get a numbered menu |
+| Servers face | — | Linux **`ss`** + **`/proc`** (host-only discovery) |
+| Optional | local `grok` for `FERRY_WRAP` | — |
+
+A **Mac laptop does not need local `fzf` or local `tmux`** for ordinary hops: `ferry` only launches mosh/ssh to remote `repo-session`, which owns the picker and all tmux calls. Install `tmux` on the Mac only if you run `repo-session` locally.
+
+### macOS (Homebrew) — laptop
+
+```sh
+brew install mosh
+# brew install tmux   # only if this Mac also runs repo-session
+npm install -g mossferry
+```
+
+Stock macOS `/bin/bash` is **3.2**. Known limits (`flock`, bash ≥4 UI kit, servers face): [Troubleshooting → macOS client](./troubleshooting.md#macos-client).
+
 ## 1. Install on the laptop
 
 ```sh
@@ -35,7 +57,7 @@ mossferry 2.7.4 · the green ferry between your machines
 
 ## 2. Install on the host
 
-The machine that holds the repos needs the same tools on `PATH` (especially `repo-session` and `tmux`):
+The machine that holds the repos needs the package **and** host tools on `PATH` (especially `repo-session` and `tmux`):
 
 ```sh
 # option A — npm
@@ -46,6 +68,8 @@ git clone https://github.com/muslewski/mossferry.git ~/Repositories/mossferry
 cd ~/Repositories/mossferry
 ./install.sh
 ```
+
+On a typical Linux host also ensure: `tmux`, `mosh` (provides `mosh-server`), and preferably `fzf`.
 
 Default remote layout:
 
@@ -121,14 +145,22 @@ ferry workstation --list-servers  # listeners TSV (ssh)
 
 Picker keys (on the host): `enter` attach · `ctrl-x` kill · `ctrl-r` rename · `ctrl-s` servers face · `esc` quit. See [Usage](./usage.md) and [Servers view](./servers-view.md).
 
-If client and remote versions differ, the picker header can show an update hint. Sync both sides:
+If client and remote versions differ, the picker header can show an update hint. How you sync depends on **how each side was installed**:
+
+| Install style | What actually updates the bits |
+|---------------|--------------------------------|
+| **Git clone + `./install.sh`** (symlinks into the clone) | `ferry update [host]` — `git pull --ff-only` on the **local** clone (`REPO_ROOT` next to the binary), then over ssh `git -C $FERRY_REMOTE_REPO pull --ff-only` (default `~/Repositories/mossferry`), then prints `local <v> / remote <v>` |
+| **`npm install -g mossferry`** | `ferry update` still runs those git pulls on whatever clone paths exist; it does **not** run `npm install`. Bump npm installs with `npm install -g mossferry@latest` (or a pinned version) **on each machine**, then re-check with `ferry doctor` |
 
 ```sh
-ferry update                      # uses default host
+ferry update                      # uses default host — clone-based deploys
 ferry update workstation
+# npm-global laptop example:
+npm install -g mossferry@latest
+# then the same on the host (ssh), or pull the remote clone if that is what FERRY_REMOTE_REPO points at
 ```
 
-Pulls the local clone (`git pull --ff-only`), then the remote clone over ssh, and prints `local <v> / remote <v>`.
+Doctor fails on version skew (`FAIL versions: local … / remote …`) even though a hop still works with a warning. Details: [Troubleshooting → versions](./troubleshooting.md#client-and-remote-versions-differ).
 
 ## 6. Detach and come back
 

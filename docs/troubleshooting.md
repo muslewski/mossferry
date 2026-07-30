@@ -100,16 +100,21 @@ mossferry: unknown FERRY_TRANSPORT='pigeon' (want mosh|ssh)
 
 Exit **1**.
 
-### Host has no tmux
+### `…/tmux: No such file or directory` (exit 127) — host **or** laptop
 
-`repo-session` defaults to `REPO_SESSION_TMUXBIN` or `/usr/bin/tmux`.
+`repo-session` resolves tmux as `REPO_SESSION_TMUXBIN` if set, otherwise a platform path (historically a bare `/usr/bin/tmux` default). The same shell message appears in two places:
 
-| Action | Observed |
-|--------|----------|
-| `--list` when the binary is missing | `no tmux sessions running` on stdout, exit **0** (list-sessions fails quietly) |
-| `my-app -p` when the binary is missing | Shell errors like `…/tmux: No such file or directory`, exit **127** |
+| Where you see it | Meaning | Fix |
+|------------------|---------|-----|
+| **Host** (normal `ferry` hop → remote `repo-session`) | Host has no tmux (or wrong path) | Install tmux on the **host**; or set `REPO_SESSION_TMUXBIN` to the real binary on that machine |
+| **Laptop** (you ran `repo-session` / a symlink **locally**, e.g. Mac without Homebrew tmux) | Local tmux path did not resolve | Install tmux on the laptop **or** export `REPO_SESSION_TMUXBIN=$(command -v tmux)` after `brew install tmux`. Ordinary laptop-only `ferry` hops do **not** need local tmux — only the host does |
 
-**Fix:** install tmux on the **host** and ensure it is on the path used by `repo-session` (or set `REPO_SESSION_TMUXBIN`). Doctor does **not** check remote tmux today — a host can pass doctor and still fail at attach.
+| Action | Observed when the binary is missing |
+|--------|-------------------------------------|
+| `--list` | `no tmux sessions running` on stdout, exit **0** (list-sessions fails quietly) — misleading “empty”, not a hard error |
+| `my-app -p` / attach | Shell errors like `…/tmux: No such file or directory` or `zsh: no such file or directory: /usr/bin/tmux`, exit **127** |
+
+**Doctor:** remote tmux presence is part of the intended doctor surface (so a host cannot “pass doctor” and then fail only at attach). If your installed client is older than that check, treat a green doctor as **not** proof of remote tmux until you upgrade both sides — see [macOS client](#macos-client) and [versions](#client-and-remote-versions-differ).
 
 ### Dropped link and reattach
 
@@ -199,6 +204,23 @@ FAIL versions: local 2.7.4 / remote 9.9.9
 ```
 
 On a TTY, a fix hint may appear: `run: ferry update <host>`.
+
+**What `ferry update` actually does** (from `cmd_update` in `bin/mossferry`):
+
+1. Resolve a host (CLI arg, else `FERRY_HOST_CANDIDATES` / `FERRY_DEFAULT_HOST`).
+2. `git pull --ff-only` in the **local** mossferry clone (`REPO_ROOT` next to the running binary).
+3. Over ssh: `git -C $FERRY_REMOTE_REPO pull --ff-only` when the remote checkout has an upstream; if the remote is a **canonical** checkout with no remotes/upstream, pull is **skipped** (message on stdout) and versions are still printed.
+4. Print `local <v> / remote <v>` from each side’s `VERSION` file.
+
+It does **not** run `npm install`. If either side was installed only with `npm install -g mossferry` and there is no git checkout at `REPO_ROOT` / `FERRY_REMOTE_REPO`, use npm on that side:
+
+```sh
+# laptop (npm-global)
+npm install -g mossferry@latest
+# host (ssh), same idea — or maintain a git clone at FERRY_REMOTE_REPO and use ferry update
+```
+
+For clone + `./install.sh` deploys (symlinks into the repo), `ferry update workstation` is the intended both-ends pull. Re-run `ferry doctor workstation` until versions match.
 
 **BOM / whitespace tolerance (important):**
 
@@ -298,11 +320,44 @@ These gaps are real behaviour, not future promises:
 | **Nonzero only on hard failure** | Exit **1** on **any** `FAIL`, including local mosh missing under `FERRY_TRANSPORT=ssh` and version skew (hop would still work with a warning). |
 | **`--json` machine output** | **Not implemented.** `ferry doctor --json` is not JSON — `--json` becomes the host token. |
 | **Remote probes after connect fail** | **Skipped** (no further ssh). Emits `info remote checks skipped — …` plus the usual remote FAIL/info lines; exit stays **1**. |
-| **Remote tmux present** | **Not checked.** Missing tmux passes doctor if other checks pass, then fails at session time. |
+| **Remote tmux present** | **Intended check** on current main: doctor should surface missing remote tmux so attach is not the first failure. Older published clients may still omit this line — upgrade both ends if doctor never mentions tmux. |
 | **BOM-safe version on hop** | Doctor strips BOM for VERSION compare; the live `--client-version` handshake does not (see [versions](#client-and-remote-versions-differ)). |
 | **Ship policy / “safe to ship”** | Not a doctor surface. See [Quoting and containment](./quoting-and-containment.md) honest-status gaps. |
 
 Related: [Getting started](./getting-started.md), [Command reference](./command-reference.md), [Configuration](./configuration.md).
+
+---
+
+## macOS client
+
+Mac laptops are a first-class **client** (type `ferry` → mosh/ssh → host). The long-running work still lives on the **host**. Measured ground truth on stock Darwin: `/bin/bash` is **3.2.x**, Homebrew tools land under `/opt/homebrew`, and Linux-only utilities (`flock`, `ss`, `/proc`) are absent.
+
+### Install (laptop)
+
+```sh
+brew install mosh
+npm install -g mossferry
+# or: clone + ./install.sh  (symlinks into the clone; ferry update can git-pull)
+ferry --help
+ferry doctor <host>
+```
+
+| Tool | Laptop? | Why |
+|------|---------|-----|
+| `mosh` | **Yes** (default transport) | `bin/mossferry` launches `mosh`; doctor FAILs on missing local mosh even if you later set `FERRY_TRANSPORT=ssh` |
+| `ssh` | Yes | Always used for `--list`, pre-validate, doctor remote probes, and `FERRY_TRANSPORT=ssh` |
+| `fzf` | **No** (for normal hops) | Picker runs **on the host** inside `repo-session` |
+| `tmux` | **No** (for normal hops) | All `tmux` calls are remote; brew-install tmux only if you run `repo-session` on the Mac |
+| `flock` | No | Linux util-linux; claim locks are a host concern |
+
+### Known limitations
+
+- **Stock bash 3.2.** `lib/green-ui.sh` self-describes as a bash **≥4** UI library. The client loads it with a **fallback** when sourcing fails or the kit is missing (`_ferry_ui_fallbacks` in `bin/mossferry` / `bin/repo-session`) — chrome may degrade to plain ASCII tokens; hops still work.
+- **No `flock` on macOS.** Session claim locking lives in host-side `repo-session`. A Mac used only as a laptop client is fine; a Mac used as the **host** needs a portable lock path (or Linux).
+- **Servers view is host-only.** `lib/servers.sh` discovers listeners with Linux **`ss`** and **`/proc`**. Run `ferry <host> --list-servers` or open the picker servers face **on the host**; do not expect full discovery from a bare Mac userland without those interfaces.
+- **Version skew.** A laptop on an older npm release (e.g. 2.7.3) against a host on 2.8.0 will doctor-FAIL and warn on hop. Sync with the real [update procedure](#client-and-remote-versions-differ) — `ferry update` for clone deploys, `npm install -g mossferry@latest` when you installed via npm.
+
+Contributor regression fence: `tests/test-macos-compat.sh` (static; no Mac required).
 
 ---
 
@@ -327,6 +382,8 @@ PATH=/usr/bin:/bin:/usr/local/bin bash tests/run.sh
 | `test-install.sh` | `install.sh` layout and config seed |
 | `test-ui-ops.sh` | Non-TTY tokens vs TTY chrome for doctor/update/help/validate |
 | `test-fleet-devlog.sh` | Opt-in fleet-devlog emitter, `repo_id`, hermetic XDG |
+| `test-servers.sh` | Servers-view pure functions + fixtures (no live listeners required) |
+| `test-macos-compat.sh` | Static portable-shell fence (bash 3.2 / BSD / no bare `/usr/bin/tmux`) — no Mac required |
 | `test-servers.sh` | `lib/servers.sh` fixtures, fix plans, hermetic `--servers` |
 
 ### Fakes
