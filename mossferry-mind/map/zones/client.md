@@ -5,7 +5,7 @@ tags: [cli, client, mosh, ssh, grok-wrap]
 status: active
 created: 2026-07-21
 updated: 2026-07-30
-verifiedAt: 572e95f6
+verifiedAt: d8df0027
 owns:
   routes: []
   testids: []
@@ -79,7 +79,21 @@ then `realpath` of the parent of that dir — not path string-munging. Hash via
 are missing, the field is **omitted** (never empty/null). Basename is the only
 human-readable fragment; absolute paths never appear in the event.
 
+**Explicit `repo_id=`** is constrained to the contract shape
+`^[A-Za-z0-9._-]+-[0-9a-f]{8}$` — free-form text and path-shaped values are
+**dropped** (field omitted), never written. Machine `config.json` enable is
+**fail-closed**: only the exact object `{"enabled":true}` (whitespace-stripped)
+turns logging on; substring greps and corrupt JSON never enable. Appends
+**refuse** when `events.jsonl` is a symlink (bash `>>` would follow out of the
+state root). Concurrent first-emit `mkdir` races treat EEXIST+dir as success.
+
+**Client hop:** remote argv is shell-quoted (`printf %q` into one remote
+string; mosh uses `bash -lc`) so repo names with spaces/quotes survive OpenSSH
+join. Config load strips a UTF-8 BOM before `source` so `KEY=value` is never a
+command name.
+
 Hermetic tests for this emitter must **not** call the desk `node` shim to
 parse event lines — under a temp `$HOME` the nvm24 wrapper exits 127 and
 `|| echo parse-fail` masks harness failure as product failure. Extract with
-`awk` (see [[tests]], [[2026-07-30-hermetic-home-no-node-shim]]).
+`awk` (see [[tests]], [[2026-07-30-hermetic-home-no-node-shim]],
+[[2026-07-30-harness-vs-assert]]).

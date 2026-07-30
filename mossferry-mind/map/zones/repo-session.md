@@ -4,8 +4,8 @@ summary: "Remote brain (bin/repo-session): fzf/menu session picker + servers fac
 tags: [remote, tmux, picker, fzf, sage, grok]
 status: active
 created: 2026-07-21
-updated: 2026-07-29
-verifiedAt: 07be064f
+updated: 2026-07-30
+verifiedAt: d8df0027
 owns:
   routes: []
   testids: []
@@ -40,28 +40,31 @@ optional **FERRY_LAUNCHERS** hotkeys, in-place kill/rename binds, and
 
 ## Invariants
 
-None claimed yet on seed. Candidates for later verification:
-
+- **Repo tokens are path-safe:** `_ferry_repo_token_ok` rejects `/`, `..`, and
+  non-basename shapes before joining with `FERRY_REPO_BASE`. `validate_repo`
+  and attach paths refuse traversal; claim lock files use a sanitized
+  basename (`_ferry_claim_lockf`), never raw `$repo` with slashes.
+- **Session filter is fixed-string:** `build_session_rows` /
+  `_list_repo_sessions` never interpolate `$repo` into `grep -E` (dots in
+  `o'neil-file.txt` must not match `o'neil-fileXtxt`).
+- **create_repo self-heals:** if `git init` fails, an empty non-git directory
+  is removed so retry is not blocked by "already exists".
+- Scoped `--list <repo>` validates the repo exists (vanished trees are not
+  silent empty success).
 - Default action is the picker; attach-primary is `--primary` / `-p`.
 - Zero live sessions for `ferry <host> <repo>` fast-path creates + attaches
   primary without showing the empty picker.
 - `ctrl-x` / `ctrl-r` reserved (kill/rename); not valid launcher keys.
 - fzf kill/rename binds use full-line `{}` + tab-split for the session name
-  (not `n="{1}"`). Modern fzf already shell-quotes placeholders; wrapping
-  `{1}` in extra quotes made kill target `'name'` and fail silently. Full-line
-  extract also keeps trailing-space names that field `{1}` would strip.
-  `picker_kill` strips one layer of wrapping quotes as defense-in-depth.
+  (not `n="{1}"`).
 - Main picker preview uses `--picker-preview` (sage chrome optional + capture);
-  synthetic rows never call bare `capture-pane -t ''` (cycle-to-➕ no self-mirror).
+  synthetic rows never call bare `capture-pane -t ''`.
 - Optional **FERRY_SAGE** hybrid wire: when `sage` on PATH and not `off`, preview
   shows `sage about --tmux` facts/judge lines; **⚖ new judge…** runs
   `sage judge run --fleet|--repo`.
 - Create path: destination first, then nested start menu when
-  `FERRY_START_MENU` or launcher cmds are non-empty; hotkey-armed `startcmd`
-  skips the menu.
-- Live Grok panes badge wallet from `GROK_HOME` (`g:delieta:…` /
-  `g:muslewski:…`, cmd `grok[wallet]`) so dual-company hosts can tell identities
-  apart in the picker. Linux `/proc` only; silent empty on other OS.
+  `FERRY_START_MENU` or launcher cmds are non-empty.
+- Live Grok panes badge wallet from `GROK_HOME` (Linux `/proc` only).
 
 ## Lineage
 
