@@ -1862,49 +1862,48 @@ main() {
     fi
     cat <<EOF
 ${S}Usage${Z}
-  repo-session [repo] [flags]   remote brain for mossferry (picker default)
+  repo-session [repo] [flags]   host brain for mossferry (picker, attach, list)
+
+  Runs on the machine that owns the repos and tmux. The laptop client (ferry)
+  invokes this for you; call it directly only when debugging on the host.
+
+${S}Primary commands${Z}
+  repo-session                      global session picker
+  repo-session <repo>               picker scoped to that repo
+  repo-session <repo> -p            attach/create primary session
+  repo-session --list               list sessions (with <repo>: scoped)
+  repo-session --servers            listeners (14-col TSV); add --json
+  repo-session --validate <repo>    exit 0 if dir under FERRY_REPO_BASE (no tmux)
+  repo-session --help               this help
+
+${S}Happy path${Z}
+  repo-session --validate my-app    # shape + directory under FERRY_REPO_BASE
+  repo-session my-app -p            # attach/create primary tmux session
+  repo-session --list               # numbered list, then exit
 
 ${S}Picker keys${Z}
-  enter=attach · ➕ new → nested start menu (default / AI CLIs)
-  ctrl-x=kill (instant, no confirm) · ctrl-r=rename · ctrl-s=servers face · esc=quit
+  enter=attach · ➕ new → nested start menu · ctrl-x=kill · ctrl-r=rename
+  ctrl-s=servers face · esc=quit
   Servers face: enter=copy Mac URL · ctrl-f=fix plan · ctrl-s=sessions
-  Kill stays in the picker — spam ctrl-x to clear many sessions fast.
-  Set FERRY_KILL_CONFIRM=1 for single-key y/N confirm before kill.
-  Start menu: FERRY_START_MENU (default claude,grok — generic only).
-  Optional hotkeys: FERRY_LAUNCHERS (empty by default; ctrl-x/ctrl-r/ctrl-s/ctrl-f reserved).
+  Kill stays in the picker (spam ctrl-x). FERRY_KILL_CONFIRM=1 → single-key y/N.
+  Start menu: FERRY_START_MENU (default claude,grok). FERRY_LAUNCHERS optional
+  (reserved: ctrl-x, ctrl-r, ctrl-s, ctrl-f).
 
-${S}Flags${Z}
-  (none)             open the session picker (scoped to <repo> when given)
-  --primary, -p      attach the repo's primary session, creating it if missing
-  --new              force a fresh session  (repo, repo-2, repo-3, ...)
-  --claude, -c       run \`claude\` in newly-created sessions  (default: neofetch)
-  --list, -l         list sessions and exit  (with <repo>: just that repo;
-                     without <repo>: every tmux session on the host)
-  --resume [N|name]  no arg -> session picker; N -> the Nth session;
-                     name -> attach that exact session (e.g. --resume syndcast-2)
-  --resume-closed    reattach one EXISTING session per caller, distinct (atomic);
-                     prefers detached, else takes over a stale-attached one. Across
-                     a ghostty-grid each pane gets a different one; extras stay BLANK.
-  --resume-or-new    like --resume-closed, but fill leftover panes with fresh
-                     sessions (honouring --claude / -- cmd) -- so the grid fills.
-  --client-version V version handshake (set by mossferry client)
-  --validate <repo>  check repo exists under FERRY_REPO_BASE (no tmux; used by client)
-  --servers          list live listeners (14-col TSV); add --json for agents
-  --help, -h         print this help and exit
-  -- cmd...          custom startup command for newly-created sessions
+${S}More flags${Z}
+  --primary, -p      attach primary, create if missing (needs <repo>)
+  --new              fresh session (repo, repo-2, …) (needs <repo>)
+  --claude, -c       new sessions start \`claude\` (default: neofetch)
+  --list, -l         list sessions and exit
+  --resume [N|name]  bare → picker; N → Nth; name → exact attach
+  --resume-closed    claim one EXISTING session (atomic; prefers detached)
+  --resume-or-new    claim or create until the grid fills
+  --client-version V version handshake (set by ferry client; warn only)
+  --validate <repo>  check repo under FERRY_REPO_BASE (no tmux)
+  --servers          live listeners TSV; --json for agents
+  -- cmd...          custom start command for newly created sessions
 
-${S}Config${Z}
-  ~/.config/mossferry/config  (FERRY_* keys; env overrides file)
-  FERRY_REPO_BASE, FERRY_DEFAULT_CMD, FERRY_START_MENU, FERRY_LAUNCHERS, FERRY_BANNER, …
-
-${S}Examples${Z}
-  ferry manjaro-remote                            global session picker
-  ferry manjaro-remote syndcast                   picker scoped to syndcast
-  ferry manjaro-remote syndcast --primary         attach/create the primary session
-  ferry manjaro-remote syndcast --new --claude    fresh session running claude
-  ferry manjaro-remote syndcast --list            list syndcast's sessions
-  ferry manjaro-remote --resume                   pick any session
-  ghostty-grid -8 -- ferry manjaro-remote syndcast --resume-or-new --claude
+${S}Full reference${Z}
+  docs/command-reference.md · docs/configuration.md · config.example
 
 mossferry ${ver} · the green ferry between your machines
 EOF
