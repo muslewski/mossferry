@@ -1,0 +1,24 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    devDependencies:
+      memory-atlas:
+        specifier: 0.5.3
+        version: 0.5.3
+
+packages:
+
+  memory-atlas@0.5.3:
+    resolution: {integrity: sha512-3iFxQW1JEczJQ9+EaGj7diKhNiuaiuUBXMZj9knsWbIfG+ncwiSD+dyyq7coXNMaH0LnkPOsbTLkkHxwykyc9Q==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+snapshots:
+
+  memory-atlas@0.5.3: {}
