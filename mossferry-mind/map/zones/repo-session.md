@@ -5,7 +5,7 @@ tags: [remote, tmux, picker, fzf, sage, grok]
 status: active
 created: 2026-07-21
 updated: 2026-10-15
-verifiedAt: 55a2999b
+verifiedAt: cb158b0e
 owns:
   routes: []
   testids: []
@@ -61,7 +61,11 @@ optional **FERRY_LAUNCHERS** hotkeys, in-place kill/rename binds, and
 - Default action is the picker; attach-primary is `--primary` / `-p`.
 - Zero live sessions for `ferry <host> <repo>` fast-path creates + attaches
   primary without showing the empty picker.
-- `ctrl-x` / `ctrl-r` reserved (kill/rename); not valid launcher keys.
+- `ctrl-x` / `ctrl-r` / `ctrl-s` / `ctrl-f` reserved; not valid launcher keys.
+- **Launcher keys never shadow Enter:** `parse_launchers` drops terminal aliases
+  (`ctrl-m` = Enter, `ctrl-j`, `ctrl-i` = Tab, `ctrl-h` = Backspace) and
+  `ctrl-c`/`ctrl-z`. With `--expect=ctrl-m` fzf reported every Enter as that key
+  and attach did nothing (2026-10-15). Any key on an existing session attaches.
 - fzf kill/rename binds use full-line `{}` + tab-split for the session name
   (not `n="{1}"`).
 - Main picker preview uses `--picker-preview` (sage chrome optional + capture);
