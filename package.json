@@ -55,6 +55,6 @@
   },
   "homepage": "https://mossferry.muslewski.com/",
   "devDependencies": {
-    "memory-atlas": "0.5.3"
+    "memory-atlas": "0.5.4"
   }
 }
