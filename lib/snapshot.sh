@@ -135,8 +135,14 @@ snap_candidates() {
 snap_marker()  { printf '%s/restore-done-%s\n' "$(snap_state_dir)" "$(basename "$1" .tsv)"; }
 snap_dismiss() { mkdir -p "$(snap_state_dir)" && : >"$(snap_marker "$1")"; }
 
+# Epoch → "Thu 18:48". bash ≥4.2 formats it itself; older bash is macOS's 3.2,
+# where BSD `date -r <epoch>` works (GNU date -r would read a file instead).
 snap_fmt_time() {
-  date -d "@$1" '+%a %H:%M' 2>/dev/null || date -r "$1" '+%a %H:%M' 2>/dev/null || printf '%s\n' "$1"
+  if (( BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 2) )); then
+    printf '%(%a %H:%M)T\n' "$1"
+  else
+    date -r "$1" '+%a %H:%M' 2>/dev/null || printf '%s\n' "$1"
+  fi
 }
 
 snap_restore_label() {
