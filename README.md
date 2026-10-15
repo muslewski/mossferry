@@ -179,6 +179,16 @@ repo-session: no repo 'typoo' under ~/Repositories — pick one below, or run 'f
 
 ---
 
+## Survive a reboot
+
+tmux dies with the machine; your Claude Code conversations don't. Turn on snapshots once per host:
+
+```sh
+repo-session --snapshot-install   # records every tmux window + Claude conversation id each minute
+```
+
+After a reboot the picker offers **`♻ restore N sessions from <time>`**: each session comes back in its folder, Claude windows with `claude --resume <id>`, spaced out so the host stays usable. See [After a reboot](./docs/troubleshooting.md#after-a-reboot).
+
 ## Servers view
 
 Second face of the picker (**servers face**, toggle with `ctrl-s`): **what is listening on the host, and can a Mac browser reach it?** Discovery is read-only.

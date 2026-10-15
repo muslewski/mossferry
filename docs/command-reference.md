@@ -287,6 +287,26 @@ Repo-bearing launches run two gates before mosh:
 
 ---
 
+## Snapshot and restore (host)
+
+```sh
+repo-session --snapshot-install            # systemd user timer: snapshot every 60 s (prints a crontab line without systemd)
+repo-session --snapshot-install --remove   # turn it off
+repo-session --snapshot                    # one snapshot now
+repo-session --restore --dry-run           # what a restore would do
+repo-session --restore                     # restore every pre-boot session that is not live, in the foreground
+```
+
+A snapshot records every tmux window: session, window name, folder and, for windows running Claude Code, the conversation id. The id comes from `~/.claude/sessions/<pid>.json`, which Claude Code deletes when the process ends, so it is joined by tmux pane id while the session is alive.
+
+After a reboot the picker shows **`♻ restore N sessions from <day time>`** above `➕ new session…`:
+
+- **enter** opens a multi-select of those sessions, all selected, with a preview of their windows. **tab** toggles, **enter** restores them in the background (log: `~/.local/state/mossferry/restore.log`), **esc** goes back.
+- **ctrl-x** on the row dismisses it for that snapshot. Nothing is killed.
+- The numbered fallback menu shows the same row as `r)`.
+
+Restore recreates each session with its windows and folders. Claude windows get `claude --resume <id>`; every other window gets `FERRY_DEFAULT_CMD`, never the command that was running before. Resumes are spaced out and wait for load (see [configuration](configuration.md#snapshot-and-restore-host)). Then every executable in `~/.config/mossferry/restore.d/` runs in name order, with the snapshot path as `$1` and the restored session names in `FERRY_RESTORED_SESSIONS`. Use those hooks for anything outside tmux: containers, dev servers.
+
 ## Servers view
 
 ### One-shot

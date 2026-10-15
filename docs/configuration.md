@@ -79,6 +79,21 @@ Doctor always checks for a **local mosh binary**, even when `FERRY_TRANSPORT=ssh
 | `FERRY_KILL_CONFIRM` | `0` (off) | host | Instant kill on `ctrl-x` | Set to `1` for single-key y/N confirm before kill |
 | `FERRY_SAGE` | `auto` | host | — | `auto`/`on`: wire agentic-sage when `sage` is on PATH (picker preview one-liners + judge entry). `off`: hard-off even if installed |
 
+## Snapshot and restore (host)
+
+Turned on with `repo-session --snapshot-install`. See [After a reboot](troubleshooting.md#after-a-reboot).
+
+| Key | Default | Side | Notes |
+|-----|---------|------|-------|
+| `FERRY_STATE_DIR` | `$XDG_STATE_HOME/mossferry` (`~/.local/state/mossferry`) | host | Holds `snapshots/`, `restore.log` and `restore-done-*` markers |
+| `FERRY_SNAPSHOT_KEEP` | `200` | host | Newest snapshot files kept. Unchanged sessions rewrite the newest file instead of adding one |
+| `FERRY_RESTORE_STAGGER` | `15` | host | Seconds between Claude resumes. Each resume loads a full conversation; starting many at once has pushed load past 30 |
+| `FERRY_RESTORE_MAX_LOAD` | CPU count | host | Restore waits while the 1-minute load average is above this |
+| `FERRY_RESTORE_LOAD_WAIT` | `300` | host | Longest wait for load per step, in seconds, before restore continues anyway |
+| `FERRY_RESTORE_CLAUDE_CMD` | `claude --resume` | host | Sent to each Claude window, followed by its conversation id |
+
+Restore also reads `FERRY_HIDDEN_WINDOW_GLOB`: windows matching it are not replayed (tools such as status-herald recreate their `_curtain` window themselves), except when one is a session's only window.
+
 ---
 
 ## Servers view

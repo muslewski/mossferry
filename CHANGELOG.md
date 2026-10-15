@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.9.0] — 2026-10-15
+
+### Added
+
+- **Snapshot + restore: a reboot is one picker press.** `repo-session --snapshot-install`
+  adds a systemd user timer that records every tmux window every 60 s (session,
+  window, folder and, for Claude Code windows, the conversation id from
+  `~/.claude/sessions/<pid>.json`, joined by pane id). After a reboot the picker
+  shows `♻ restore N sessions from <time>`. Enter picks sessions (all preselected)
+  and restores them in the background with `claude --resume <id>`, spaced out and
+  load-aware. ctrl-x dismisses the row. Also `repo-session --restore [--dry-run]`,
+  `--snapshot`, and `~/.config/mossferry/restore.d/` hooks for anything outside
+  tmux. New keys: `FERRY_STATE_DIR`, `FERRY_SNAPSHOT_KEEP`, `FERRY_RESTORE_STAGGER`,
+  `FERRY_RESTORE_MAX_LOAD`, `FERRY_RESTORE_LOAD_WAIT`, `FERRY_RESTORE_CLAUDE_CMD`.
+
 ## [2.8.0] — 2026-07-30
 
 ### Changed
