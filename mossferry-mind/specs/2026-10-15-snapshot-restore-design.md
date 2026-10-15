@@ -71,7 +71,8 @@ picker row.
 - **Boot id:** Linux `/proc/sys/kernel/random/boot_id`; macOS the `sec` value
   of `sysctl -n kern.boottime`; otherwise `unknown`.
 - **Churn control:** when the rows equal the newest snapshot from the same
-  boot, `touch` it instead of writing a new file. Keep the newest
+  boot, rewrite that file's `# taken` line in place instead of writing a new
+  file. (No `touch`: the label time then needs no portable `stat`.) Keep the newest
   `FERRY_SNAPSHOT_KEEP` files (default 200). No tmux server, or zero sessions,
   means no write.
 - The picker also takes a snapshot in the background each time it opens, so a
@@ -98,7 +99,8 @@ now. Pick is per session; all windows of a picked session come back.
 
 - `print_picker_rows` emits `♻ restore N sessions from <Day HH:MM>` before
   `➕ new session…` when there are candidates and no dismiss marker
-  (`state/restore-dismissed-<boot>`) exists.
+  (`state/restore-done-<snapshot-epoch>`) exists. It is keyed by snapshot, not
+  boot id, so it also works when the boot id is `unknown`.
 - **Enter** opens a second fzf: `--multi`, every candidate preselected, with a
   preview listing windows, folders and Claude names. Enter starts the restore
   in the background (`nohup repo-session --restore-run <snapshot> <names…>`,
@@ -150,9 +152,9 @@ Documented in `config.example` and `docs/configuration.md`.
 
 ## Testing
 
-`tests/test-snapshot.sh`, using `fake-tmux` (extended to cover
-`list-panes -a -F`, `new-window` and `#{start_time}`), with a temp HOME and
-state dir:
+`tests/test-snapshot.sh` sources `lib/snapshot.sh` directly with a test-local
+tmux stub (pane model, `-P` targets, call log). `fake-tmux` is tuned for the
+picker and has no pane model. Temp HOME and state dir:
 
 - snapshot rows from fake panes plus a fixture sessions json (live pid = `$$`),
   a stale pid ignored, a renamed session still joined by pane id
