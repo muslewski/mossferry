@@ -153,7 +153,7 @@ Default when you omit `--list` / `--primary` / `--new` / claim flags:
 
 **Preview:** `tmux capture-pane` of the selected session. **Banner:** green ferry art when `FERRY_BANNER` is on (default). **No fzf:** numbered menu (`n` new, `q` quit).
 
-**AI launchers:** optional `FERRY_LAUNCHERS` (`key:command` pairs). Empty by default. Reserved: `ctrl-x`, `ctrl-r`, `ctrl-s`, `ctrl-f`. On an existing-session row, launcher keys reload the list (no attach).
+**AI launchers:** optional `FERRY_LAUNCHERS` (`key:command` pairs). Empty by default. Reserved: `ctrl-x`, `ctrl-r`, `ctrl-s`, `ctrl-f`; terminal aliases `ctrl-m` (Enter), `ctrl-j`, `ctrl-i` (Tab), `ctrl-h` (Backspace), `ctrl-c`, `ctrl-z` are ignored. On an existing-session row a launcher key attaches, same as Enter.
 
 **Zero sessions for a scoped repo** (fast path — creates and attaches primary):
 

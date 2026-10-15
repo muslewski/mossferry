@@ -70,7 +70,7 @@ Runs **on the host** inside the interactive hop.
 
 **Preview:** `tmux capture-pane` of the selected session (colour). **Banner:** green ferry art in the fzf header when `FERRY_BANNER` is on (default). **No fzf:** numbered menu (`n` new, `q` quit; global create also offers new-repo / home-session).
 
-**AI launchers:** optional `FERRY_LAUNCHERS` (`key:command` pairs). Empty by default. Reserved: `ctrl-x`, `ctrl-r`, `ctrl-s`, `ctrl-f`. On an existing-session row, launcher keys reload the list (no attach).
+**AI launchers:** optional `FERRY_LAUNCHERS` (`key:command` pairs). Empty by default. Reserved: `ctrl-x`, `ctrl-r`, `ctrl-s`, `ctrl-f`; terminal aliases `ctrl-m` (Enter), `ctrl-j`, `ctrl-i` (Tab), `ctrl-h` (Backspace), `ctrl-c`, `ctrl-z` are ignored. On an existing-session row a launcher key attaches, same as Enter.
 
 **Grok wrap** is laptop-side (`FERRY_WRAP`), not a picker key. See [Grok + ferry](./guides/grok-and-ferry.md).
 

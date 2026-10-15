@@ -242,8 +242,14 @@ parse_launchers() {
     key="${pair%%:*}"
     cmd="${pair#*:}"
     [[ -z "$key" || -z "$cmd" ]] && continue
-    # Reserved for kill/rename in the main picker.
-    [[ "$key" == "ctrl-x" || "$key" == "ctrl-r" || "$key" == "ctrl-s" || "$key" == "ctrl-f" ]] && continue
+    case "$key" in
+      # Reserved for kill / rename / servers face / fix in the main picker.
+      ctrl-x|ctrl-r|ctrl-s|ctrl-f) continue ;;
+      # Terminal aliases and signals: ctrl-m IS Enter (fzf --expect=ctrl-m swallowed
+      # every Enter, so attach silently did nothing), ctrl-j newline, ctrl-i Tab,
+      # ctrl-h Backspace; ctrl-c / ctrl-z never reach fzf as plain keys.
+      ctrl-m|ctrl-j|ctrl-i|ctrl-h|ctrl-c|ctrl-z) continue ;;
+    esac
     # Valid fzf-bindable keys only.
     if [[ "$key" =~ ^ctrl-[a-z]$ ]] \
        || [[ "$key" =~ ^alt-[a-z]$ ]] \
@@ -1817,11 +1823,8 @@ run_picker() {
 
     [[ -z "$name" ]] && exit 130
 
-    # Launcher keys on existing-session rows: ignore, reload.
-    if [[ -n "$key" ]] && launcher_cmd "$key" >/dev/null 2>&1; then
-      continue
-    fi
-    # Enter (or empty expect key) → attach
+    # Any key on an existing session attaches — a launcher key only means
+    # something on the ➕ row, and no key may ever make Enter a no-op.
     exec "$TMUXBIN" attach -t "=$name"
   done
 }
@@ -2201,7 +2204,7 @@ ${S}Picker${Z}
   Servers face: enter=copy Mac URL · ctrl-f=fix plan · ctrl-s=sessions
   Kill stays in the picker (spam ctrl-x). FERRY_KILL_CONFIRM=1 → single-key y/N.
   Start menu: FERRY_START_MENU (default claude,grok). FERRY_LAUNCHERS optional
-  (reserved: ctrl-x, ctrl-r, ctrl-s, ctrl-f).
+  (reserved: ctrl-x, ctrl-r, ctrl-s, ctrl-f; never ctrl-m/j/i/h/c/z — terminal aliases).
 
 ${S}Flags${Z}
   --primary, -p      attach primary, create if missing (needs <repo>)

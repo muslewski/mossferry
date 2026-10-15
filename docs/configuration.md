@@ -73,7 +73,7 @@ Doctor always checks for a **local mosh binary**, even when `FERRY_TRANSPORT=ssh
 |-----|---------|------|--------------------|-------|
 | `FERRY_DEFAULT_CMD` | `neofetch` | host | Used as start command for new sessions when neither `--claude` nor `-- cmd` is set | Any shell command string sent via `tmux send-keys` |
 | `FERRY_START_MENU` | `claude,grok` | host | Empty string disables the nested create menu | Comma-separated start commands after ➕ destination pick; first row is always “default (no AI)” = `FERRY_DEFAULT_CMD` |
-| `FERRY_LAUNCHERS` | empty | host | Feature off (menu only) | `key:command` pairs, comma-separated; first colon splits. Reserved keys: `ctrl-x`, `ctrl-r`, `ctrl-s`, `ctrl-f` |
+| `FERRY_LAUNCHERS` | empty | host | Feature off (menu only) | `key:command` pairs, comma-separated; first colon splits. Reserved keys: `ctrl-x`, `ctrl-r`, `ctrl-s`, `ctrl-f`. Ignored terminal aliases: `ctrl-m` (= Enter), `ctrl-j`, `ctrl-i` (= Tab), `ctrl-h` (= Backspace), `ctrl-c`, `ctrl-z` |
 | `FERRY_BANNER` | `on` | both | — | `off` or `0` hides green ferry art in `--help` and the picker |
 | `FERRY_HIDDEN_WINDOW_GLOB` | `_*` | host | — | Windows matching this glob are skipped in picker names/previews (default hides underscore-prefixed windows) |
 | `FERRY_KILL_CONFIRM` | `0` (off) | host | Instant kill on `ctrl-x` | Set to `1` for single-key y/N confirm before kill |

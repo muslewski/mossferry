@@ -1240,6 +1240,24 @@ t54() {
   teardown
 }
 
+# ---- t55: terminal-alias keys rejected (ctrl-m IS Enter: fzf --expect=ctrl-m
+# swallowed every Enter, so attach did nothing) ----
+t55() {
+  setup
+  local out
+  export FERRY_LAUNCHERS="ctrl-m:grok-x,ctrl-j:a,ctrl-i:b,ctrl-h:c,ctrl-c:d,ctrl-z:e,ctrl-a:claude"
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  out=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    parse_launchers
+    printf 'KEYS:%s\n' "${LAUNCHER_KEYS[*]-}"
+  ) 2>/dev/null || true
+  if [[ "$out" == "KEYS:ctrl-a" ]]; then ok t55; else fail t55 "out=[$out]"; fi
+  teardown
+}
+
 export TEST_TMPDIR_ROOT="${TMPDIR:-/tmp}"
 set +e
 t1; t2; t3; t4; t5; t6; t7; t8; t9; t10; t11; t12
@@ -1253,5 +1271,5 @@ t39
 t40; t41; t42
 t43; t44; t45
 t46; t47; t48; t49; t50
-t51; t52; t53; t54
+t51; t52; t53; t54; t55
 exit $FAIL

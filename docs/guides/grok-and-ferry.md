@@ -64,13 +64,15 @@ When you keep two Grok identities on the host, put **wrappers** (not plain `grok
 ```sh
 # ~/.config/mossferry/config  (host-side; never commit wallets into the OSS repo)
 FERRY_START_MENU="claude,grok-delieta,grok-muslewski"
-FERRY_LAUNCHERS="ctrl-a:claude,ctrl-g:grok-delieta,ctrl-m:grok-muslewski"
+FERRY_LAUNCHERS="ctrl-a:claude,ctrl-g:grok-delieta,ctrl-w:grok-muslewski"
 ```
 
 | Chord / menu entry | Wallet | Sessions live under |
 |--------------------|--------|---------------------|
 | `grok-delieta` / `ctrl-g` | company | `~/.grok-profiles/delieta/sessions/` |
-| `grok-muslewski` / `ctrl-m` | personal/work | `~/.grok-profiles/muslewski/sessions/` |
+| `grok-muslewski` / `ctrl-w` | personal/work | `~/.grok-profiles/muslewski/sessions/` |
+
+Not `ctrl-m`: terminals send `ctrl-m` for Enter, so binding it made every Enter in the picker a launcher press. mossferry ignores it (and `ctrl-j`, `ctrl-i`, `ctrl-h`, `ctrl-c`, `ctrl-z`).
 
 **Switching wallets is create-time, not attach-time.** Attaching an old pane resumes that process and its context (and can feel “dumb” after multi-day threads). Fresh brain:
 

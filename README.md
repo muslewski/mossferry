@@ -167,7 +167,7 @@ Columns: index, session name, active window, window count, attached/detached, cu
 | `ctrl-s` | toggle **servers** face (see below) |
 | `esc` | quit picker (exit 130 → hop ends) |
 
-Start menu defaults to `claude,grok` (`FERRY_START_MENU`). Optional hotkeys: `FERRY_LAUNCHERS` (empty by default). `ctrl-x` / `ctrl-r` / `ctrl-s` / `ctrl-f` are reserved.
+Start menu defaults to `claude,grok` (`FERRY_START_MENU`). Optional hotkeys: `FERRY_LAUNCHERS` (empty by default). `ctrl-x` / `ctrl-r` / `ctrl-s` / `ctrl-f` are reserved; `ctrl-m` (= Enter) and other terminal aliases are ignored.
 
 **Zero sessions for a repo:** `ferry workstation my-app` creates and attaches the primary session (named like the repo) instead of showing an empty list.
 
