@@ -111,6 +111,7 @@ eq "resume sent to returned target" "1" "$(grep -c '^send-keys -t synd1:0 claude
 eq "dotted name restored" "1" "$(grep -c '^new-session .* -s o.neil ' "$STUB_LOG")"
 eq "hooks ran in order, failure did not stop next" "h1 $snapf [synd1 o.neil]
 h2" "$(cat "$T/hooks")"
+eq "log has no duplicate lines in quiet mode" "0" "$(: >"$(snap_log_file)"; FERRY_RESTORE_QUIET=1 snap_log hi 2>"$T/err"; wc -c <"$T/err" | tr -d ' ')"
 eq "marker written" "yes" "$([ -e "$(snap_marker "$snapf")" ] && echo yes)"
 : >"$STUB_LOG"; export STUB_SESSIONS="synd1"
 snap_restore_run "$snapf" synd1 2>/dev/null

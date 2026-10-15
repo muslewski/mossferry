@@ -156,9 +156,14 @@ snap_restore_label() {
 }
 
 snap_log_file() { printf '%s/restore.log\n' "$(snap_state_dir)"; }
+# Log to restore.log and stderr. FERRY_RESTORE_QUIET=1 (the picker's background
+# runner, whose stderr already goes to restore.log) logs to the file only.
 snap_log() {
+  local line
   mkdir -p "$(snap_state_dir)" 2>/dev/null
-  printf '%s %s\n' "$(date '+%F %T')" "$*" | tee -a "$(snap_log_file)" >&2
+  line="$(date '+%F %T') $*"
+  printf '%s\n' "$line" >>"$(snap_log_file)"
+  [[ -n "${FERRY_RESTORE_QUIET:-}" ]] || printf '%s\n' "$line" >&2
 }
 
 # Hidden windows (FERRY_HIDDEN_WINDOW_GLOB, default _*) are skipped: other tools
