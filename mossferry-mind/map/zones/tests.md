@@ -4,8 +4,8 @@ summary: "Bash test harness (tests/): run.sh drives test-mossferry, test-repo-se
 tags: [tests, harness, fakes]
 status: active
 created: 2026-07-21
-updated: 2026-07-30
-verifiedAt: 69e11f9b
+updated: 2026-10-15
+verifiedAt: 55a2999b
 owns:
   routes: []
   testids: []
@@ -24,6 +24,13 @@ sources: []
 ---
 
 ## What this is
+
+`tests/test-snapshot.sh` sources `lib/snapshot.sh` directly with a
+test-local tmux stub (pane model, `-P` targets, call log) rather than
+`fake-tmux`, which has no pane model. It covers rows/join, take/rotate,
+pre-boot pick, candidates/label, restore runner, hooks, lock and timer
+install. `test-repo-session.sh` t51–t54 cover the ♻ row, dismiss,
+`--restore --dry-run` and help.
 
 `tests/test-servers.sh` covers `lib/servers.sh` fixture-driven discovery,
 mac_state, fix_plan, agent-status rows, and hermetic `--servers` fixture rows

@@ -1,7 +1,7 @@
 ---
 type: plan
 summary: "Implements snapshot + restore: lib/snapshot.sh (rows, take, rotate, pre-boot pick, candidates, restore runner, hooks, timer install), repo-session flags and the ♻ picker row, tests/test-snapshot.sh, docs and 2.9.0."
-status: active
+status: done
 created: 2026-10-15
 ---
 
