@@ -2006,7 +2006,6 @@ main() {
                           if [[ "${1:-}" == --remove ]]; then snap_install_mode=remove; shift; fi ;;
       --restore)          restore_do=1; shift
                           if [[ "${1:-}" == --dry-run ]]; then restore_dry=1; shift; fi ;;
-      --dry-run)          restore_dry=1; shift ;;
       # Internal: background runner started by the ♻ row, and its fzf preview.
       --restore-run)      restore_run_file="${2:-}"; shift 2 || shift
                           restore_run_names=("$@"); set -- ;;

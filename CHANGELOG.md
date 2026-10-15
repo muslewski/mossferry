@@ -18,8 +18,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and restores them in the background with `claude --resume <id>`, spaced out and
   load-aware. ctrl-x dismisses the row. Also `repo-session --restore [--dry-run]`,
   `--snapshot`, and `~/.config/mossferry/restore.d/` hooks for anything outside
-  tmux. New keys: `FERRY_STATE_DIR`, `FERRY_SNAPSHOT_KEEP`, `FERRY_RESTORE_STAGGER`,
-  `FERRY_RESTORE_MAX_LOAD`, `FERRY_RESTORE_LOAD_WAIT`, `FERRY_RESTORE_CLAUDE_CMD`.
+  tmux. New keys: `FERRY_STATE_DIR`, `FERRY_RESTORE_STAGGER`.
+
+### Fixed
+
+- **Enter attaches again with a `ctrl-m` launcher.** Terminals send ctrl-m for
+  Enter, so `FERRY_LAUNCHERS="…,ctrl-m:…"` (as the Grok guide suggested) turned
+  every Enter into a launcher press that existing rows ignored. Terminal-alias
+  keys (`ctrl-m/j/i/h`, `ctrl-c/z`) are now rejected, and any key on an existing
+  session attaches.
 
 ## [2.8.0] — 2026-07-30
 

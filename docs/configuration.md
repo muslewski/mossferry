@@ -86,11 +86,9 @@ Turned on with `repo-session --snapshot-install`. See [After a reboot](troublesh
 | Key | Default | Side | Notes |
 |-----|---------|------|-------|
 | `FERRY_STATE_DIR` | `$XDG_STATE_HOME/mossferry` (`~/.local/state/mossferry`) | host | Holds `snapshots/`, `restore.log` and `restore-done-*` markers |
-| `FERRY_SNAPSHOT_KEEP` | `200` | host | Newest snapshot files kept. Unchanged sessions rewrite the newest file instead of adding one |
-| `FERRY_RESTORE_STAGGER` | `15` | host | Seconds between Claude resumes. Each resume loads a full conversation; starting many at once has pushed load past 30 |
-| `FERRY_RESTORE_MAX_LOAD` | CPU count | host | Restore waits while the 1-minute load average is above this |
-| `FERRY_RESTORE_LOAD_WAIT` | `300` | host | Longest wait for load per step, in seconds, before restore continues anyway |
-| `FERRY_RESTORE_CLAUDE_CMD` | `claude --resume` | host | Sent to each Claude window, followed by its conversation id |
+| `FERRY_RESTORE_STAGGER` | `15` | host | Seconds between Claude resumes. Each resume loads a full conversation; starting many at once has pushed load past 30. Each step also waits (up to 300 s) while the 1-minute load is above the CPU count |
+
+The newest 200 snapshots are kept; an unchanged session list rewrites the newest file instead of adding one.
 
 Restore also reads `FERRY_HIDDEN_WINDOW_GLOB`: windows matching it are not replayed (tools such as status-herald recreate their `_curtain` window themselves), except when one is a session's only window.
 

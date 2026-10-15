@@ -27,8 +27,8 @@ sources: []
 
 ## What this is
 
-`config.example` documents the six snapshot/restore keys (`FERRY_STATE_DIR`,
-`FERRY_SNAPSHOT_KEEP`, `FERRY_RESTORE_*`). The timer itself is installed by
+`config.example` documents the two snapshot/restore keys (`FERRY_STATE_DIR`,
+`FERRY_RESTORE_STAGGER`); keep-count, load ceiling and resume command are fixed. The timer itself is installed by
 `repo-session --snapshot-install` (systemd user units), not by `install.sh`.
 
 Also ships `config.example.servers` (TSV declaration template for the

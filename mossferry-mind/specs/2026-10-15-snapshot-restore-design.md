@@ -73,7 +73,7 @@ picker row.
 - **Churn control:** when the rows equal the newest snapshot from the same
   boot, rewrite that file's `# taken` line in place instead of writing a new
   file. (No `touch`: the label time then needs no portable `stat`.) Keep the newest
-  `FERRY_SNAPSHOT_KEEP` files (default 200). No tmux server, or zero sessions,
+  200 files. No tmux server, or zero sessions,
   means no write.
 - The picker also takes a snapshot in the background each time it opens, so a
   host without the timer still has a recent one.
@@ -118,12 +118,11 @@ now. Pick is per session; all windows of a picked session come back.
   `new-window -t <name>: -n … -c …` for the rest. A cwd that no longer exists
   falls back to `$HOME`. Commands go via `send-keys -t "<name>:<idx>"`
   (never `=`-prefixed; that fails as a pane target):
-  - claude: `${FERRY_RESTORE_CLAUDE_CMD:-claude --resume} <id>`
+  - claude: `claude --resume <id>`
   - shell: `FERRY_DEFAULT_CMD`
 - **Pacing:** before each Claude window after the first, sleep
   `FERRY_RESTORE_STAGGER` seconds (default 15). Then wait while the 1-minute
-  load is above `FERRY_RESTORE_MAX_LOAD` (default: CPU count), capped at
-  `FERRY_RESTORE_LOAD_WAIT` seconds (default 300), then continue anyway.
+  load is above the CPU count, capped at 300 seconds, then continue anyway.
 - **Hooks:** afterwards, run every executable in `${FERRY_CONFIG_DIR}/restore.d/`
   in lexical order. Each gets the snapshot path as `$1` and the restored names
   in `FERRY_RESTORED_SESSIONS` (space-separated). A failing hook is logged and
@@ -135,8 +134,9 @@ now. Pick is per session; all windows of a picked session come back.
 
 ## Config keys (all optional)
 
-`FERRY_STATE_DIR`, `FERRY_SNAPSHOT_KEEP`, `FERRY_RESTORE_STAGGER`,
-`FERRY_RESTORE_MAX_LOAD`, `FERRY_RESTORE_LOAD_WAIT`, `FERRY_RESTORE_CLAUDE_CMD`.
+`FERRY_STATE_DIR`, `FERRY_RESTORE_STAGGER`. Keep-count (200), load ceiling
+(CPU count, 300 s max wait) and the resume command are fixed: fewer knobs,
+fewer ways to misconfigure a recovery path that runs once a year.
 Documented in `config.example` and `docs/configuration.md`.
 
 ## Error handling

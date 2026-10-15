@@ -61,11 +61,12 @@ eq "identical content rewrites in place" "1" "$(snap_list | wc -l | tr -d ' ')"
 : >"$(snap_dir)/.tmp.123"; : >"$(snap_dir)/notes.txt~"
 eq "junk files ignored by list" "1" "$(snap_list | wc -l | tr -d ' ')"
 for e in 100 200 300; do cp "$f1" "$(snap_dir)/$e.tsv"; done
-FERRY_SNAPSHOT_KEEP=2 snap_rotate
-eq "rotate keeps newest N" "2" "$(snap_list | wc -l | tr -d ' ')"
+for e in $(seq 1000 1199); do : >"$(snap_dir)/$e.tsv"; done
+snap_rotate
+eq "rotate keeps newest 200" "200" "$(snap_list | wc -l | tr -d ' ')"
 eq "rotate keeps the real one" "$f1" "$(snap_list | tail -n 1)"
-STUB_PANES="" snap_take
-eq "no panes → no write" "2" "$(snap_list | wc -l | tr -d ' ')"
+n0="$(snap_list | wc -l | tr -d ' ')"; STUB_PANES="" snap_take
+eq "no panes → no write" "$n0" "$(snap_list | wc -l | tr -d ' ')"
 
 echo "== snap_preboot / candidates / label =="
 export FERRY_BOOT_ID="boot-B"
@@ -83,7 +84,7 @@ eq "unknown boot → older than tmux start" "$f1" "$(FERRY_BOOT_ID=unknown STUB_
 eq "unknown boot, snapshot after start → none" "" "$(FERRY_BOOT_ID=unknown STUB_START=1 snap_preboot)"
 
 echo "== restore =="
-export FERRY_RESTORE_STAGGER=0 FERRY_RESTORE_LOAD_WAIT=0 FERRY_DEFAULT_CMD="true" STUB_SESSIONS=""
+export FERRY_RESTORE_STAGGER=0 FERRY_TEST_LOAD=0 FERRY_DEFAULT_CMD="true" STUB_SESSIONS=""
 snapf="$(snap_dir)/500.tsv"
 _snap_write "$snapf" boot-A 500 "synd1${TAB}0${TAB}main${TAB}$T/w/a${TAB}claude${TAB}aaaa-1111${TAB}synd1
 synd1${TAB}1${TAB}logs${TAB}$T/gone${TAB}shell${TAB}-${TAB}-

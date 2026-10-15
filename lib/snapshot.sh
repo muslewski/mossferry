@@ -99,7 +99,7 @@ snap_take() {
 }
 
 snap_rotate() {
-  local keep="${FERRY_SNAPSHOT_KEEP:-200}" total excess
+  local keep=200 total excess
   total=$(snap_list | wc -l | tr -d ' ')
   excess=$(( total - keep ))
   (( excess > 0 )) || return 0
@@ -180,7 +180,7 @@ snap_plan() {
       if (( ! first )) && [[ "$wname" == $glob ]]; then continue; fi
       first=0
       [[ -d "$cwd" ]] || cwd="$HOME"
-      if [[ "$kind" == claude && "$id" != - ]]; then cmd="${FERRY_RESTORE_CLAUDE_CMD:-claude --resume} $id"
+      if [[ "$kind" == claude && "$id" != - ]]; then cmd="claude --resume $id"
       else cmd="${FERRY_DEFAULT_CMD:-}"; kind=shell; fi
       printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$s" "$widx" "$wname" "$cwd" "$kind" "$cmd"
     done < <(snap_body "$f")
@@ -200,9 +200,11 @@ snap_load1() {
   if [[ -r /proc/loadavg ]]; then cut -d' ' -f1 /proc/loadavg
   else sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' | awk '{ print $1 }'; fi
 }
+# Space Claude resumes out: each loads a whole conversation, and starting many at
+# once pushed load past 30 on a 24-core host. Waits for load ≤ CPU count, ≤ 300 s.
 _snap_pace() {
-  local stagger="${FERRY_RESTORE_STAGGER:-15}" max="${FERRY_RESTORE_MAX_LOAD:-$(snap_ncpu)}"
-  local cap="${FERRY_RESTORE_LOAD_WAIT:-300}" waited=0
+  local stagger="${FERRY_RESTORE_STAGGER:-15}" max cap=300 waited=0
+  max=$(snap_ncpu)
   (( stagger > 0 )) && sleep "$stagger"
   while (( waited < cap )) && awk -v l="$(snap_load1)" -v m="$max" 'BEGIN { exit !(l > m) }'; do
     (( waited == 0 )) && snap_log "load $(snap_load1) > $max — waiting (max ${cap}s)"

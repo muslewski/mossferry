@@ -35,11 +35,8 @@
 #                                            # auto|on|off — off hard-kills even if sage installed.
 # Snapshot + restore (host). Turn on with: repo-session --snapshot-install
 #FERRY_STATE_DIR="$HOME/.local/state/mossferry"  # snapshots/, restore.log, restore markers
-#FERRY_SNAPSHOT_KEEP="200"                   # newest snapshot files kept
-#FERRY_RESTORE_STAGGER="15"                  # seconds between Claude resumes on restore
-#FERRY_RESTORE_MAX_LOAD=""                   # wait while 1-min load is above this (default: CPU count)
-#FERRY_RESTORE_LOAD_WAIT="300"               # longest wait for load per step, then continue
-#FERRY_RESTORE_CLAUDE_CMD="claude --resume"  # command + conversation id sent to Claude windows
+#FERRY_RESTORE_STAGGER="15"                  # seconds between Claude resumes (each also waits
+#                                            # up to 300 s for load ≤ CPU count)
 #REPO_SESSION_TMUXBIN="/opt/homebrew/bin/tmux"  # local: override tmux binary for repo-session
 #                                            # (default /usr/bin/tmux is absent on macOS Homebrew;
 #                                            # only needed if you run repo-session on this machine)
