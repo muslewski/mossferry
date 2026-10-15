@@ -92,6 +92,13 @@ plan="$(snap_plan "$snapf" synd1)"
 eq "plan claude cmd" "claude --resume aaaa-1111" "$(printf '%s\n' "$plan" | sed -n 1p | cut -f6)"
 eq "missing cwd falls back to HOME" "$HOME" "$(printf '%s\n' "$plan" | sed -n 2p | cut -f4)"
 eq "shell gets FERRY_DEFAULT_CMD" "true" "$(printf '%s\n' "$plan" | sed -n 2p | cut -f6)"
+hid="$(snap_dir)/600.tsv"
+_snap_write "$hid" boot-A 600 "a${TAB}0${TAB}main${TAB}$T/w/a${TAB}shell${TAB}-${TAB}-
+a${TAB}1${TAB}_curtain${TAB}$T/w/a${TAB}shell${TAB}-${TAB}-
+b${TAB}0${TAB}_only${TAB}$T/w/a${TAB}shell${TAB}-${TAB}-"
+eq "hidden window skipped" "main" "$(snap_plan "$hid" a | cut -f3 | tr '\n' ' ' | sed 's/ $//')"
+eq "hidden-only session keeps its window" "_only" "$(snap_plan "$hid" b | cut -f3)"
+rm -f "$hid"
 export STUB_LOG="$T/log"; : >"$STUB_LOG"
 mkdir -p "$HOME/.config/mossferry/restore.d"
 printf '#!/bin/sh\necho "h1 $1 [$FERRY_RESTORED_SESSIONS]" >>"%s/hooks"\nexit 3\n' "$T" >"$HOME/.config/mossferry/restore.d/10-a"

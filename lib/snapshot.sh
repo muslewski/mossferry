@@ -161,11 +161,19 @@ snap_log() {
   printf '%s %s\n' "$(date '+%F %T')" "$*" | tee -a "$(snap_log_file)" >&2
 }
 
+# Hidden windows (FERRY_HIDDEN_WINDOW_GLOB, default _*) are skipped: other tools
+# (status-herald's _curtain) recreate them per session, so replaying them would
+# duplicate. A session's first window is always kept, hidden or not.
 snap_plan() {
-  local f="$1" name s widx wname cwd kind id cname cmd; shift
+  local f="$1" name s widx wname cwd kind id cname cmd glob first; shift
+  glob="${FERRY_HIDDEN_WINDOW_GLOB:-_*}"
   for name in "$@"; do
+    first=1
     while IFS=$'\t' read -r s widx wname cwd kind id cname; do
       [[ "$s" == "$name" ]] || continue
+      # shellcheck disable=SC2053  # glob match is intended
+      if (( ! first )) && [[ "$wname" == $glob ]]; then continue; fi
+      first=0
       [[ -d "$cwd" ]] || cwd="$HOME"
       if [[ "$kind" == claude && "$id" != - ]]; then cmd="${FERRY_RESTORE_CLAUDE_CMD:-claude --resume} $id"
       else cmd="${FERRY_DEFAULT_CMD:-}"; kind=shell; fi
