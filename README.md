@@ -167,7 +167,7 @@ Columns: index, session name, active window, window count, attached/detached, cu
 | `ctrl-s` | toggle **servers** face (see below) |
 | `esc` | quit picker (exit 130 → hop ends) |
 
-Start menu defaults to `claude,grok` (`FERRY_START_MENU`). Optional hotkeys: `FERRY_LAUNCHERS` (empty by default). `ctrl-x` / `ctrl-r` / `ctrl-s` / `ctrl-f` are reserved.
+Start menu defaults to `claude,grok` (`FERRY_START_MENU`). Optional hotkeys: `FERRY_LAUNCHERS` (empty by default). `ctrl-x` / `ctrl-r` / `ctrl-s` / `ctrl-f` are reserved; `ctrl-m` (= Enter) and other terminal aliases are ignored.
 
 **Zero sessions for a repo:** `ferry workstation my-app` creates and attaches the primary session (named like the repo) instead of showing an empty list.
 
@@ -178,6 +178,16 @@ repo-session: no repo 'typoo' under ~/Repositories — pick one below, or run 'f
 ```
 
 ---
+
+## Survive a reboot
+
+tmux dies with the machine; your Claude Code conversations don't. Turn on snapshots once per host:
+
+```sh
+repo-session --snapshot-install   # records every tmux window + Claude conversation id each minute
+```
+
+After a reboot the picker offers **`♻ restore N sessions from <time>`**: each session comes back in its folder, Claude windows with `claude --resume <id>`, spaced out so the host stays usable. See [After a reboot](./docs/troubleshooting.md#after-a-reboot).
 
 ## Servers view
 

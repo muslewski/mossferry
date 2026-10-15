@@ -127,6 +127,25 @@ In both cases the **remote tmux session keeps running**. Detach deliberately wit
 
 Reattach is ordinary `tmux attach`. Multiple clients can attach to the same session (tmux multi-attach). `--primary` on an existing session **attaches only** — it does **not** re-send the start command.
 
+### After a reboot
+
+tmux does not survive a reboot, but your Claude Code conversations do. With snapshots on (`repo-session --snapshot-install`, once per host):
+
+1. `ferry <host>` → the picker shows `♻ restore N sessions from <time>`.
+2. **enter**, untick anything you don't want with **tab**, then **enter**. Sessions come back one by one, about 15 s apart, so the host stays usable.
+3. Watch progress: `tail -f ~/.local/state/mossferry/restore.log`.
+
+Without the picker: `ssh <host> repo-session --restore --dry-run`, then `repo-session --restore`.
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| No ♻ row | No snapshot from before this boot, every session in it is already live, or the row was dismissed | `repo-session --restore --dry-run` says which. Check the timer: `systemctl --user list-timers mossferry-snapshot.timer` |
+| A window comes back as a plain shell | It was not running Claude Code, or Claude's session file was unreadable | Expected. Restore never replays other commands |
+| `claude --resume` fails in a window | The conversation was deleted | Start fresh in that window |
+| Containers or dev servers still down | Outside tmux | Add a `~/.config/mossferry/restore.d/` hook |
+
+Snapshots were off when the host went down? Claude Code conversations are still in `~/.claude/projects/<folder>/<id>.jsonl`; a session's name is in its `"customTitle"` lines. Resume one by hand with `claude --resume <id>`.
+
 ### Repository name rejected
 
 Shape gate (`_ferry_repo_token_ok`): letters, digits, `.`, `_`, `-` only; no `/`, `\`, `..`, spaces, empty.

@@ -7,8 +7,8 @@
 | client | active | ok | Local ferry CLI (bin/mossferry): FERRY_* config, mosh/ssh launch of repo-session, optional grok wrap, local shape gate + ssh --validate, doctor short-circuit, --list-servers, fleet-devlog. |
 | demo | seeded | seeded | Demo recording pipeline (demo/) and published GIF assets (assets/): VHS tapes for picker/help/doctor, green-demo.sh, fixtures with stub ferry/mosh/ssh/tmux-greenui for offline capture. |
 | green-ui | active | ok | Vendored GREEN-UI-KIT (lib/green-ui.sh): source-able bash UI library — detect_color, ui_tty, banner/ok/warn/die/panel/checklist; stdout=data stderr=chrome; missing kit never kills ferry tools. |
-| install-config | active | ok | Install and packaging surface: install.sh (symlink ferry/mossferry/repo-session into ~/.local/bin, seed/migrate config), config.example FERRY_* keys (START_MENU + optional LAUNCHERS), package.json npm bins, VERSION. |
-| repo-session | active | ok | Remote brain (bin/repo-session): fzf/menu session picker + servers face (ctrl-s), create/attach, atomic claim, nested start menu, FERRY_LAUNCHERS, Grok wallet badge, FERRY_SAGE wire, kill/rename, --servers discovery, validate_repo; shared lib/repo-token.sh shape gate. |
+| install-config | active | ok | Install and packaging surface: install.sh (symlink ferry/mossferry/repo-session into ~/.local/bin, seed/migrate config), config.example FERRY_* keys (START_MENU + optional LAUNCHERS, snapshot/restore keys), package.json npm bins, VERSION. |
+| repo-session | active | ok | Remote brain (bin/repo-session): fzf/menu session picker + servers face (ctrl-s), create/attach, atomic claim, nested start menu, FERRY_LAUNCHERS, Grok wallet badge, FERRY_SAGE wire, kill/rename, --servers discovery, validate_repo, snapshot/restore (lib/snapshot.sh, ♻ row); shared lib/repo-token.sh shape gate. |
 | tests | active | ok | Bash test harness (tests/): run.sh drives test-mossferry, test-repo-session, test-install, test-ui-ops, test-fleet-devlog with fake-tmux and fake-bin stubs — no framework beyond bash. |
 
 ## ⚠ Verification gaps
@@ -33,13 +33,15 @@ _none_
 
 ## Ledger
 
-- specs: 9 (? 8 · approved 1)
-- plans: 8 (? 8)
+- specs: 10 (? 8 · approved 2)
+- plans: 9 (? 8 · done 1)
 - reports: 1 (snapshot 1)
 - decisions: 10 (active 10)
 
 ### Recent
 
+- [[2026-10-15-snapshot-restore-plan]]
+- [[2026-10-15-snapshot-restore-design]]
 - [[2026-07-24-ferry-sage-wire-plan]]
 - [[2026-07-24-ferry-sage-wire-design]]
 - [[2026-07-17-picker-launchers-plan]]
@@ -48,5 +50,3 @@ _none_
 - [[2026-07-17-picker-banner-design]]
 - [[2026-07-17-mossferry-ui-ops-design]]
 - [[2026-07-17-banner-v2-cycle-plan]]
-- [[2026-07-17-banner-v2-cycle-design]]
-- [[2026-07-16-picker-create-plan]]

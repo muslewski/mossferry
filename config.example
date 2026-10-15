@@ -33,6 +33,10 @@
 #FERRY_SAGE="auto"                           # remote: wire agentic-sage when `sage` on PATH
 #                                            # (picker preview one-liners + ⚖ new judge…).
 #                                            # auto|on|off — off hard-kills even if sage installed.
+# Snapshot + restore (host). Turn on with: repo-session --snapshot-install
+#FERRY_STATE_DIR="$HOME/.local/state/mossferry"  # snapshots/, restore.log, restore markers
+#FERRY_RESTORE_STAGGER="15"                  # seconds between Claude resumes (each also waits
+#                                            # up to 300 s for load ≤ CPU count)
 #REPO_SESSION_TMUXBIN="/opt/homebrew/bin/tmux"  # local: override tmux binary for repo-session
 #                                            # (default /usr/bin/tmux is absent on macOS Homebrew;
 #                                            # only needed if you run repo-session on this machine)

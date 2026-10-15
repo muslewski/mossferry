@@ -71,6 +71,21 @@ _ferry_load_servers() {
 }
 _ferry_load_servers
 
+# ---- snapshot/restore (lib/snapshot.sh) — missing lib degrades to no ♻ row ---
+_ferry_load_snapshot() {
+  local s="${REPO_ROOT}/lib/snapshot.sh"
+  if [[ -r "$s" ]]; then
+    # shellcheck source=lib/snapshot.sh
+    source "$s" || true
+  fi
+  if ! declare -F snap_restore_label >/dev/null 2>&1; then
+    snap_restore_label() { return 0; }
+    snap_take() { return 0; }
+    snap_preboot() { return 0; }
+  fi
+}
+_ferry_load_snapshot
+
 # ---- GREEN-UI-KIT (vendored) — missing lib must NEVER kill the tool --------
 _ferry_ui_fallbacks() {
   detect_color() { printf 'none\n'; }
@@ -227,8 +242,14 @@ parse_launchers() {
     key="${pair%%:*}"
     cmd="${pair#*:}"
     [[ -z "$key" || -z "$cmd" ]] && continue
-    # Reserved for kill/rename in the main picker.
-    [[ "$key" == "ctrl-x" || "$key" == "ctrl-r" || "$key" == "ctrl-s" || "$key" == "ctrl-f" ]] && continue
+    case "$key" in
+      # Reserved for kill / rename / servers face / fix in the main picker.
+      ctrl-x|ctrl-r|ctrl-s|ctrl-f) continue ;;
+      # Terminal aliases and signals: ctrl-m IS Enter (fzf --expect=ctrl-m swallowed
+      # every Enter, so attach silently did nothing), ctrl-j newline, ctrl-i Tab,
+      # ctrl-h Backspace; ctrl-c / ctrl-z never reach fzf as plain keys.
+      ctrl-m|ctrl-j|ctrl-i|ctrl-h|ctrl-c|ctrl-z) continue ;;
+    esac
     # Valid fzf-bindable keys only.
     if [[ "$key" =~ ^ctrl-[a-z]$ ]] \
        || [[ "$key" =~ ^alt-[a-z]$ ]] \
@@ -875,6 +896,13 @@ picker_kill() {
     esac
   fi
   [[ -z "$name" ]] && return 0
+  # ctrl-x on the ♻ restore row dismisses it for this snapshot; kills nothing.
+  if [[ "$name" == ♻* ]]; then
+    local f
+    f=$(snap_preboot)
+    [[ -n "$f" ]] && snap_dismiss "$f"
+    return 0
+  fi
   "$TMUXBIN" kill-session -t "=$name" 2>/dev/null || true
 }
 
@@ -894,8 +922,10 @@ picker_rename() {
 _NEW_SESSION_LABEL=$'➕ new session…'
 _NEW_JUDGE_LABEL=$'⚖ new judge…'
 print_picker_rows() {
-  local r="${1:-}"
+  local r="${1:-}" rl
   build_session_rows "$r"
+  rl=$(snap_restore_label 2>/dev/null)
+  [[ -n "$rl" ]] && printf '%s\n' "$rl"
   printf '%s\n' "$_NEW_SESSION_LABEL"
   if _ferry_sage_enabled; then
     printf '%s\n' "$_NEW_JUDGE_LABEL"
@@ -1543,7 +1573,10 @@ run_picker() {
   local -a rows=()
   local line choice name i nsel key ans newname pickfile
   local new_label=$'➕ new session…'
-  local is_new=0
+  local is_new=0 restore_label=""
+
+  # Opportunistic snapshot: a host without the timer still keeps a recent one.
+  ( snap_take >/dev/null 2>&1 & )
 
   # Numbered menu fallback: loop so invalid create-flow input reloads.
   if ! command -v fzf >/dev/null 2>&1 || [[ -n "${FERRY_NO_FZF:-}" ]]; then
@@ -1562,6 +1595,8 @@ run_picker() {
         printf '%d) %s\n' "$i" "$line" | tr '\t' ' '
         ((i++)) || true
       done
+      restore_label=$(snap_restore_label 2>/dev/null)
+      [[ -n "$restore_label" ]] && printf 'r) %s\n' "$restore_label"
       printf 'n) new session…\n'
       printf 'q) quit\n'
       if ! read -r nsel; then
@@ -1569,6 +1604,10 @@ run_picker() {
       fi
       case "$nsel" in
         q|Q|"") exit 130 ;;
+        r|R)
+          [[ -n "$restore_label" ]] && { _do_restore_flow || true; }
+          continue
+          ;;
         n|N)
           # On invalid name: message already printed; reload this menu.
           _do_new_session_flow || continue
@@ -1766,6 +1805,12 @@ run_picker() {
       continue
     fi
 
+    # ♻ restore row (pre-boot snapshot)
+    if [[ "$name" == ♻* ]]; then
+      _do_restore_flow || true
+      continue
+    fi
+
     # Launcher keys on the new-session row arm create; kill/rename are binds (no expect).
     if (( is_new )); then
       if [[ -n "$key" ]] && lc=$(launcher_cmd "$key"); then
@@ -1778,13 +1823,39 @@ run_picker() {
 
     [[ -z "$name" ]] && exit 130
 
-    # Launcher keys on existing-session rows: ignore, reload.
-    if [[ -n "$key" ]] && launcher_cmd "$key" >/dev/null 2>&1; then
-      continue
-    fi
-    # Enter (or empty expect key) → attach
+    # Any key on an existing session attaches — a launcher key only means
+    # something on the ➕ row, and no key may ever make Enter a no-op.
     exec "$TMUXBIN" attach -t "=$name"
   done
+}
+
+# ♻ row: multi-select the pre-boot sessions (all preselected), then restore them
+# in the background so the picker stays usable. Returns 1 on cancel (reload).
+_do_restore_flow() {
+  local f self picks n log
+  f=$(snap_preboot)
+  [[ -n "$f" ]] || return 1
+  self=$(_ferry_resolve_self "${BASH_SOURCE[0]}")
+  if command -v fzf >/dev/null 2>&1 && [[ -z "${FERRY_NO_FZF:-}" ]]; then
+    picks=$(snap_candidates "$f" | fzf --multi --bind 'load:select-all' --layout=reverse \
+      --header "♻ restore from $(snap_fmt_time "$(snap_taken_of "$f")") · tab=toggle · enter=restore · esc=back" \
+      --preview "bash $(printf '%q' "$self") --restore-preview $(printf '%q' "$f") {}" \
+      --preview-window=right:60%) || return 1
+  else
+    picks=$(snap_candidates "$f")
+  fi
+  [[ -n "$picks" ]] || return 1
+  n=$(printf '%s\n' "$picks" | grep -c .)
+  log=$(snap_log_file)
+  mkdir -p "$(dirname "$log")"
+  # One name per line → one argv word each (names may contain spaces).
+  local -a names=()
+  local _l
+  while IFS= read -r _l; do [[ -n "$_l" ]] && names+=("$_l"); done <<<"$picks"
+  FERRY_RESTORE_QUIET=1 nohup bash "$self" --restore-run "$f" ${names[@]+"${names[@]}"} >>"$log" 2>&1 </dev/null &
+  printf 'restoring %d session(s) in the background — log: %s\n' "$n" "$log" >/dev/tty 2>/dev/null || true
+  sleep 1
+  return 0
 }
 
 # ---- main --------------------------------------------------------------------
@@ -1800,6 +1871,9 @@ main() {
   local picker_face_rows=0 picker_face_preview=0 picker_face_header=0
   local picker_face_file="" picker_face_arg2="" picker_face_arg3=""
   local dir sessions
+  local snap_do=0 snap_install=0 snap_install_mode="" restore_do=0 restore_dry=0
+  local restore_run_file="" restore_preview=0 restore_preview_file="" restore_preview_name=""
+  local -a restore_run_names=()
   sessions=()
 
   while (( $# )); do
@@ -1927,6 +2001,16 @@ main() {
         shift
         [[ $# -gt 0 && "${1:-}" != -* ]] && shift
         ;;
+      --snapshot)         snap_do=1; shift ;;
+      --snapshot-install) snap_install=1; shift
+                          if [[ "${1:-}" == --remove ]]; then snap_install_mode=remove; shift; fi ;;
+      --restore)          restore_do=1; shift
+                          if [[ "${1:-}" == --dry-run ]]; then restore_dry=1; shift; fi ;;
+      # Internal: background runner started by the ♻ row, and its fzf preview.
+      --restore-run)      restore_run_file="${2:-}"; shift 2 || shift
+                          restore_run_names=("$@"); set -- ;;
+      --restore-preview)  restore_preview=1; restore_preview_file="${2:-}"; restore_preview_name="${3:-}"
+                          shift; [[ $# -gt 0 ]] && shift; [[ $# -gt 0 ]] && shift ;;
       --)                 shift; startcmd="$*"; break ;;
       -*)                 echo "repo-session: ignoring unknown flag '$1'" >&2; shift ;;
       *)                  if [[ -z "$repo" ]]; then repo="$1"; else startcmd="${startcmd:+$startcmd }$1"; fi; shift ;;
@@ -1955,10 +2039,52 @@ main() {
   # The face-dependent verbs (--picker-face-rows / --picker-face-preview) require
   # tmux only on their sessions branch; each calls _require_tmux there.
   # Everything else (list, picker, attach, claim, session fzf helpers) needs tmux.
+  # Timer install touches systemd only — no tmux needed.
+  if (( snap_install )); then
+    snap_install_timer "$(_ferry_resolve_self "${BASH_SOURCE[0]}")" "$snap_install_mode"
+    exit $?
+  fi
+
   if (( ! help && ! servers_list && ! picker_servers_rows && ! picker_servers_preview \
         && ! picker_servers_fix && ! picker_face_header && ! picker_face_rows \
         && ! picker_face_preview )); then
     _require_tmux
+  fi
+
+  # Snapshot / restore verbs (lib/snapshot.sh).
+  if (( snap_do )); then
+    snap_take
+    exit 0
+  fi
+  if [[ -n "$restore_run_file" ]]; then
+    snap_restore_run "$restore_run_file" ${restore_run_names[@]+"${restore_run_names[@]}"}
+    exit $?
+  fi
+  if (( restore_preview )); then
+    # Shows the restore plan (hidden windows already dropped), not the raw snapshot.
+    snap_plan "$restore_preview_file" "$restore_preview_name" | awk -F'\t' '
+      { printf "%s  %-16s %s\n    %s\n", $2, $3, $4, ($6 == "" ? "(empty shell)" : $6) }'
+    exit 0
+  fi
+  if (( restore_do )); then
+    local _rf _l
+    local -a _rn=()
+    _rf=$(snap_preboot)
+    if [[ -z "$_rf" ]]; then
+      echo "nothing to restore — no snapshot from before this boot"
+      exit 0
+    fi
+    while IFS= read -r _l; do [[ -n "$_l" ]] && _rn+=("$_l"); done < <(snap_candidates "$_rf")
+    if (( ${#_rn[@]} == 0 )); then
+      echo "nothing to restore — every session in $(basename "$_rf") is already live"
+      exit 0
+    fi
+    if (( restore_dry )); then
+      snap_dry_run "$_rf" ${_rn[@]+"${_rn[@]}"}
+      exit 0
+    fi
+    snap_restore_run "$_rf" ${_rn[@]+"${_rn[@]}"}
+    exit $?
   fi
 
   # Internal picker helpers (fzf bind+reload) — exit immediately.
@@ -2059,6 +2185,8 @@ ${S}Primary commands${Z}
   repo-session <repo>               picker scoped to that repo
   repo-session <repo> -p            attach/create primary session
   repo-session --list               list sessions (with <repo>: scoped)
+  repo-session --restore [--dry-run] bring back sessions alive before the last reboot
+  repo-session --snapshot-install   record sessions every 60s (systemd user timer; --remove)
   repo-session --servers            listeners (14-col TSV); add --json
   repo-session --validate <repo>    exit 0 if dir under FERRY_REPO_BASE (no tmux)
   repo-session --help               this help
@@ -2075,7 +2203,7 @@ ${S}Picker${Z}
   Servers face: enter=copy Mac URL · ctrl-f=fix plan · ctrl-s=sessions
   Kill stays in the picker (spam ctrl-x). FERRY_KILL_CONFIRM=1 → single-key y/N.
   Start menu: FERRY_START_MENU (default claude,grok). FERRY_LAUNCHERS optional
-  (reserved: ctrl-x, ctrl-r, ctrl-s, ctrl-f).
+  (reserved: ctrl-x, ctrl-r, ctrl-s, ctrl-f; never ctrl-m/j/i/h/c/z — terminal aliases).
 
 ${S}Flags${Z}
   --primary, -p      attach primary, create if missing (needs <repo>)
@@ -2087,6 +2215,7 @@ ${S}Flags${Z}
   --resume-or-new    claim or create until the grid fills
   --client-version V version handshake (set by ferry client; warn only)
   --validate <repo>  check repo under FERRY_REPO_BASE (no tmux)
+  --snapshot         record tmux windows + Claude conversation ids now
   --servers          live listeners TSV; --json for agents
   -- cmd...          custom start command for newly created sessions
 

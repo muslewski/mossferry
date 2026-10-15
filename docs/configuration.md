@@ -73,11 +73,24 @@ Doctor always checks for a **local mosh binary**, even when `FERRY_TRANSPORT=ssh
 |-----|---------|------|--------------------|-------|
 | `FERRY_DEFAULT_CMD` | `neofetch` | host | Used as start command for new sessions when neither `--claude` nor `-- cmd` is set | Any shell command string sent via `tmux send-keys` |
 | `FERRY_START_MENU` | `claude,grok` | host | Empty string disables the nested create menu | Comma-separated start commands after ➕ destination pick; first row is always “default (no AI)” = `FERRY_DEFAULT_CMD` |
-| `FERRY_LAUNCHERS` | empty | host | Feature off (menu only) | `key:command` pairs, comma-separated; first colon splits. Reserved keys: `ctrl-x`, `ctrl-r`, `ctrl-s`, `ctrl-f` |
+| `FERRY_LAUNCHERS` | empty | host | Feature off (menu only) | `key:command` pairs, comma-separated; first colon splits. Reserved keys: `ctrl-x`, `ctrl-r`, `ctrl-s`, `ctrl-f`. Ignored terminal aliases: `ctrl-m` (= Enter), `ctrl-j`, `ctrl-i` (= Tab), `ctrl-h` (= Backspace), `ctrl-c`, `ctrl-z` |
 | `FERRY_BANNER` | `on` | both | — | `off` or `0` hides green ferry art in `--help` and the picker |
 | `FERRY_HIDDEN_WINDOW_GLOB` | `_*` | host | — | Windows matching this glob are skipped in picker names/previews (default hides underscore-prefixed windows) |
 | `FERRY_KILL_CONFIRM` | `0` (off) | host | Instant kill on `ctrl-x` | Set to `1` for single-key y/N confirm before kill |
 | `FERRY_SAGE` | `auto` | host | — | `auto`/`on`: wire agentic-sage when `sage` is on PATH (picker preview one-liners + judge entry). `off`: hard-off even if installed |
+
+## Snapshot and restore (host)
+
+Turned on with `repo-session --snapshot-install`. See [After a reboot](troubleshooting.md#after-a-reboot).
+
+| Key | Default | Side | Notes |
+|-----|---------|------|-------|
+| `FERRY_STATE_DIR` | `$XDG_STATE_HOME/mossferry` (`~/.local/state/mossferry`) | host | Holds `snapshots/`, `restore.log` and `restore-done-*` markers |
+| `FERRY_RESTORE_STAGGER` | `15` | host | Seconds between Claude resumes. Each resume loads a full conversation; starting many at once has pushed load past 30. Each step also waits (up to 300 s) while the 1-minute load is above the CPU count |
+
+The newest 200 snapshots are kept; an unchanged session list rewrites the newest file instead of adding one.
+
+Restore also reads `FERRY_HIDDEN_WINDOW_GLOB`: windows matching it are not replayed (tools such as status-herald recreate their `_curtain` window themselves), except when one is a session's only window.
 
 ---
 

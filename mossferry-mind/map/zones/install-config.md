@@ -1,11 +1,11 @@
 ---
 type: zone
-summary: "Install and packaging surface: install.sh (symlink ferry/mossferry/repo-session into ~/.local/bin, seed/migrate config), config.example FERRY_* keys (START_MENU + optional LAUNCHERS), package.json npm bins, VERSION."
+summary: "Install and packaging surface: install.sh (symlink ferry/mossferry/repo-session into ~/.local/bin, seed/migrate config), config.example FERRY_* keys (START_MENU + optional LAUNCHERS, snapshot/restore keys), package.json npm bins, VERSION."
 tags: [install, config, npm, packaging]
 status: active
 created: 2026-07-21
-updated: 2026-07-30
-verifiedAt: 69e11f9b
+updated: 2026-10-15
+verifiedAt: cb158b0e
 owns:
   routes: []
   testids: []
@@ -26,6 +26,10 @@ sources: []
 ---
 
 ## What this is
+
+`config.example` documents the two snapshot/restore keys (`FERRY_STATE_DIR`,
+`FERRY_RESTORE_STAGGER`); keep-count, load ceiling and resume command are fixed. The timer itself is installed by
+`repo-session --snapshot-install` (systemd user units), not by `install.sh`.
 
 Also ships `config.example.servers` (TSV declaration template for the
 servers view — not YAML; zero-dep bash parse).

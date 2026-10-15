@@ -1,17 +1,18 @@
 ---
 type: zone
-summary: "Remote brain (bin/repo-session): fzf/menu session picker + servers face (ctrl-s), create/attach, atomic claim, nested start menu, FERRY_LAUNCHERS, Grok wallet badge, FERRY_SAGE wire, kill/rename, --servers discovery, validate_repo; shared lib/repo-token.sh shape gate."
+summary: "Remote brain (bin/repo-session): fzf/menu session picker + servers face (ctrl-s), create/attach, atomic claim, nested start menu, FERRY_LAUNCHERS, Grok wallet badge, FERRY_SAGE wire, kill/rename, --servers discovery, validate_repo, snapshot/restore (lib/snapshot.sh, ♻ row); shared lib/repo-token.sh shape gate."
 tags: [remote, tmux, picker, fzf, sage, grok]
 status: active
 created: 2026-07-21
-updated: 2026-07-30
-verifiedAt: 69e11f9b
+updated: 2026-10-15
+verifiedAt: cb158b0e
 owns:
   routes: []
   testids: []
   globs:
     - "bin/repo-session"
     - "lib/servers.sh"
+    - "lib/snapshot.sh"
   tools: []
 depends:
   - "[[green-ui]]"
@@ -60,7 +61,11 @@ optional **FERRY_LAUNCHERS** hotkeys, in-place kill/rename binds, and
 - Default action is the picker; attach-primary is `--primary` / `-p`.
 - Zero live sessions for `ferry <host> <repo>` fast-path creates + attaches
   primary without showing the empty picker.
-- `ctrl-x` / `ctrl-r` reserved (kill/rename); not valid launcher keys.
+- `ctrl-x` / `ctrl-r` / `ctrl-s` / `ctrl-f` reserved; not valid launcher keys.
+- **Launcher keys never shadow Enter:** `parse_launchers` drops terminal aliases
+  (`ctrl-m` = Enter, `ctrl-j`, `ctrl-i` = Tab, `ctrl-h` = Backspace) and
+  `ctrl-c`/`ctrl-z`. With `--expect=ctrl-m` fzf reported every Enter as that key
+  and attach did nothing (2026-10-15). Any key on an existing session attaches.
 - fzf kill/rename binds use full-line `{}` + tab-split for the session name
   (not `n="{1}"`).
 - Main picker preview uses `--picker-preview` (sage chrome optional + capture);
@@ -74,6 +79,16 @@ optional **FERRY_LAUNCHERS** hotkeys, in-place kill/rename binds, and
 - Create path: destination first, then nested start menu when
   `FERRY_START_MENU` or launcher cmds are non-empty.
 - Live Grok panes badge wallet from `GROK_HOME` (Linux `/proc` only).
+- **Snapshot/restore** (`lib/snapshot.sh`, spec
+  [[2026-10-15-snapshot-restore-design]]): Claude conversation ids come from
+  `~/.claude/sessions/<pid>.json` and are joined by **tmux pane id**, never by the
+  session name inside its `tmux` field (that name goes stale after a rename).
+  Pre-boot = different boot id, else older than tmux `#{start_time}`. Restore
+  never replays non-Claude commands (`FERRY_DEFAULT_CMD` instead), skips
+  `FERRY_HIDDEN_WINDOW_GLOB` windows except a session's first, is mkdir-locked,
+  and never starts without the operator (♻ row or `--restore`). The ♻ row's
+  ctrl-x dismisses via `picker_kill`, never `kill-session`. `_do_restore_flow`
+  sits after `run_picker` because t43 greps the file's first `--preview`.
 - **Runs on macOS stock bash 3.2** (`3.2.57`, the only bash on the human's Mac) as
   well as bash 5. No `mapfile`, no `declare/local -A`; every array expansion uses
   `${arr[@]+"${arr[@]}"}` because bash 3.2 under `set -u` treats an empty

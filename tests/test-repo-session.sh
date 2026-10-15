@@ -1195,6 +1195,69 @@ t50() {
   teardown
 }
 
+# ---- t51–t54: snapshot/restore wiring (lib/snapshot.sh) ----
+_snap_fixture() {
+  # Pre-boot snapshot (boot "old") naming one live and one gone session.
+  export FERRY_STATE_DIR="$HOME/state" FERRY_BOOT_ID="new"
+  mkdir -p "$FERRY_STATE_DIR/snapshots"
+  printf '# mossferry-snapshot v1\n# boot old\n# taken 1000\nalive\t0\tmain\t%s\tshell\t-\t-\ngone one\t0\tmain\t%s\tclaude\tabcd-1234\tsynd9\n' \
+    "$HOME" "$HOME" >"$FERRY_STATE_DIR/snapshots/1000.tsv"
+  export FAKE_TMUX_SESSIONS="alive"
+  export FAKE_TMUX_META="alive|main|1w detached bash"
+}
+
+t51() {
+  setup; _snap_fixture
+  local rows
+  rows=$(bash "$RS" --picker-rows 2>/dev/null)
+  if [[ "$rows" == *"♻ restore 1 session from "* ]]; then ok t51; else fail t51 "rows=[$rows]"; fi
+  teardown
+}
+
+t52() {
+  setup; _snap_fixture
+  local rows
+  bash "$RS" --picker-kill "♻ restore 1 session from Thu 01:00" >/dev/null 2>&1
+  rows=$(bash "$RS" --picker-rows 2>/dev/null)
+  if [[ "$rows" != *"♻"* ]] && ! grep -q 'kill-session' "$FAKE_TMUX_LOG"; then ok t52; else fail t52 "rows=[$rows] log=[$(cat "$FAKE_TMUX_LOG")]"; fi
+  teardown
+}
+
+t53() {
+  setup; _snap_fixture
+  local out
+  out=$(bash "$RS" --restore --dry-run 2>&1)
+  if [[ "$out" == *"gone one"* && "$out" == *"claude --resume abcd-1234"* && "$out" != *"alive "* ]] \
+     && ! grep -q 'new-session' "$FAKE_TMUX_LOG"; then ok t53; else fail t53 "out=[$out]"; fi
+  teardown
+}
+
+t54() {
+  setup
+  local out
+  out=$(bash "$RS" --help 2>&1)
+  if [[ "$out" == *"--snapshot-install"* && "$out" == *"--restore"* ]]; then ok t54; else fail t54 "help lacks snapshot verbs"; fi
+  teardown
+}
+
+# ---- t55: terminal-alias keys rejected (ctrl-m IS Enter: fzf --expect=ctrl-m
+# swallowed every Enter, so attach did nothing) ----
+t55() {
+  setup
+  local out
+  export FERRY_LAUNCHERS="ctrl-m:grok-x,ctrl-j:a,ctrl-i:b,ctrl-h:c,ctrl-c:d,ctrl-z:e,ctrl-a:claude"
+  export REPO_SESSION_TMUXBIN="$FAKE"
+  out=$(
+    export REPO_SESSION_LIB=1
+    # shellcheck source=/dev/null
+    source "$RS"
+    parse_launchers
+    printf 'KEYS:%s\n' "${LAUNCHER_KEYS[*]-}"
+  ) 2>/dev/null || true
+  if [[ "$out" == "KEYS:ctrl-a" ]]; then ok t55; else fail t55 "out=[$out]"; fi
+  teardown
+}
+
 export TEST_TMPDIR_ROOT="${TMPDIR:-/tmp}"
 set +e
 t1; t2; t3; t4; t5; t6; t7; t8; t9; t10; t11; t12
@@ -1208,4 +1271,5 @@ t39
 t40; t41; t42
 t43; t44; t45
 t46; t47; t48; t49; t50
+t51; t52; t53; t54; t55
 exit $FAIL
